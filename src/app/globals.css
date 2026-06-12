@@ -1,26 +1,51 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Swiftbox design tokens */
+  --color-green: #00ff40; /* primary accent, CTAs */
+  --color-green-deep: #00cc33; /* hover / pressed states */
+  --color-ink: #0e1114; /* dark surfaces / text */
+  --color-ink-2: #1a2020; /* slightly lighter dark surface */
+  --color-mist: #f4f5f2; /* light backgrounds */
+  --color-muted: #6b7280; /* secondary text on light */
+  --color-muted-dark: #8a9a8a; /* secondary text on dark */
+
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --font-display: var(--font-archivo), system-ui, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-mist);
+  color: var(--color-ink);
+  /* var(--font-archivo) directly — @theme vars are tree-shaken unless a
+     utility references them, so var(--font-sans) is unreliable here */
+  font-family: var(--font-archivo), system-ui, sans-serif;
+}
+
+@layer utilities {
+  /* Display utility: Archivo 800 (matches marketing site .sb-disp) */
+  .sb-disp {
+    font-family: var(--font-archivo), system-ui, sans-serif;
+    font-weight: 800;
+  }
+
+  /* Subtle green radial glow used behind brand visuals */
+  .sb-glow {
+    background: radial-gradient(
+      closest-side,
+      rgba(0, 255, 64, 0.28),
+      rgba(0, 255, 64, 0.08) 60%,
+      transparent 100%
+    );
+  }
 }

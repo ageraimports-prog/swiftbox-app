@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import DashboardHome from "./DashboardHome";
 
 type UserRow = {
   fname: string;
@@ -48,29 +49,7 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* SP02 home */}
-      <section className="flex flex-col items-center rounded-lg border border-dashed border-mist/15 px-6 py-12 text-center">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.5}
-          className="h-10 w-10 text-muted-dark"
-          aria-hidden
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25M3 7.5l9 5.25m9-5.25v9l-9 5.25m0-9v9m-9-14.25v9l9 5.25"
-          />
-        </svg>
-        <p className="mt-4 text-sm font-semibold text-mist">
-          Your recent packages
-        </p>
-        <p className="mt-1 text-xs text-muted-dark">
-          Tap Packages below to view all your deliveries and track their status.
-        </p>
-      </section>
+      <DashboardHome />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -14,6 +15,23 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Toast is derived at render time from the URL (gated by `mounted` so SSR and
+  // first hydration render match). This is immune to mount/unmount churn — any
+  // live instance that renders with ?reset=1 shows it.
+  const [mounted, setMounted] = React.useState(false);
+  const [dismissed, setDismissed] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+    const t = setTimeout(() => setDismissed(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const showResetToast =
+    mounted &&
+    !dismissed &&
+    new URLSearchParams(window.location.search).get("reset") === "1";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +60,18 @@ export default function LoginPage() {
   return (
     <main className="relative flex min-h-screen flex-col bg-ink px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-[max(env(safe-area-inset-bottom),2rem)]">
       <div className="sb-glow absolute inset-x-0 top-0 h-72" aria-hidden />
+
+      {showResetToast && (
+        <div
+          role="status"
+          className="fixed inset-x-5 top-[max(env(safe-area-inset-top),1rem)] z-30 mx-auto flex max-w-md items-center gap-2 rounded-xl border border-green/30 bg-green/15 px-4 py-3 text-sm font-semibold text-green backdrop-blur"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5 shrink-0" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+          </svg>
+          Password updated. Please sign in.
+        </div>
+      )}
 
       <header className="relative flex justify-center pt-2 pb-10">
         <Image
@@ -89,7 +119,7 @@ export default function LoginPage() {
               />
             </label>
 
-            <label className="mb-6 block">
+            <label className="mb-2 block">
               <span className="mb-1.5 block text-xs font-semibold text-muted">
                 Password
               </span>
@@ -103,6 +133,15 @@ export default function LoginPage() {
                 autoComplete="current-password"
               />
             </label>
+
+            <div className="mb-6 text-right">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-semibold text-green/80 transition-colors hover:text-green"
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             <button
               type="submit"

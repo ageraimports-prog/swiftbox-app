@@ -65,10 +65,10 @@ export default async function DashboardPage() {
           />
         </svg>
         <p className="mt-4 text-sm font-semibold text-mist">
-          Your packages will appear here
+          Your recent packages
         </p>
         <p className="mt-1 text-xs text-muted-dark">
-          Package tracking is on the way in the next update.
+          Tap Packages below to view all your deliveries and track their status.
         </p>
       </section>
     </div>

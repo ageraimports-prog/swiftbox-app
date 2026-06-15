@@ -19,7 +19,7 @@ export default async function AccountPage() {
       </section>
 
       {/* Shipping address (AIR / SEA, copy-to-clipboard) */}
-      <ShippingAddress accountNo={session.ac} />
+      <ShippingAddress accountNo={session.ac} customerName={session.name} />
 
       {/* Support */}
       <section>

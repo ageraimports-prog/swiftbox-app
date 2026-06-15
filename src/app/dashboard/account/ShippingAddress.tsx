@@ -6,12 +6,33 @@ const STREET = "11305 NW 122nd Street";
 const CITY = "Medley, FL 33178";
 const COUNTRY = "USA";
 
-/** The exact multi-line block placed on the clipboard. */
-function buildBlock(attn: string): string {
-  return ["Swiftbox T&T", attn, STREET, CITY, COUNTRY].join("\n");
+// Company line is intentionally omitted from the address block for now (the
+// customer's name is Address Line 1). If the warehouse later requires the
+// company name on the package, flip INCLUDE_COMPANY to true — both the display
+// and clipboard builders honor it.
+const COMPANY = "Swiftbox T&T";
+const INCLUDE_COMPANY = false;
+
+/**
+ * The clean address pushed to the clipboard — NO on-screen labels, one value
+ * per line, ready to paste into a checkout form. Built separately from the
+ * labeled display so the two never drift into each other.
+ */
+function buildCopyBlock(name: string, attn: string): string {
+  const lines = [name, attn, STREET, CITY, COUNTRY];
+  if (INCLUDE_COMPANY) lines.unshift(COMPANY);
+  return lines.join("\n");
 }
 
-function AddressBlock({ freight, attn }: { freight: "AIR" | "SEA"; attn: string }) {
+function AddressBlock({
+  freight,
+  name,
+  attn,
+}: {
+  freight: "AIR" | "SEA";
+  name: string;
+  attn: string;
+}) {
   const [copied, setCopied] = React.useState(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -23,7 +44,7 @@ function AddressBlock({ freight, attn }: { freight: "AIR" | "SEA"; attn: string 
   );
 
   async function copy() {
-    const block = buildBlock(attn);
+    const block = buildCopyBlock(name, attn);
     try {
       await navigator.clipboard.writeText(block);
     } catch {
@@ -67,9 +88,22 @@ function AddressBlock({ freight, attn }: { freight: "AIR" | "SEA"; attn: string 
       </div>
 
       <div className="mt-3 text-sm leading-relaxed">
-        <p className="font-semibold text-mist">Swiftbox T&amp;T</p>
-        <p className="font-bold text-green">{attn}</p>
-        <p className="text-muted-dark">{STREET}</p>
+        {INCLUDE_COMPANY && (
+          <p className="font-semibold text-mist">{COMPANY}</p>
+        )}
+        <p>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-dark">
+            Address Line 1:{" "}
+          </span>
+          <span className="font-semibold text-mist">{name}</span>
+        </p>
+        <p>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-dark">
+            Address Line 2:{" "}
+          </span>
+          <span className="font-bold text-green">{attn}</span>
+        </p>
+        <p className="mt-1 text-muted-dark">{STREET}</p>
         <p className="text-muted-dark">{CITY}</p>
         <p className="text-muted-dark">{COUNTRY}</p>
       </div>
@@ -77,7 +111,13 @@ function AddressBlock({ freight, attn }: { freight: "AIR" | "SEA"; attn: string 
   );
 }
 
-export default function ShippingAddress({ accountNo }: { accountNo: string }) {
+export default function ShippingAddress({
+  accountNo,
+  customerName,
+}: {
+  accountNo: string;
+  customerName: string;
+}) {
   return (
     <section>
       <h2 className="sb-disp mb-1 text-lg text-mist">Your shipping address</h2>
@@ -86,8 +126,8 @@ export default function ShippingAddress({ accountNo }: { accountNo: string }) {
         speed or SEA for savings.
       </p>
       <div className="flex flex-col gap-3">
-        <AddressBlock freight="AIR" attn={`AIR-${accountNo}`} />
-        <AddressBlock freight="SEA" attn={`OCEAN-${accountNo}`} />
+        <AddressBlock freight="AIR" name={customerName} attn={`AIR-${accountNo}`} />
+        <AddressBlock freight="SEA" name={customerName} attn={`OCEAN-${accountNo}`} />
       </div>
     </section>
   );

@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import {
@@ -19,12 +20,25 @@ type UserRow = {
 
 const GENERIC_ERROR = "Incorrect account number, email or password.";
 
-/** Legacy scheme (verified against live data): users.hash = MD5(password) hex. */
-function md5Matches(password: string, storedHash: string): boolean {
+/**
+ * Dual-verify. Migrated accounts have a bcrypt hash ($2a/$2b/$2y…); everyone
+ * else still has a 32-char MD5 hex (the legacy scheme, verified against live
+ * data), which can never start with "$2", so it always falls to the MD5 path.
+ * No flag day — an account only takes the bcrypt branch after a successful reset.
+ */
+async function passwordMatches(password: string, storedHash: string): Promise<boolean> {
+  const stored = storedHash.trim();
+  if (/^\$2[aby]\$/.test(stored)) {
+    try {
+      return await bcrypt.compare(password, stored);
+    } catch {
+      return false;
+    }
+  }
   const submitted = createHash("md5").update(password).digest("hex");
-  const stored = storedHash.trim().toLowerCase();
-  if (stored.length !== submitted.length) return false;
-  return timingSafeEqual(Buffer.from(submitted), Buffer.from(stored));
+  const lower = stored.toLowerCase();
+  if (lower.length !== submitted.length) return false;
+  return timingSafeEqual(Buffer.from(submitted), Buffer.from(lower));
 }
 
 export async function POST(req: Request) {
@@ -57,7 +71,7 @@ export async function POST(req: Request) {
   );
 
   const user = rows[0];
-  if (!user || !md5Matches(password, user.hash)) {
+  if (!user || !(await passwordMatches(password, user.hash))) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 

@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   lastSent.set(key, now);
 
   try {
-    const token = await createResetToken(user.id, user.email);
+    const token = await createResetToken(user.id);
     const resetUrl = `${APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
     await sendPasswordResetEmail(user.email, user.fname || "there", resetUrl);
   } catch (e) {

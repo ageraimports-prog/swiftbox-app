@@ -1,41 +1,59 @@
-import { SignJWT, jwtVerify } from "jose";
+import "server-only";
+import { createHash, randomBytes } from "node:crypto";
+import { query, execute } from "@/lib/db";
 
 /**
- * Password-reset tokens: a signed JWT (jose, HS256) using SESSION_SECRET.
- * The signature + 1-hour expiry IS the verification — no DB table needed.
+ * Password-reset tokens, DB-backed and single-use.
+ *
+ * A random raw token is emailed in the reset link; only its SHA-256 is stored
+ * (token_hash), so a leak of the `password_resets` table never exposes a usable
+ * link. Single use is enforced by `used_at`, expiry by `expires_at` (~60 min).
+ * Both are checked atomically when the token is claimed.
  */
 
-const PURPOSE = "password-reset";
+const TOKEN_BYTES = 32; // 64 hex chars
+const TTL_MINUTES = 60;
 
-function secretKey(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error("SESSION_SECRET is not set");
-  return new TextEncoder().encode(secret);
+function sha256Hex(s: string): string {
+  return createHash("sha256").update(s).digest("hex");
 }
 
-export async function createResetToken(
-  userId: number,
-  email: string
-): Promise<string> {
-  return new SignJWT({ email, purpose: PURPOSE })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(String(userId))
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(secretKey());
+/**
+ * Creates a single-use reset-token row for a user and returns the RAW token
+ * (the value that goes in the emailed link — never stored).
+ */
+export async function createResetToken(userId: number): Promise<string> {
+  const raw = randomBytes(TOKEN_BYTES).toString("hex");
+  const tokenHash = sha256Hex(raw);
+  await execute(
+    `INSERT INTO password_resets (user_id, token_hash, expires_at, created_at)
+     VALUES (:userId, :tokenHash, DATE_ADD(NOW(), INTERVAL ${TTL_MINUTES} MINUTE), NOW())`,
+    { userId, tokenHash }
+  );
+  return raw;
 }
 
-export type ResetPayload = { userId: number; email: string };
+/**
+ * Atomically claims a valid token: marks it used and returns its user_id.
+ * Returns null if the token is unknown, already used, or expired. The
+ * conditional UPDATE is the single-use gate — a concurrent second claim of the
+ * same token sees affectedRows = 0 and is rejected.
+ */
+export async function claimResetToken(rawToken: string): Promise<number | null> {
+  if (!rawToken) return null;
+  const tokenHash = sha256Hex(rawToken);
 
-/** Returns the payload for a valid, unexpired reset token, else null. */
-export async function verifyResetToken(
-  token: string
-): Promise<ResetPayload | null> {
-  try {
-    const { payload } = await jwtVerify(token, secretKey());
-    if (payload.purpose !== PURPOSE || !payload.sub) return null;
-    return { userId: Number(payload.sub), email: String(payload.email ?? "") };
-  } catch {
-    return null;
-  }
+  const claim = await execute(
+    `UPDATE password_resets SET used_at = NOW()
+      WHERE token_hash = :tokenHash AND used_at IS NULL AND expires_at > NOW()`,
+    { tokenHash }
+  );
+  if (claim.affectedRows !== 1) return null;
+
+  const rows = await query<{ userId: number }>(
+    `SELECT user_id AS userId FROM password_resets
+      WHERE token_hash = :tokenHash LIMIT 1`,
+    { tokenHash }
+  );
+  return rows[0]?.userId ?? null;
 }

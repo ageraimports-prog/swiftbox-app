@@ -41,14 +41,24 @@ export async function POST(req: Request) {
   if (prev && now - prev < RATE_MS) return ok; // already sent recently
   lastSent.set(key, now);
 
+  // Two independent failure points, logged distinctly so prod logs say which
+  // half broke: DB token creation vs SMTP send. { ok: true } stays unconditional
+  // either way — never reveal whether the email is registered.
+  let token: string;
   try {
-    const token = await createResetToken(user.id);
+    token = await createResetToken(user.id);
+  } catch (e) {
+    lastSent.delete(key); // allow a retry
+    console.error("forgot-password: DB token creation failed", e);
+    return ok;
+  }
+
+  try {
     const resetUrl = `${APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
     await sendPasswordResetEmail(user.email, user.fname || "there", resetUrl);
   } catch (e) {
-    // Allow a retry if the send failed.
-    lastSent.delete(key);
-    console.error("forgot-password: send failed", e);
+    lastSent.delete(key); // allow a retry if the send failed
+    console.error("forgot-password: SMTP send failed", e);
   }
 
   return ok;

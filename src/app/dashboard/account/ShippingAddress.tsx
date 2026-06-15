@@ -2,8 +2,8 @@
 
 import * as React from "react";
 
-const STREET = "8724 NW 24th Terrace";
-const CITY = "Miami, FL 33122";
+const STREET = "11305 NW 122nd Street";
+const CITY = "Medley, FL 33178";
 const COUNTRY = "USA";
 
 /** The exact multi-line block placed on the clipboard. */

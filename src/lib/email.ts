@@ -1,17 +1,48 @@
-import "server-only";
-import { Resend } from "resend";
+import nodemailer, { type Transporter } from "nodemailer";
 
-/** Transactional email via Resend. RESEND_API_KEY + RESEND_FROM live in env. */
+/**
+ * Transactional email via the cPanel mailbox (SMTP_* env vars).
+ *
+ * Transport (ported from the Admin repo's proven config):
+ *   - port 465 → secure: true   (implicit TLS)
+ *   - port 587 → secure: false  + STARTTLS (requireTLS)
+ *
+ * cPanel sender-verify gotcha: the server rejects mail whose envelope MAIL FROM
+ * isn't a real local mailbox. SMTP_FROM's display address (noreply@) may not
+ * exist as a mailbox, so the envelope sender is set to SMTP_USER (the
+ * authenticated mailbox, info@) while the visible "From" header stays SMTP_FROM.
+ * Same domain, so SPF stays aligned.
+ *
+ * Not marked "server-only" so the transport can be verified in isolation from a
+ * script; it is only ever imported from server code in the app.
+ */
 
-function resendClient(): Resend {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) throw new Error("RESEND_API_KEY is not set");
-  return new Resend(key);
+let cached: Transporter | null = null;
+
+export function getTransport(): Transporter {
+  if (cached) return cached;
+
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT ?? 465);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) {
+    throw new Error("SMTP_HOST / SMTP_USER / SMTP_PASS are not configured");
+  }
+
+  cached = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465, // 465 = implicit TLS; 587 = STARTTLS (below)
+    requireTLS: port === 587,
+    auth: { user, pass },
+  });
+  return cached;
 }
 
-function fromAddress(): string {
-  // onboarding@resend.dev until swiftboxtt.com is verified in Resend.
-  return process.env.RESEND_FROM ?? "onboarding@resend.dev";
+/** Confirms the SMTP credentials/connection are valid. */
+export function verifyTransport(): Promise<true> {
+  return getTransport().verify();
 }
 
 function escapeHtml(s: string): string {
@@ -68,19 +99,21 @@ function resetEmailHtml(firstName: string, resetUrl: string): string {
 </html>`;
 }
 
+/** Sends the password-reset email via the cPanel transport. Throws on failure. */
 export async function sendPasswordResetEmail(
   to: string,
   firstName: string,
   resetUrl: string
 ): Promise<{ id: string }> {
-  const { data, error } = await resendClient().emails.send({
-    from: `Swiftbox <${fromAddress()}>`,
+  const from = process.env.SMTP_FROM || "Swift Box <noreply@swiftboxtt.com>";
+  // Envelope sender = authenticated mailbox so cPanel sender-verify passes.
+  const envelopeFrom = process.env.SMTP_USER || undefined;
+  const info = await getTransport().sendMail({
+    from,
     to,
     subject: "Reset your Swiftbox password",
     html: resetEmailHtml(firstName, resetUrl),
+    ...(envelopeFrom ? { envelope: { from: envelopeFrom, to } } : {}),
   });
-  if (error) {
-    throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
-  }
-  return { id: data?.id ?? "" };
+  return { id: info.messageId ?? "" };
 }

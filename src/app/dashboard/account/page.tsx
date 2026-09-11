@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import ShippingAddress from "./ShippingAddress";
@@ -79,6 +80,18 @@ export default async function AccountPage() {
           Sign out
         </button>
       </form>
+
+      {/* Delete account — required in-app path under Google Play's User Data
+          policy. Links to the public /delete-account form so signed-out users
+          and people who uninstalled the app reach the same place. */}
+      <div className="pb-2">
+        <Link
+          href="/delete-account"
+          className="block text-center text-xs font-semibold text-muted-dark underline underline-offset-4 transition-colors hover:text-red-400"
+        >
+          Delete my account
+        </Link>
+      </div>
     </div>
   );
 }

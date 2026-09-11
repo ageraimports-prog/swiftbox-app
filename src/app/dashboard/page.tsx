@@ -1,7 +1,17 @@
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import {
+  ensureReferralCode,
+  whatsappShareUrl,
+  getReferralStats,
+  ZERO_REFERRAL_STATS,
+  REFERRAL_CREDIT_TTD,
+  type ReferralStats,
+} from "@/lib/referral";
 import DashboardHome from "./DashboardHome";
+import ReferralCard from "./ReferralCard";
+import ReferralEarningsCard from "./ReferralEarningsCard";
 
 type UserRow = {
   fname: string;
@@ -30,6 +40,30 @@ export default async function DashboardPage() {
 
   const since = memberSince(user.created);
 
+  // Lazily ensure the customer has a referral code. Secondary to the rest of
+  // the dashboard — a bridge hiccup here must not blank the whole page, so on
+  // failure we simply skip the card this load.
+  let referralCode: string | null = null;
+  try {
+    referralCode = await ensureReferralCode(session.id);
+  } catch {
+    referralCode = null;
+  }
+  // Deep-link to the website's signup page (SIGNUP_URL), not the app (APP_URL) —
+  // the friend signs up on the marketing site, which reads ?ref= and prefills it.
+  const referralShareUrl = referralCode
+    ? whatsappShareUrl(referralCode, process.env.SIGNUP_URL)
+    : null;
+
+  // Earnings stats for the panel (Sub-piece D). Secondary to the page like the
+  // code-ensure above — a bridge hiccup falls back to zeros, never an error.
+  let referralStats: ReferralStats = ZERO_REFERRAL_STATS;
+  try {
+    referralStats = await getReferralStats(session.id);
+  } catch {
+    referralStats = ZERO_REFERRAL_STATS;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Account number card */}
@@ -48,6 +82,16 @@ export default async function DashboardPage() {
           <p className="mt-0.5 text-xs text-muted-dark">Member since {since}</p>
         )}
       </section>
+
+      {referralCode && referralShareUrl && (
+        <ReferralCard
+          code={referralCode}
+          shareUrl={referralShareUrl}
+          creditTtd={REFERRAL_CREDIT_TTD}
+        />
+      )}
+
+      {referralCode && <ReferralEarningsCard stats={referralStats} />}
 
       <DashboardHome />
     </div>

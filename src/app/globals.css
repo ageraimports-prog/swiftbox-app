@@ -4,6 +4,7 @@
   /* Swiftbox design tokens */
   --color-green: #00ff40; /* primary accent, CTAs */
   --color-green-deep: #00cc33; /* hover / pressed states */
+  --color-green-ink: #007a1f; /* green TEXT on white/mist (5.4:1) — never neon green as text on light */
   --color-ink: #0e1114; /* dark surfaces / text */
   --color-ink-2: #1a2020; /* slightly lighter dark surface */
   --color-mist: #f4f5f2; /* light backgrounds */

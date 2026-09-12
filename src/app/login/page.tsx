@@ -137,7 +137,7 @@ export default function LoginPage() {
             <div className="mb-6 text-right">
               <Link
                 href="/forgot-password"
-                className="text-xs font-semibold text-green/80 transition-colors hover:text-green"
+                className="text-sm font-semibold text-green-ink transition-colors hover:text-ink"
               >
                 Forgot password?
               </Link>
@@ -154,7 +154,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-muted-dark">
-          Your account number is on your Swiftbox membership card.
+          Your account number is in your welcome email and was shown when you signed up.
         </p>
       </section>
     </main>

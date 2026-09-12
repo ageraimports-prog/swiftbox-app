@@ -25,7 +25,12 @@ const PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME ?? "com.swiftboxtt.app";
 // Either set ANDROID_SHA256_FINGERPRINTS in Vercel, or paste them here.
 const FINGERPRINTS = (
   process.env.ANDROID_SHA256_FINGERPRINTS ??
-  "REPLACE_WITH_PLAY_APP_SIGNING_SHA256"
+  // 1. Play App Signing key — Google re-signs every upload with this.
+  //    Play Console -> App integrity -> App signing -> App signing key.
+  "9D:97:94:D2:8E:42:C8:46:64:06:29:0E:F2:71:64:78:08:09:FC:6C:10:9F:C7:02:34:BB:5E:17:16:5A:FC:AD," +
+  // 2. Upload key (C:\\Dev\\SwiftboxAndroid\\android.keystore) — lets a
+  //    sideloaded app-release-signed.apk verify too. Harmless in production.
+  "C9:07:85:FF:41:4E:52:CA:C0:F6:B2:A6:EC:6E:00:B7:DF:9A:EA:39:BA:27:8D:45:59:51:26:0D:8B:F5:00:BC"
 )
   .split(",")
   .map((f) => f.trim().toUpperCase())

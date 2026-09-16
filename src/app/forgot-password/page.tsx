@@ -7,28 +7,64 @@ import AuthLayout from "@/components/AuthLayout";
 const inputCls =
   "w-full rounded-md border border-gray-200 bg-white px-4 py-3.5 text-base text-ink placeholder:text-gray-400 focus:outline-none focus:border-green focus:ring-2 focus:ring-green/40";
 
+/** Deliberately loose — the server is the authority. This only stops obvious typos. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
-  const [sent, setSent] = React.useState(false);
+  /**
+   * The address the server accepted. Non-empty is what unlocks the confirmation
+   * screen, so "a reset link has been sent to <nothing>" can never render again.
+   */
+  const [sentTo, setSentTo] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    /**
+     * Read the address out of the DOM, not just React state. Android Chrome
+     * autofill can fill the box without firing onChange, which used to submit
+     * an empty string while the customer was looking at a filled-in field.
+     */
+    const form = e.currentTarget;
+    const fromDom = String(new FormData(form).get("email") ?? "");
+    const address = (fromDom || email).trim();
+
+    if (address !== email) setEmail(address);
+
     setError(null);
+
+    if (!address) {
+      setError("Enter your email address.");
+      return;
+    }
+    if (!EMAIL_RE.test(address)) {
+      setError("That doesn’t look like a valid email address.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: address }),
       });
       if (!res.ok) {
-        setError("Something went wrong. Please try again.");
+        let message = "Something went wrong. Please try again.";
+        try {
+          const data = await res.json();
+          if (data?.error) message = String(data.error);
+        } catch {
+          /* keep the generic message */
+        }
+        setError(message);
         setSubmitting(false);
         return;
       }
-      setSent(true);
+      setSentTo(address);
     } catch {
       setError("Something went wrong. Please try again.");
       setSubmitting(false);
@@ -38,7 +74,7 @@ export default function ForgotPasswordPage() {
   return (
     <AuthLayout>
       <div className="rounded-xl bg-white p-6 shadow-2xl">
-        {sent ? (
+        {sentTo ? (
           <>
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green/15">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-6 w-6 text-green-ink" aria-hidden>
@@ -48,11 +84,13 @@ export default function ForgotPasswordPage() {
             <h1 className="sb-disp mb-1 text-2xl text-ink">Check your email</h1>
             <p className="text-sm text-muted">
               A reset link has been sent to{" "}
-              <span className="font-semibold text-ink">{email}</span>. The link
+              <span className="font-semibold text-ink">{sentTo}</span>. The link
               expires in 1 hour.
             </p>
             <p className="mt-3 text-xs text-muted">
-              Didn&rsquo;t get it? Check your spam folder.
+              Didn&rsquo;t get it? Check your spam folder. If nothing arrives,
+              the address may not be the one on your Swiftbox account — contact
+              us on WhatsApp and we&rsquo;ll check it for you.
             </p>
           </>
         ) : (
@@ -62,7 +100,7 @@ export default function ForgotPasswordPage() {
               Enter your email and we&rsquo;ll send you a reset link.
             </p>
 
-            <form onSubmit={handleSubmit} noValidate>
+            <form onSubmit={handleSubmit}>
               {error && (
                 <div role="alert" className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
@@ -75,6 +113,7 @@ export default function ForgotPasswordPage() {
                 </span>
                 <input
                   type="email"
+                  name="email"
                   inputMode="email"
                   className={inputCls}
                   placeholder="you@email.com"
@@ -84,6 +123,7 @@ export default function ForgotPasswordPage() {
                   autoComplete="email"
                   autoCapitalize="none"
                   autoCorrect="off"
+                  aria-invalid={error ? true : undefined}
                 />
               </label>
 

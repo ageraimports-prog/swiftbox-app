@@ -6,15 +6,22 @@ import * as React from "react";
  * Referral code card — Sub-piece A. Shows the customer's own code prominently
  * with a WhatsApp share (the primary action, matching Swiftbox customer comms)
  * and a tap-to-copy fallback. Read-only status display is Sub-piece D.
+ *
+ * The program is double-sided: `welcomeTtd` is what the FRIEND gets off their
+ * first shipment, `creditTtd` is what this customer gets once that friend's
+ * first package is delivered. Lead with the friend's number — it's the reason
+ * anyone accepts a code.
  */
 export default function ReferralCard({
   code,
   shareUrl,
   creditTtd,
+  welcomeTtd,
 }: {
   code: string;
   shareUrl: string;
   creditTtd: number;
+  welcomeTtd: number;
 }) {
   const [copied, setCopied] = React.useState(false);
 
@@ -30,11 +37,13 @@ export default function ReferralCard({
 
   return (
     <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
-      <h2 className="sb-disp text-lg text-mist">Refer a friend, get rewarded</h2>
+      <h2 className="sb-disp text-lg text-mist">
+        Give ${welcomeTtd}, get ${creditTtd}
+      </h2>
       <p className="mt-1 text-sm text-muted-dark">
-        Share your code with friends and family. When their first package is
-        delivered, you get ${creditTtd} off your next invoice. Refer as many
-        people as you like.
+        Share your code with friends and family. They get ${welcomeTtd} off
+        their first shipment, and you get ${creditTtd} off your next invoice
+        once that package is delivered. Refer as many people as you like.
       </p>
 
       <button

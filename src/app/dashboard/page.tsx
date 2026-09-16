@@ -7,6 +7,7 @@ import {
   getReferralStats,
   ZERO_REFERRAL_STATS,
   REFERRAL_CREDIT_TTD,
+  REFERRAL_WELCOME_CREDIT_TTD,
   type ReferralStats,
 } from "@/lib/referral";
 import DashboardHome from "./DashboardHome";
@@ -88,6 +89,7 @@ export default async function DashboardPage() {
           code={referralCode}
           shareUrl={referralShareUrl}
           creditTtd={REFERRAL_CREDIT_TTD}
+          welcomeTtd={REFERRAL_WELCOME_CREDIT_TTD}
         />
       )}
 

@@ -17,8 +17,13 @@ function money(n: number): string {
 }
 
 export default function ReferralEarningsCard({ stats }: { stats: ReferralStats }) {
-  const { totalEarned, available, redeemed, qualifiedCount, pendingCount } = stats;
+  const { totalEarned, welcomeCredit, available, redeemed, qualifiedCount, pendingCount } =
+    stats;
   const nothingYet = totalEarned === 0;
+  // The welcome credit is money they have but did not earn by referring, so it is
+  // never added to the headline — it gets its own line, or the two figures stop
+  // adding up against "Available" and the card looks wrong.
+  const hasWelcome = welcomeCredit > 0;
 
   return (
     <section className="relative overflow-hidden rounded-lg border border-mist/10 bg-ink-2 p-5">
@@ -37,6 +42,12 @@ export default function ReferralEarningsCard({ stats }: { stats: ReferralStats }
           ? "Credit appears here once a package for someone you referred is delivered."
           : "Credit earned from referrals, all-time."}
       </p>
+      {hasWelcome && (
+        <p className="mt-1 text-xs text-green">
+          Plus {money(welcomeCredit)} welcome credit for joining with a referral code —
+          it comes off your first shipment.
+        </p>
+      )}
       <p className="mt-1 text-xs text-muted-dark">
         Credit is applied to your next Swiftbox invoice. It can’t be exchanged
         for cash or transferred.

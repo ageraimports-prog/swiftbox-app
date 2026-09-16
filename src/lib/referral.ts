@@ -8,9 +8,15 @@ import { query, execute } from "@/lib/db";
  * Read-only referral earnings for the dashboard panel. All figures are scoped to
  * one referrer (= the logged-in customer's users.id).
  *
- *  - totalEarned    SUM(amount) of every credit, all-time (the headline number).
- *  - available      credits not yet applied to an invoice (applied = 0).
- *  - redeemed       credits already applied to an invoice (applied = 1).
+ *  - totalEarned    SUM(amount) of credits they EARNED by referring (kind='referrer'),
+ *                   all-time. This is the headline number, so it must never include
+ *                   the customer's own welcome credit — being referred is not earning.
+ *  - welcomeCredit  the one kind='welcome' credit they were given for signing up with
+ *                   someone's code, if any. Shown separately, never folded into the
+ *                   headline.
+ *  - available      credits not yet applied to an invoice (applied = 0), BOTH kinds —
+ *                   this is spendable money, and the welcome credit spends the same.
+ *  - redeemed       credits already applied to an invoice (applied = 1), both kinds.
  *  - qualifiedCount referrals that reached a first delivery (status = 'qualified').
  *  - pendingCount   referrals signed up but not yet delivered (status = 'pending').
  *
@@ -19,6 +25,7 @@ import { query, execute } from "@/lib/db";
  */
 export type ReferralStats = {
   totalEarned: number;
+  welcomeCredit: number;
   available: number;
   redeemed: number;
   qualifiedCount: number;
@@ -28,13 +35,19 @@ export type ReferralStats = {
 /** Safe all-zero stats — the fallback when a bridge read fails. */
 export const ZERO_REFERRAL_STATS: ReferralStats = {
   totalEarned: 0,
+  welcomeCredit: 0,
   available: 0,
   redeemed: 0,
   qualifiedCount: 0,
   pendingCount: 0,
 };
 
-type CreditAggRow = { total_earned: string; available: string; redeemed: string };
+type CreditAggRow = {
+  total_earned: string;
+  welcome_credit: string;
+  available: string;
+  redeemed: string;
+};
 type ReferralCountRow = { qualified_count: string; pending_count: string };
 
 export async function getReferralStats(referrerId: number): Promise<ReferralStats> {
@@ -43,9 +56,10 @@ export async function getReferralStats(referrerId: number): Promise<ReferralStat
   // never NULL. DECIMAL sums come back as strings through the bridge → Number().
   const [credits, counts] = await Promise.all([
     query<CreditAggRow>(
-      `SELECT COALESCE(SUM(amount), 0)                                        AS total_earned,
-              COALESCE(SUM(CASE WHEN applied = 0 THEN amount ELSE 0 END), 0)  AS available,
-              COALESCE(SUM(CASE WHEN applied = 1 THEN amount ELSE 0 END), 0)  AS redeemed
+      `SELECT COALESCE(SUM(CASE WHEN kind = 'referrer' THEN amount ELSE 0 END), 0) AS total_earned,
+              COALESCE(SUM(CASE WHEN kind = 'welcome'  THEN amount ELSE 0 END), 0) AS welcome_credit,
+              COALESCE(SUM(CASE WHEN applied = 0 THEN amount ELSE 0 END), 0)       AS available,
+              COALESCE(SUM(CASE WHEN applied = 1 THEN amount ELSE 0 END), 0)       AS redeemed
          FROM referral_credits
         WHERE referrer_id = :referrerId`,
       { referrerId }
@@ -63,6 +77,7 @@ export async function getReferralStats(referrerId: number): Promise<ReferralStat
   const n = counts[0];
   return {
     totalEarned: Number(c?.total_earned ?? 0),
+    welcomeCredit: Number(c?.welcome_credit ?? 0),
     available: Number(c?.available ?? 0),
     redeemed: Number(c?.redeemed ?? 0),
     qualifiedCount: Number(n?.qualified_count ?? 0),
@@ -85,15 +100,39 @@ export async function getReferralStats(referrerId: number): Promise<ReferralStat
  */
 
 /**
+ * The referral program is DOUBLE-SIDED. Two amounts, two different triggers:
+ *
+ *   REFERRAL_CREDIT_TTD  (100) → the REFERRER, when the referred customer's
+ *                                first package is DELIVERED.
+ *   REFERRAL_WELCOME_TTD  (50) → the REFERRED customer, credited at SIGNUP and
+ *                                applied to their FIRST invoice.
+ *
+ * Keep both in step with SwiftboxAdmin lib/referrals.ts (which issues the rows)
+ * and with the public copy on swiftboxtt.com/referral and /terms.
+ */
+
+/**
  * Credit awarded to the referrer once a referred customer qualifies.
- * Single source of truth for later sub-pieces (C credits, D dashboard panel).
- * Not used in A. Override per-environment with REFERRAL_CREDIT_TTD.
+ * Override per-environment with REFERRAL_CREDIT_TTD.
  *
  * Business-confirmed at 100 TTD (matches SwiftboxAdmin lib/referrals.ts). The 100
  * default is the safety net if the env var is unset in a deployment.
  */
 export const REFERRAL_CREDIT_TTD: number = Number(
   process.env.REFERRAL_CREDIT_TTD ?? "100"
+);
+
+/**
+ * Welcome credit awarded to the REFERRED customer for signing up with a valid
+ * code. Unlike the referrer credit this does not wait for a delivery — it is
+ * issued at signup and applied to their first invoice, with no minimum spend.
+ * Override per-environment with REFERRAL_WELCOME_CREDIT_TTD.
+ *
+ * Business-confirmed at 50 TTD. Displayed on the dashboard share card and in
+ * the prefilled WhatsApp message below.
+ */
+export const REFERRAL_WELCOME_CREDIT_TTD: number = Number(
+  process.env.REFERRAL_WELCOME_CREDIT_TTD ?? "50"
 );
 
 /**
@@ -180,8 +219,9 @@ export const SIGNUP_BASE_URL = "https://swiftboxtt.com";
 
 /**
  * WhatsApp share deep link with a prefilled, natural recommendation message.
- * The credit is the referrer's reward only — the message makes no promise of a
- * discount to the friend. The link always deep-links to the website signup page
+ * The program is double-sided, so the message leads with what the FRIEND gets
+ * (REFERRAL_WELCOME_CREDIT_TTD off their first shipment) — that is the reason
+ * they'd bother entering a code. The link always deep-links to the website signup page
  * with the referrer's code prefilled — `/signup?ref=CODE` — which the signup
  * page reads from the query string and uppercases into the referral field
  * (Sub-piece B). `signupBaseUrl` is an optional override (e.g.
@@ -193,7 +233,7 @@ export function whatsappShareUrl(code: string, signupBaseUrl?: string): string {
   const link = `${base}/signup?ref=${encodeURIComponent(code)}`;
   const text = encodeURIComponent(
     [
-      `Hey! I've been using Swift Box to ship my online orders down to Trinidad and the service and rates are unmatchable 📦 If you want to try them, use my referral code *${code}* when you sign up.`,
+      `Hey! I've been using Swift Box to ship my online orders down to Trinidad and the service and rates are unmatchable 📦 Use my referral code *${code}* when you sign up and you'll get TT$${REFERRAL_WELCOME_CREDIT_TTD} off your first shipment.`,
       ``,
       link,
     ].join("\n")

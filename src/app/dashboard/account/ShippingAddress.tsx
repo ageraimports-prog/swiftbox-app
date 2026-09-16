@@ -2,9 +2,25 @@
 
 import * as React from "react";
 
-const STREET = "11305 NW 122nd Street";
-const CITY = "Medley, FL 33178";
+const STREET = "6175 NW 167TH ST, Unit G36";
+const CITY = "Hialeah, FL 33015";
 const COUNTRY = "USA";
+
+/**
+ * Address Line 2, formatted exactly as the website's `swiftLabel` does it
+ * (SwiftBox Rebranded Website, src/lib/miamiAddress.ts) — strip anything that
+ * is not a digit, then pad to at least four.
+ *
+ * `users.ac` is not clean: on live, 5 accounts are stored two digits wide and 3
+ * carry a leading tab. Interpolating the raw value printed `SWIFT-18` here while
+ * the welcome email and the verify screen said `SWIFT-0018`, and `SWIFT-<tab>33843`
+ * for the tabbed ones. This is the field the warehouse matches a package on, so
+ * the two surfaces disagreeing is a lost package, not a cosmetic difference.
+ */
+function swiftLabel(ac: string): string {
+  const digits = String(ac ?? "").replace(/\D+/g, "");
+  return `SWIFT-${digits.padStart(4, "0")}`;
+}
 
 // Company line is intentionally omitted from the address block for now (the
 // customer's name is Address Line 1). If the warehouse later requires the
@@ -24,15 +40,7 @@ function buildCopyBlock(name: string, attn: string): string {
   return lines.join("\n");
 }
 
-function AddressBlock({
-  freight,
-  name,
-  attn,
-}: {
-  freight: "AIR" | "SEA";
-  name: string;
-  attn: string;
-}) {
+function AddressBlock({ name, attn }: { name: string; attn: string }) {
   const [copied, setCopied] = React.useState(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -71,7 +79,7 @@ function AddressBlock({
     <div className="rounded-lg border border-mist/10 bg-ink-2 p-4">
       <div className="flex items-center justify-between">
         <span className="rounded-sm bg-green/10 px-2 py-0.5 text-xs font-bold text-green">
-          {freight}
+          MIAMI
         </span>
         <button
           type="button"
@@ -122,12 +130,11 @@ export default function ShippingAddress({
     <section>
       <h2 className="sb-disp mb-1 text-lg text-mist">Your shipping address</h2>
       <p className="mb-3 text-xs text-muted-dark">
-        Use this as your US delivery address when you shop online. Choose AIR for
-        speed or SEA for savings.
+        Use this as your US delivery address when you shop online. Always put
+        your SWIFT code in Address Line 2 so we match every package to you.
       </p>
       <div className="flex flex-col gap-3">
-        <AddressBlock freight="AIR" name={customerName} attn={`AIR-${accountNo}`} />
-        <AddressBlock freight="SEA" name={customerName} attn={`OCEAN-${accountNo}`} />
+        <AddressBlock name={customerName} attn={swiftLabel(accountNo)} />
       </div>
     </section>
   );

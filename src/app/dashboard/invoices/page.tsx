@@ -1,47 +1,22 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import {
+  STATUS_BADGE,
+  formatDate,
+  formatTtd,
+  type InvoiceStatus,
+} from "@/lib/invoice-line";
 
 type Invoice = {
   invoiceNo: string;
   scope: "package" | "shipment";
   totalTtd: number;
   amountPaid: number;
-  status: "unpaid" | "partial" | "paid";
+  status: InvoiceStatus;
   createdAt: string;
 };
-
-const STATUS_BADGE: Record<Invoice["status"], { label: string; cls: string }> = {
-  paid: {
-    label: "Paid",
-    cls: "bg-green/10 text-green border border-green/25",
-  },
-  partial: {
-    label: "Partial",
-    cls: "bg-amber-400/10 text-amber-300 border border-amber-400/25",
-  },
-  unpaid: {
-    label: "Unpaid",
-    cls: "bg-amber-400/10 text-amber-300 border border-amber-400/25",
-  },
-};
-
-function formatTtd(amount: number): string {
-  return `TTD $${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function formatDate(ts: string): string {
-  const d = new Date(ts.replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return ts;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function scopeLabel(scope: Invoice["scope"]): string {
   return scope.charAt(0).toUpperCase() + scope.slice(1);
@@ -136,9 +111,10 @@ export default function InvoicesPage() {
         invoices.map((inv) => {
           const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.unpaid;
           return (
-            <div
+            <Link
               key={inv.invoiceNo}
-              className="rounded-lg border border-mist/10 bg-ink-2 p-4"
+              href={`/dashboard/invoices/${inv.invoiceNo}`}
+              className="block rounded-lg border border-mist/10 bg-ink-2 p-4 transition-colors hover:border-mist/25 active:border-green/40"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -156,9 +132,23 @@ export default function InvoicesPage() {
 
               <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-dark">
                 <span>{formatDate(inv.createdAt)}</span>
-                <span className="text-sm font-bold text-white">
+                <span className="ml-auto text-sm font-bold text-white">
                   {formatTtd(inv.totalTtd)}
                 </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  className="-mr-1 h-4 w-4 shrink-0 text-muted-dark"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m8.25 4.5 7.5 7.5-7.5 7.5"
+                  />
+                </svg>
               </div>
 
               {inv.status === "partial" && (
@@ -166,7 +156,7 @@ export default function InvoicesPage() {
                   {formatTtd(inv.amountPaid)} of {formatTtd(inv.totalTtd)} paid
                 </p>
               )}
-            </div>
+            </Link>
           );
         })}
     </div>

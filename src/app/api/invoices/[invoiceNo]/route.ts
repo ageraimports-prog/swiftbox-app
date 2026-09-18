@@ -38,6 +38,16 @@ type PaymentRow = {
   reference: string | null;
 };
 
+type PackageRow = {
+  pk_id: number;
+  wr: string;
+  tracking: string | null;
+  commodities: string | null;
+  shipper: string | null;
+  weight: string;
+  pcs: number;
+};
+
 const round2 = (n: number) => Number(`${Math.round(Number(`${n}e2`))}e-2`);
 
 export async function GET(
@@ -91,6 +101,18 @@ export async function GET(
     { id: h.invoice_id }
   );
 
+  // What the charges are FOR. Scoped by invoice_id from the header row above —
+  // that row already passed `user_id = :userId`, which is what makes this safe.
+  // Re-deriving ownership here would be a second, weaker copy of the same check.
+  const pkgRows = await query<PackageRow>(
+    `SELECT p.pk_id, p.wr, p.tracking, p.commodities, p.shipper, p.weight, p.pcs
+       FROM swiftbox_invoice_packages ip
+       JOIN mod_packages p ON p.pk_id = ip.pk_id
+      WHERE ip.invoice_id = :id
+      ORDER BY p.wr`,
+    { id: h.invoice_id }
+  );
+
   const total = Number(h.total_ttd);
   const paid = Number(h.amount_paid);
   // Referral credit = the negative TTD lines (the only negative lines we ever
@@ -134,6 +156,18 @@ export async function GET(
         method: p.method,
         paidDate: p.paid_date,
         reference: (p.reference ?? "").trim(),
+      })),
+      // Trimmed like `reference` above: an empty string must render as nothing,
+      // not as a labelled row with no value. Empty list is normal — a
+      // shipment-scope invoice can have no membership rows at all.
+      packages: pkgRows.map((p) => ({
+        pkId: Number(p.pk_id),
+        wr: (p.wr ?? "").trim(),
+        tracking: (p.tracking ?? "").trim(),
+        commodities: (p.commodities ?? "").trim(),
+        shipper: (p.shipper ?? "").trim(),
+        weight: Number(p.weight),
+        pcs: Number(p.pcs),
       })),
     },
   });

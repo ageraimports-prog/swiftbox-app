@@ -32,6 +32,16 @@ type Payment = {
   reference: string;
 };
 
+type Pkg = {
+  pkId: number;
+  wr: string;
+  tracking: string;
+  commodities: string;
+  shipper: string;
+  weight: number;
+  pcs: number;
+};
+
 type Invoice = {
   invoiceNo: string;
   scope: "package" | "shipment";
@@ -48,6 +58,7 @@ type Invoice = {
   createdAt: string;
   lines: Line[];
   payments: Payment[];
+  packages: Pkg[];
 };
 
 /** Line amounts carry their own currency label — "USD 19.90" / "TTD 135.53". */
@@ -155,6 +166,9 @@ export default function InvoiceDetailPage() {
     ? invoiceBillingBadge(invoice.shipNo, invoice.billingMode)
     : null;
   const settled = !!invoice && invoice.balance <= 0;
+  // Empty is normal (shipment-scope invoices carry no membership rows), and the
+  // ?? guards a cached PWA shell meeting a response that predates this field.
+  const pkgs = invoice?.packages ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -232,6 +246,55 @@ export default function InvoiceDetailPage() {
               <DetailRow label="Exchange rate" value={invoice.roe.toFixed(4)} />
             </dl>
           </section>
+
+          {/* What the charges are FOR. No membership rows → no card at all;
+              a heading over nothing reads as a bug rather than as an absence. */}
+          {pkgs.length > 0 && (
+            <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
+              <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-dark">
+                {pkgs.length === 1 ? "Package" : "Packages"}
+              </h2>
+
+              {pkgs.map((p) => (
+                <div key={p.pkId} className="mt-3 first:mt-1">
+                  {/* Closes the loop: bill → package → tracking timeline. That
+                      route runs its own ownership check, so linking is safe. */}
+                  <Link
+                    href={`/dashboard/packages/${p.pkId}`}
+                    className="flex w-fit items-center gap-1 transition-colors active:text-mist"
+                  >
+                    <span className="sb-disp text-lg text-green">{p.wr}</span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      className="h-4 w-4 text-green"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="m8.25 4.5 7.5 7.5-7.5 7.5"
+                      />
+                    </svg>
+                  </Link>
+
+                  <dl>
+                    {p.tracking && (
+                      <DetailRow
+                        label="Tracking"
+                        value={<span className="break-all">{p.tracking}</span>}
+                      />
+                    )}
+                    {p.commodities && (
+                      <DetailRow label="Contents" value={p.commodities} />
+                    )}
+                  </dl>
+                </div>
+              ))}
+            </section>
+          )}
 
           {/* Charges — rows, not a table: a table is too wide for a phone. */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">

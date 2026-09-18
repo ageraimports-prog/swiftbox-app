@@ -208,28 +208,77 @@ export async function ensureReferralCode(customerId: number): Promise<string> {
 
 /**
  * Registration lives on the marketing WEBSITE (swiftboxtt.com/signup), NOT the
- * app — app.swiftboxtt.com has no signup page. This base is hardcoded so the
- * share link is always correct even when SIGNUP_URL is unset in production. The
- * earlier env-only approach fell back to the bare app origin in prod (which
- * 404s the friend); the hardcoded default below is the safety net. An env
- * override is still honoured, but the fallback is ALWAYS the website signup,
- * never the app.
+ * app — app.swiftboxtt.com has no signup page. This base is hardcoded and is
+ * AUTHORITATIVE: it is what the share link uses unless an override passes the
+ * same-site check in `resolveSignupBase` below. A wrong or stale SIGNUP_URL in
+ * a deployment used to silently win and hand the friend a 404; it no longer
+ * can.
  */
 export const SIGNUP_BASE_URL = "https://swiftboxtt.com";
+
+/**
+ * The only hosts a signup-base override may point at. Registration exists on
+ * the marketing site and nowhere else, so an override is a way to swap between
+ * the apex and www — not a way to point the link at another origin. Note that
+ * `app.swiftboxtt.com` is deliberately absent: the app has no /signup page.
+ */
+const ALLOWED_SIGNUP_HOSTS = new Set(["swiftboxtt.com", "www.swiftboxtt.com"]);
+
+/**
+ * Resolve the base URL the share link is built on.
+ *
+ * Unset/blank override → SIGNUP_BASE_URL, silently: that is the normal, correct
+ * configuration, not a misconfiguration, and this runs on every dashboard
+ * render. A non-blank override that fails the check is a real deployment bug,
+ * so it gets a one-line console.warn naming the offending value — that surfaces
+ * in the Vercel runtime logs instead of failing silently for the friend.
+ *
+ * The check is deliberately strict: parses as a URL, https, and a hostname in
+ * ALLOWED_SIGNUP_HOSTS. Everything else (http, app.swiftboxtt.com, localhost,
+ * a tunnel domain, garbage) falls back.
+ */
+function resolveSignupBase(signupBaseUrl?: string): string {
+  const candidate = signupBaseUrl?.trim();
+  if (!candidate) return SIGNUP_BASE_URL;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    console.warn(
+      `[referral] Ignoring signup base override ${JSON.stringify(candidate)} — not a valid URL. Falling back to ${SIGNUP_BASE_URL}.`
+    );
+    return SIGNUP_BASE_URL;
+  }
+
+  if (parsed.protocol !== "https:" || !ALLOWED_SIGNUP_HOSTS.has(parsed.hostname)) {
+    console.warn(
+      `[referral] Ignoring signup base override ${JSON.stringify(candidate)} — only https://swiftboxtt.com and https://www.swiftboxtt.com are accepted. Falling back to ${SIGNUP_BASE_URL}.`
+    );
+    return SIGNUP_BASE_URL;
+  }
+
+  return candidate;
+}
 
 /**
  * WhatsApp share deep link with a prefilled, natural recommendation message.
  * The program is double-sided, so the message leads with what the FRIEND gets
  * (REFERRAL_WELCOME_CREDIT_TTD off their first shipment) — that is the reason
- * they'd bother entering a code. The link always deep-links to the website signup page
- * with the referrer's code prefilled — `/signup?ref=CODE` — which the signup
- * page reads from the query string and uppercases into the referral field
- * (Sub-piece B). `signupBaseUrl` is an optional override (e.g.
- * process.env.SIGNUP_URL); when unset or blank it falls back to SIGNUP_BASE_URL,
- * so the link is never the bare app URL.
+ * they'd bother entering a code. The link always deep-links to the website
+ * signup page with the referrer's code prefilled — `/signup?ref=CODE` — which
+ * the signup page reads from the query string and uppercases into the referral
+ * field (Sub-piece B).
+ *
+ * PRECEDENCE: SIGNUP_BASE_URL wins by default. `signupBaseUrl` (in practice
+ * process.env.SIGNUP_URL) is a SAME-SITE override, not an escape hatch — it is
+ * honoured only when it is a valid https URL on swiftboxtt.com or
+ * www.swiftboxtt.com. Anything else is ignored, warned about, and replaced with
+ * SIGNUP_BASE_URL. The friend therefore cannot be sent to a 404 by a bad env
+ * var; the worst a misconfigured deployment can do is log a warning.
  */
 export function whatsappShareUrl(code: string, signupBaseUrl?: string): string {
-  const base = (signupBaseUrl?.trim() || SIGNUP_BASE_URL).replace(/\/+$/, "");
+  const base = resolveSignupBase(signupBaseUrl).replace(/\/+$/, "");
   const link = `${base}/signup?ref=${encodeURIComponent(code)}`;
   const text = encodeURIComponent(
     [

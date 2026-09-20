@@ -2,14 +2,16 @@
 
 import * as React from "react";
 
-const STREET = "6175 NW 167TH ST, Unit G36";
+const STREET = "6175 NW 167th ST STE G36";
 const CITY = "Hialeah, FL 33015";
 const COUNTRY = "USA";
 
 /**
- * Address Line 2, formatted exactly as the website's `swiftLabel` does it
- * (SwiftBox Rebranded Website, src/lib/miamiAddress.ts) — strip anything that
- * is not a digit, then pad to at least four.
+ * Address Line 2, formatted exactly as the website's `addressLine2` does it
+ * (SwiftBox Rebranded Website, src/lib/miamiAddress.ts) — the unit repeated,
+ * then the account code: strip anything that is not a digit, then pad to at
+ * least four. Airdrop changed the separator hyphen -> colon on 2026-09-19 and
+ * asked for "UNIT G36" at the head of the line; the padding is unchanged.
  *
  * `users.ac` is not clean: on live, 5 accounts are stored two digits wide and 3
  * carry a leading tab. Interpolating the raw value printed `SWIFT-18` here while
@@ -19,7 +21,7 @@ const COUNTRY = "USA";
  */
 function swiftLabel(ac: string): string {
   const digits = String(ac ?? "").replace(/\D+/g, "");
-  return `SWIFT-${digits.padStart(4, "0")}`;
+  return `UNIT G36 SWIFT: ${digits.padStart(4, "0")}`;
 }
 
 // Company line is intentionally omitted from the address block for now (the

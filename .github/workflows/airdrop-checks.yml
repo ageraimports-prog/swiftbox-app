@@ -3,7 +3,7 @@ on:
   push:
     branches: [codex/airdrop-customer-visibility]
   pull_request:
-    paths: ['src/lib/status*', 'src/lib/airdrop-display.ts', 'src/app/api/packages/**', 'src/app/dashboard/packages/**']
+    paths: ['src/lib/status*', 'src/lib/airdrop-*.ts', 'scripts/test-airdrop*', 'src/app/api/packages/**', 'src/app/dashboard/packages/**']
 permissions:
   contents: read
 jobs:
@@ -18,3 +18,4 @@ jobs:
       - run: npm ci
       - run: node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
       - run: node node_modules/vitest/vitest.mjs run src/lib/status.test.ts src/lib/referral.test.ts
+      - run: node scripts/test-airdrop-documents.cjs

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import AirdropDocuments from "../AirdropDocuments";
 import { useParams } from "next/navigation";
 import {
   STAGES,
@@ -245,6 +246,8 @@ export default function PackageDetailPage() {
               )}
             </dl>
           </section>
+
+          {data.package.transportMode && <div className="rounded-xl border p-4"><AirdropDocuments endpoint={`/api/packages/${data.package.id}/airdrop-documents`} /></div>}
 
           {/* Status timeline */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">

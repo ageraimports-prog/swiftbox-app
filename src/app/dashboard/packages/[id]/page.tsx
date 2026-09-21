@@ -229,9 +229,8 @@ export default function PackageDetailPage() {
               {data.package.shipper && (
                 <DetailRow label="Shipper" value={data.package.shipper} />
               )}
-              <DetailRow label="Weight" value={`${data.package.weight} lb`} />
+              <DetailRow label="Billing weight" value={`${data.package.weight} lb`} />
               {data.package.packageCode !== data.package.wr && <DetailRow label="Swiftbox reference" value={data.package.wr} />}
-              {data.package.billableWeight != null && data.package.billableWeight !== data.package.weight && <DetailRow label="Billing weight" value={`${data.package.billableWeight} lb (rounded up)`} />}
               {data.package.volumetricWeight > 0 && (
                 <DetailRow
                   label="Volumetric"

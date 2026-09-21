@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { airdropPackageColumns } from "@/lib/airdrop-display";
 
 type Row = {
   pk_id: number;
   wr: string;
+  external_code: string | null;
+  external_mode: string | null;
+  actual_weight: number;
   tracking: string;
   pk_type: number;
   weight: number;
@@ -26,7 +30,7 @@ export async function GET() {
   // stepper stage via shipStatusToStage().
   const rows = await query<Row>(
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight, p.pcs,
-            p.shipper, p.commodities, p.date,
+            p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
             s.ship_no, s.ship_status
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
@@ -38,9 +42,12 @@ export async function GET() {
   const packages = rows.map((r) => ({
     id: Number(r.pk_id),
     wr: r.wr,
+    packageCode: r.external_code || r.wr,
+    transportMode: r.external_mode,
+    billableWeight: Number(r.weight),
     tracking: r.tracking,
     freight: Number(r.pk_type),
-    weight: Number(r.weight),
+    weight: Number(r.actual_weight),
     pcs: Number(r.pcs),
     shipper: r.shipper,
     commodities: r.commodities,

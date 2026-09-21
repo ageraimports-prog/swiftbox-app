@@ -7,6 +7,9 @@ import { freightLabel, stageMeta } from "@/lib/status";
 type Pkg = {
   id: number;
   wr: string;
+  packageCode?: string;
+  transportMode?: string | null;
+  billableWeight?: number;
   tracking: string;
   freight: number;
   weight: number;
@@ -140,7 +143,7 @@ export default function PackagesPage() {
               className="block rounded-lg border border-mist/10 bg-ink-2 p-4 transition-colors active:border-green/40"
             >
               <div className="flex items-start justify-between gap-3">
-                <p className="sb-disp text-lg text-mist">{pkg.wr}</p>
+                <p className="sb-disp text-lg text-mist">{pkg.packageCode || pkg.wr}</p>
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}
                 >
@@ -164,7 +167,7 @@ export default function PackagesPage() {
                   {pkg.pcs === 1 ? "pc" : "pcs"}
                 </span>
                 <span className="rounded-sm bg-mist/10 px-1.5 py-0.5 font-semibold text-mist">
-                  {freightLabel(pkg.freight)}
+                  {freightLabel(pkg.freight, pkg.transportMode)}
                 </span>
                 <span className="ml-auto">{formatDate(pkg.date)}</span>
               </div>

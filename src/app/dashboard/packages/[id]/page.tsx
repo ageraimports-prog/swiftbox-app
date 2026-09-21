@@ -12,6 +12,9 @@ import {
 type Pkg = {
   id: number;
   wr: string;
+  packageCode?: string;
+  transportMode?: string | null;
+  billableWeight?: number;
   tracking: string;
   freight: number;
   weight: number;
@@ -200,7 +203,7 @@ export default function PackageDetailPage() {
       {data && (
         <>
           <div className="flex items-start justify-between gap-3">
-            <h1 className="sb-disp text-2xl text-mist">{data.package.wr}</h1>
+            <h1 className="sb-disp text-2xl text-mist">{data.package.packageCode || data.package.wr}</h1>
             <span
               className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
                 STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
@@ -226,6 +229,8 @@ export default function PackageDetailPage() {
                 <DetailRow label="Shipper" value={data.package.shipper} />
               )}
               <DetailRow label="Weight" value={`${data.package.weight} lb`} />
+              {data.package.packageCode !== data.package.wr && <DetailRow label="Swiftbox reference" value={data.package.wr} />}
+              {data.package.billableWeight != null && data.package.billableWeight !== data.package.weight && <DetailRow label="Billing weight" value={`${data.package.billableWeight} lb (rounded up)`} />}
               {data.package.volumetricWeight > 0 && (
                 <DetailRow
                   label="Volumetric"
@@ -233,7 +238,7 @@ export default function PackageDetailPage() {
                 />
               )}
               <DetailRow label="Pieces" value={data.package.pcs} />
-              <DetailRow label="Freight" value={freightLabel(data.package.freight)} />
+              <DetailRow label="Freight" value={freightLabel(data.package.freight, data.package.transportMode)} />
               <DetailRow label="Received" value={formatDate(data.package.date)} />
               {data.shipment?.shipNo && (
                 <DetailRow label="Shipment" value={data.shipment.shipNo} />

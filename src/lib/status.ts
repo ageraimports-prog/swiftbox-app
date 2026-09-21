@@ -10,11 +10,11 @@
  * DB `mod_shipment.ship_status` (0–5) → stage:
  *   no shipment row → 0   (package logged at Miami, not yet manifested)
  *   0 → 0   (manifested, no tracking update yet — still In Miami)
- *   1 → 1   2 → 2   3 → 3
- *   4 → 3   (unused in live data; clamped so it can't render as Delivered)
+ *   1 → 0   2 → 1   3 → 2
+ *   4 → 3   (Out for Delivery)
  *   5 → 4   (Delivered)
  *
- * Live data only contains ship_status 0 and 5.
+ * Swiftbox's admin owns these stages; provider warehouse states are separate.
  */
 
 export type Stage = 0 | 1 | 2 | 3 | 4;
@@ -60,10 +60,8 @@ export function shipStatusToStage(
   shipStatus: number | null | undefined
 ): Stage {
   const s = Number(shipStatus ?? 0);
-  if (s <= 0) return 0;
-  if (s >= 5) return 4;
-  if (s === 4) return 3; // clamp unused value, never falsely "Delivered"
-  return s as Stage;
+  if (!Number.isInteger(s) || s < 1 || s > 5) return 0;
+  return (s - 1) as Stage;
 }
 
 export function stageMeta(shipStatus: number | null | undefined): StageMeta {
@@ -71,7 +69,8 @@ export function stageMeta(shipStatus: number | null | undefined): StageMeta {
 }
 
 /** mod_packages.pk_type — 1 = AIR, 2 = SEA. */
-export function freightLabel(pkType: number | null | undefined): string {
+export function freightLabel(pkType: number | null | undefined, mode?: string | null): string {
+  if (mode === "express") return "EXPRESS";
   if (Number(pkType) === 1) return "AIR";
   if (Number(pkType) === 2) return "SEA";
   return "—";

@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { airdropPackageColumns } from "@/lib/airdrop-display";
 
 type Row = {
   pk_id: number;
   wr: string;
+  external_code: string | null;
+  external_mode: string | null;
+  actual_weight: number;
   tracking: string;
   pk_type: number;
   weight: number;
@@ -42,7 +46,7 @@ export async function GET(
   // id 404s rather than leaking that it exists.
   const rows = await query<Row>(
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight,
-            p.volumetric_weight, p.pcs, p.shipper, p.commodities, p.date,
+            p.volumetric_weight, p.pcs, p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
             s.ship_id, s.ship_no, s.ship_status,
             s.miami_date, s.transit_date, s.awaiting_date,
             s.ofd_date, s.delivered_date
@@ -62,9 +66,12 @@ export async function GET(
     package: {
       id: Number(r.pk_id),
       wr: r.wr,
+      packageCode: r.external_code || r.wr,
+      transportMode: r.external_mode,
+      billableWeight: Number(r.weight),
       tracking: r.tracking,
       freight: Number(r.pk_type),
-      weight: Number(r.weight),
+      weight: Number(r.actual_weight),
       volumetricWeight: Number(r.volumetric_weight),
       pcs: Number(r.pcs),
       shipper: r.shipper,

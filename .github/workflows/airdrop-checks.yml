@@ -19,3 +19,4 @@ jobs:
       - run: node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
       - run: node node_modules/vitest/vitest.mjs run src/lib/status.test.ts src/lib/referral.test.ts
       - run: node scripts/test-airdrop-documents.cjs
+      - run: node scripts/test-airdrop-billing-weight.cjs

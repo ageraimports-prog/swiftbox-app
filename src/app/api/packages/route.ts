@@ -8,7 +8,6 @@ type Row = {
   wr: string;
   external_code: string | null;
   external_mode: string | null;
-  actual_weight: number;
   tracking: string;
   pk_type: number;
   weight: number;
@@ -47,7 +46,7 @@ export async function GET() {
     billableWeight: Number(r.weight),
     tracking: r.tracking,
     freight: Number(r.pk_type),
-    weight: Number(r.actual_weight),
+    weight: Number(r.weight),
     pcs: Number(r.pcs),
     shipper: r.shipper,
     commodities: r.commodities,

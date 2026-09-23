@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       {
         ok: false,
         error:
-          "We couldn't submit that just now. Please WhatsApp 1 (868) 795-3300 and we'll handle it.",
+          "We couldn't submit that just now. Please WhatsApp 1 (868) 703-3600 and we'll handle it.",
       },
       { status: 500 }
     );

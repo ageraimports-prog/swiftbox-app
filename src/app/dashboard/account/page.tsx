@@ -27,7 +27,7 @@ export default async function AccountPage() {
         <h2 className="sb-disp mb-3 text-lg text-mist">Need help?</h2>
         <div className="grid grid-cols-2 gap-3">
           <a
-            href="https://wa.me/18687953300"
+            href="https://wa.me/18687033600"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep"
@@ -42,7 +42,7 @@ export default async function AccountPage() {
             WhatsApp Support
           </a>
           <a
-            href="tel:18687953300"
+            href="tel:18686093000"
             className="flex items-center justify-center gap-2 rounded-lg border border-green/40 bg-ink px-4 py-3 text-sm font-bold text-green transition-colors hover:border-green hover:bg-green/5"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-5 w-5" aria-hidden>

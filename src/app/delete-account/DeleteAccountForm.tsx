@@ -201,7 +201,7 @@ export default function DeleteAccountForm({
             <p className="mt-5 text-center text-xs text-muted">
               Prefer to talk to someone?{" "}
               <a
-                href="https://wa.me/18687953300"
+                href="https://wa.me/18687033600"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-green-deep underline"

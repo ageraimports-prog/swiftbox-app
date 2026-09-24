@@ -10,8 +10,9 @@ const COUNTRY = "USA";
  * Address Line 2, formatted exactly as the website's `addressLine2` does it
  * (SwiftBox Rebranded Website, src/lib/miamiAddress.ts) — the unit repeated,
  * then the account code: strip anything that is not a digit, then pad to at
- * least four. Airdrop changed the separator hyphen -> colon on 2026-09-19 and
- * asked for "UNIT G36" at the head of the line; the padding is unchanged.
+ * least four. Airdrop asked for "UNIT G36" at the head of the line on
+ * 2026-09-19; the separator is a HYPHEN ("SWIFT-0018"), set by Brent 2026-09-24
+ * after a brief colon form. The padding is unchanged.
  *
  * `users.ac` is not clean: on live, 5 accounts are stored two digits wide and 3
  * carry a leading tab. Interpolating the raw value printed `SWIFT-18` here while
@@ -21,7 +22,7 @@ const COUNTRY = "USA";
  */
 function swiftLabel(ac: string): string {
   const digits = String(ac ?? "").replace(/\D+/g, "");
-  return `UNIT G36 SWIFT: ${digits.padStart(4, "0")}`;
+  return `UNIT G36 SWIFT-${digits.padStart(4, "0")}`;
 }
 
 // Company line is intentionally omitted from the address block for now (the

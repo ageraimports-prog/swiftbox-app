@@ -27,7 +27,7 @@ export default async function AccountPage() {
         <h2 className="sb-disp mb-3 text-lg text-mist">Need help?</h2>
         <div className="grid grid-cols-2 gap-3">
           <a
-            href="https://wa.me/18687033600"
+            href="https://wa.me/18686093000"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep"

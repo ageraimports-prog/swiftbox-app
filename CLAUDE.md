@@ -35,6 +35,11 @@ things, all in `src/lib/consolidation.ts`:
    released email itself and stamps `released_notified_at` (+ the members'
    `joined_notified_at`) so the admin's sweep never sends a second one. The admin
    then drafts the ONE consolidated invoice; the app never writes an invoice.
+   Straight after a release the app calls the admin's
+   `POST /api/consolidation/release-hook` (`requestInstantDraft`, header
+   `x-consolidation-key` = `CONSOLIDATION_HOOK_KEY`, `ADMIN_URL` default
+   https://admin.swiftboxtt.com, 10 s timeout) so the draft exists at once. A failed
+   call never fails the release — the admin's daily cron drafts it instead.
 
 - Status/reason values are VARCHAR vocabularies owned by the admin
   (`holding|released|invoiced`, `all_arrived|deadline|customer|admin`); live MySQL

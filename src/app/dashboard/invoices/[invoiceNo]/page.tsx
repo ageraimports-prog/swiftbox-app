@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { paymentLabel } from "@/lib/payment-label";
 import {
   STATUS_BADGE,
   formatDate,
@@ -401,7 +402,7 @@ export default function InvoiceDetailPage() {
                         {formatDate(p.paidDate)}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-dark">
-                        {p.method}
+                        {paymentLabel(p.method)}
                         {p.reference && ` · ${p.reference}`}
                       </p>
                     </div>

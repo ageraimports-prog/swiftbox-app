@@ -13,6 +13,7 @@ import {
 import DashboardHome from "./DashboardHome";
 import ReferralCard from "./ReferralCard";
 import ReferralEarningsCard from "./ReferralEarningsCard";
+import BuyForMeCard from "@/components/BuyForMeCard";
 
 type UserRow = {
   fname: string;
@@ -83,6 +84,8 @@ export default async function DashboardPage() {
           <p className="mt-0.5 text-xs text-muted-dark">Member since {since}</p>
         )}
       </section>
+
+      <BuyForMeCard />
 
       {referralCode && referralShareUrl && (
         <ReferralCard

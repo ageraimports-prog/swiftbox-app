@@ -59,3 +59,23 @@ things, all in `src/lib/consolidation.ts`:
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.
 Don't run a build while a dev server for this app is running (it corrupts `.next`).
+
+## Buy For Me (SwiftboxAdmin BUY_FOR_ME_PLAN.md — the admin owns the rules)
+
+- `src/lib/buy-for-me-core.ts` is an IDENTICAL copy of the admin's
+  `lib/buy-for-me-core.ts` (statuses, the quote calculator, `cleanText`,
+  `safeProductUrl`). Change it in the admin and copy it here; never edit only one.
+  This app never recalculates a quote — it shows the frozen `swiftbox_bfm_quotes` row.
+- The customer can only: create a request (`submitted`), upload a slip
+  (`quoted` → `payment_uploaded`), and cancel while nothing is paid. Every write is
+  conditional on the status and scoped `WHERE user_id = :userId`.
+- **Payment slips are private.** They go through `/api/buy-for-me/[id]/slip`
+  (server-side `put`, `access: 'private'`, type checked by first bytes, 4 MB max,
+  path `bfm-slips/<id>/<32 hex>`) into the private store `swiftbox-admin-blob`.
+  `blob_url` is never selected into a page or API response; the only reader is
+  `/api/buy-for-me/slip/[slipId]`, which streams the customer's OWN slip and
+  answers 404 to anyone else.
+- All customer text goes through `cleanText` (the bfm tables are 3-byte utf8).
+- Payment methods are shown with `paymentLabel` (`src/lib/payment-label.ts`),
+  never raw — `bfm_credit` is "Buy For Me credit".
+- Login returns to `?next=` only through `safeNext` (`src/lib/next-path.ts`).

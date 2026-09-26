@@ -10,6 +10,8 @@ type HeaderRow = {
   ship_no: string | null;
   status: "unpaid" | "partial" | "paid";
   billing_mode: string | null;
+  billing_basis: string | null;
+  consolidation_saving_ttd: string | null;
   roe: string;
   shipping_ttd: string;
   customs_total_ttd: string;
@@ -74,7 +76,7 @@ export async function GET(
   // packages; neither is a real debt, both can change before a cent is owed, and
   // neither may be shown to the customer. A draft's invoice number 404s here.
   const headers = await query<HeaderRow>(
-    `SELECT invoice_id, invoice_no, scope, ship_no, status, billing_mode, roe,
+    `SELECT invoice_id, invoice_no, scope, ship_no, status, billing_mode, billing_basis, consolidation_saving_ttd, roe,
             shipping_ttd, customs_total_ttd, total_ttd, amount_paid, created_at
        FROM swiftbox_invoices
       WHERE invoice_no = :invoiceNo AND user_id = :userId AND lifecycle = 'issued'
@@ -129,6 +131,9 @@ export async function GET(
       shipNo: h.ship_no,
       status: h.status,
       billingMode: billingModeOf(h.billing_mode),
+      // Consolidated Billing: "saved you TT$X" — the page shows it only when > 0.
+      consolidated: String(h.billing_basis ?? "").trim() === "consolidated",
+      consolidationSavingTtd: Number(h.consolidation_saving_ttd ?? 0),
       roe: Number(h.roe),
       shippingTtd: Number(h.shipping_ttd),
       customsTotalTtd: Number(h.customs_total_ttd),

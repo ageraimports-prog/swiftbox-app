@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import ShippingAddress from "./ShippingAddress";
+import ConsolidationToggle from "./ConsolidationToggle";
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -21,6 +22,9 @@ export default async function AccountPage() {
 
       {/* Shipping address (AIR / SEA, copy-to-clipboard) */}
       <ShippingAddress accountNo={session.ac} customerName={session.name} />
+
+      {/* Consolidated Billing opt-in */}
+      <ConsolidationToggle />
 
       {/* Support */}
       <section>

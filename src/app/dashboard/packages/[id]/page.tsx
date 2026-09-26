@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
+import ConsolidationBanner from "@/components/ConsolidationBanner";
+import { HELD_BADGE } from "@/lib/status";
 import AirdropDocuments from "../AirdropDocuments";
 import { useParams } from "next/navigation";
 import {
@@ -147,6 +149,7 @@ export default function PackageDetailPage() {
   const [data, setData] = React.useState<{
     package: Pkg;
     shipment: Shipment | null;
+    held?: boolean;
   } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -207,12 +210,14 @@ export default function PackageDetailPage() {
             <h1 className="sb-disp text-2xl text-mist">{data.package.packageCode || data.package.wr}</h1>
             <span
               className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
+                data.held ? HELD_BADGE.badge : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
               }`}
             >
-              {STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].label}
+              {data.held ? HELD_BADGE.label : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].label}
             </span>
           </div>
+
+          {data.held && <ConsolidationBanner />}
 
           {/* Package details */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 px-4 py-1">

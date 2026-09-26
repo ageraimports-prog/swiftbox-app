@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { freightLabel, stageMeta } from "@/lib/status";
+import { freightLabel, packageBadge } from "@/lib/status";
+import ConsolidationBanner from "@/components/ConsolidationBanner";
 
 type Pkg = {
   id: number;
@@ -19,6 +20,7 @@ type Pkg = {
   date: string;
   shipNo: string | null;
   shipStatus: number | null;
+  held?: boolean;
 };
 
 function formatDate(date: string): string {
@@ -94,6 +96,8 @@ export default function PackagesPage() {
   const [packages, setPackages] = React.useState<Pkg[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  const [reload, setReload] = React.useState(0);
+
   React.useEffect(() => {
     let cancelled = false;
     fetch("/api/packages")
@@ -111,11 +115,13 @@ export default function PackagesPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reload]);
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="sb-disp text-xl text-mist">Packages</h1>
+
+      <ConsolidationBanner onReleased={() => setReload((n) => n + 1)} />
 
       {error && (
         <div role="alert" className="rounded-md bg-red-400/10 px-4 py-3 text-sm text-red-300">
@@ -135,7 +141,7 @@ export default function PackagesPage() {
 
       {packages &&
         packages.map((pkg) => {
-          const meta = stageMeta(pkg.shipStatus);
+          const meta = packageBadge(pkg.shipStatus, pkg.held);
           return (
             <Link
               key={pkg.id}

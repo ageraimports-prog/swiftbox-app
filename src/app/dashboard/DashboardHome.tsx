@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { stageMeta, freightLabel } from "@/lib/status";
+import { packageBadge, freightLabel } from "@/lib/status";
+import ConsolidationBanner from "@/components/ConsolidationBanner";
 
 type Pkg = {
   id: number;
@@ -16,6 +17,7 @@ type Pkg = {
   commodities: string;
   date: string;
   shipStatus: number | null;
+  held?: boolean;
 };
 
 type Invoice = {
@@ -96,7 +98,7 @@ function PackageSkeleton() {
 }
 
 function PackageCard({ pkg }: { pkg: Pkg }) {
-  const meta = stageMeta(pkg.shipStatus);
+  const meta = packageBadge(pkg.shipStatus, pkg.held);
   return (
     <Link
       href={`/dashboard/packages/${pkg.id}`}
@@ -191,6 +193,8 @@ export default function DashboardHome() {
 
   return (
     <>
+      <ConsolidationBanner />
+
       {/* Recent Packages */}
       <section>
         <SectionHeading title="Recent Packages" href="/dashboard/packages" />

@@ -48,6 +48,8 @@ type Invoice = {
   shipNo: string | null;
   status: InvoiceStatus;
   billingMode: "air" | "ocean";
+  consolidated?: boolean;
+  consolidationSavingTtd?: number;
   roe: number;
   shippingTtd: number;
   customsTotalTtd: number;
@@ -365,6 +367,11 @@ export default function InvoiceDetailPage() {
                 emphasis
                 divider
               />
+              {invoice.consolidated && (invoice.consolidationSavingTtd ?? 0) > 0 && (
+                <p className="py-1.5 text-right text-sm font-bold text-green">
+                  Consolidated Billing saved you {formatTtd(invoice.consolidationSavingTtd ?? 0)}
+                </p>
+              )}
               <TotalRow label="Amount paid" value={formatTtd(invoice.amountPaid)} />
               <TotalRow
                 label="Balance due"

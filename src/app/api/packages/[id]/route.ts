@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
+import { heldPackageIds } from "@/lib/consolidation";
 
 type Row = {
   pk_id: number;
@@ -61,7 +62,10 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const held = (await heldPackageIds(session.id).catch(() => new Set<number>())).has(Number(r.pk_id));
+
   return NextResponse.json({
+    held,
     package: {
       id: Number(r.pk_id),
       wr: r.wr,

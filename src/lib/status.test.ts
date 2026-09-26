@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {shipStatusToStage,freightLabel} from "./status";
+import {shipStatusToStage,freightLabel, packageBadge, stageMeta } from "./status";
 describe("canonical Swiftbox shipment progress",()=>{
   it("keeps unmanifested and stage 1 packages in Miami",()=>{
     for(const value of [null,undefined,0,1])expect(shipStatusToStage(value)).toBe(0);
@@ -14,5 +14,15 @@ describe("canonical Swiftbox shipment progress",()=>{
     expect(freightLabel(1,"express")).toBe("EXPRESS");
     expect(freightLabel(2,"sea")).toBe("SEA");
     expect(freightLabel(1)).toBe("AIR");
+  });
+});
+
+describe("packageBadge (Consolidated Billing)", () => {
+  it("shows the hold while a package is held", () => {
+    expect(packageBadge(3, true).label).toBe("Held for consolidation");
+  });
+  it("falls back to the real stage when not held", () => {
+    expect(packageBadge(3, false).label).toBe(stageMeta(3).label);
+    expect(packageBadge(5).label).toBe(stageMeta(5).label);
   });
 });

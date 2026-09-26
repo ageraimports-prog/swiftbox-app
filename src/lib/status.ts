@@ -75,3 +75,18 @@ export function freightLabel(pkType: number | null | undefined, mode?: string | 
   if (Number(pkType) === 2) return "SEA";
   return "—";
 }
+
+/**
+ * Consolidated Billing: a cleared package the customer asked us to HOLD until
+ * the rest arrives. Shown in place of the stage badge while it is held; the
+ * stepper underneath still shows the real stage (cleared).
+ */
+export const HELD_BADGE = {
+  label: "Held for consolidation",
+  badge: "bg-violet-400/10 text-violet-300 border border-violet-400/25",
+};
+
+/** The badge for a package card: the hold wins while the package is held. */
+export function packageBadge(shipStatus: number | null | undefined, held?: boolean): { label: string; badge: string } {
+  return held ? HELD_BADGE : stageMeta(shipStatus);
+}

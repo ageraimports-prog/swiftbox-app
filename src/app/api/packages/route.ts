@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
+import { heldPackageIds } from "@/lib/consolidation";
 
 type Row = {
   pk_id: number;
@@ -38,6 +39,9 @@ export async function GET() {
     { userId: session.id }
   );
 
+  // Consolidated Billing: which of these are held until the rest arrive.
+  const held = await heldPackageIds(session.id).catch(() => new Set<number>());
+
   const packages = rows.map((r) => ({
     id: Number(r.pk_id),
     wr: r.wr,
@@ -53,6 +57,7 @@ export async function GET() {
     date: r.date,
     shipNo: r.ship_no,
     shipStatus: r.ship_status == null ? null : Number(r.ship_status),
+    held: held.has(Number(r.pk_id)),
   }));
 
   return NextResponse.json({ packages });

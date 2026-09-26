@@ -152,7 +152,45 @@ export async function releaseOpenGroup(userId: number, firstName: string, email:
       console.error("[consolidation] released email failed:", e instanceof Error ? e.message : e);
     }
   }
+  // The ONE consolidated invoice draft, now rather than at the admin's next
+  // sweep. Never fails the release: if the admin can't be reached the group is
+  // already released and the admin's daily cron drafts it.
+  const draft = await requestInstantDraft(userId);
+  if (!draft.ok) console.error("[consolidation] instant draft not made now:", draft.reason);
   return true;
+}
+
+/**
+ * Ask the admin to draft this customer's released consolidation NOW —
+ * SwiftboxAdmin's POST /api/consolidation/release-hook, gated by the shared
+ * CONSOLIDATION_HOOK_KEY. The admin owns the billing; this app never writes an
+ * invoice. 10-second timeout; every failure is reported, never thrown.
+ */
+export async function requestInstantDraft(
+  userId: number
+): Promise<{ ok: true; invoiced: string[] } | { ok: false; reason: string }> {
+  const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
+  if (!key) return { ok: false, reason: "CONSOLIDATION_HOOK_KEY not set" };
+  const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10_000);
+  try {
+    const res = await fetch(`${base}/api/consolidation/release-hook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-consolidation-key": key },
+      body: JSON.stringify({ userId }),
+      signal: ctl.signal,
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => ({}))) as { invoiced?: string[]; failed?: { reason: string }[]; error?: string };
+    if (!res.ok) return { ok: false, reason: data.error ?? `HTTP ${res.status}` };
+    if (data.failed && data.failed.length > 0) return { ok: false, reason: data.failed.map((f) => f.reason).join("; ") };
+    return { ok: true, invoiced: data.invoiced ?? [] };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : "admin unreachable" };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Opt in or out. Opting OUT releases any open group straight away. */

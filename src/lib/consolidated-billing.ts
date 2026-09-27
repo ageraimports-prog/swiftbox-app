@@ -36,6 +36,12 @@ const G = "swiftbox_cb_groups";
 const M = "swiftbox_cb_group_packages";
 const B = "swiftbox_cb_bills";
 const BI = "swiftbox_cb_bill_invoices";
+/**
+ * Buy For Me is completely separate (Brent, 27 Sep 2026): a package bought for
+ * the customer is never shown as waiting for a group, even in the moment between
+ * its link and the admin's next run taking it out of the group.
+ */
+const BFM_PKS = "SELECT pk_id FROM swiftbox_bfm_packages";
 
 /** A read that answers `fallback` when migration 038 has not run. */
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
@@ -152,7 +158,8 @@ export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPa
          FROM ${M} m
          JOIN ${G} g ON g.group_id = m.group_id
          LEFT JOIN mod_shipment s ON s.package_id = m.pk_id
-        WHERE m.user_id = :userId AND m.removed_at IS NULL`,
+        WHERE m.user_id = :userId AND m.removed_at IS NULL
+          AND m.pk_id NOT IN (${BFM_PKS})`,
       { userId }
     ),
     []
@@ -197,7 +204,7 @@ export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
       `SELECT ip.invoice_id
          FROM swiftbox_invoice_packages ip
          JOIN swiftbox_invoices i ON i.invoice_id = ip.invoice_id AND i.user_id = :userId
-         LEFT JOIN ${M} m ON m.pk_id = ip.pk_id AND m.removed_at IS NULL
+         LEFT JOIN ${M} m ON m.pk_id = ip.pk_id AND m.removed_at IS NULL AND m.pk_id NOT IN (${BFM_PKS})
          LEFT JOIN ${G} g ON g.group_id = m.group_id AND g.state IN ('open','closed')
         GROUP BY ip.invoice_id
        HAVING COUNT(*) = SUM(g.group_id IS NOT NULL)`,

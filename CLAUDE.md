@@ -10,8 +10,12 @@ Brent is non-technical — explain in plain language.
 
 - **All DB access goes through `src/lib/db.ts`** (the PHP bridge — MySQL :3306 is
   firewalled). `:named` placeholders. MySQL 5.6: no CTEs, no window functions.
-- **Deploys are manual:** commit, then `npx vercel --prod`. There is no git
-  integration.
+- **Deploys come from GitHub `master`.** The Vercel project swiftbox-app IS
+  connected to GitHub (since ~2026-09-11; the old "no git integration" note was
+  wrong): a push to `master` deploys PRODUCTION, and any other branch push makes a
+  protected preview. Never `npx vercel --prod` from a working copy — that is how
+  live drifted onto a side branch in Sept 2026. Production must keep
+  `CONSOLIDATION_HOOK_KEY`.
 - **Customers see ISSUED invoices only** (`lifecycle = 'issued'`); drafts and held
   drafts are never shown.
 - **Every query is scoped to the session user** (`getSession()` → `session.id` =

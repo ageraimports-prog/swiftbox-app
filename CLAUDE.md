@@ -21,43 +21,52 @@ Brent is non-technical — explain in plain language.
 - **Every query is scoped to the session user** (`getSession()` → `session.id` =
   `users.id`), which doubles as the ownership check.
 
-## Consolidated Billing (since migration 033, 2026-09-26)
+## Consolidated Billing v2 (Brent's rules of 27 Sep 2026, admin migration 038)
 
-The admin owns the rules (see SwiftboxAdmin `CLAUDE.md` → "Consolidated Billing
-invariants" and `CONSOLIDATED_BILLING_PLAN.md`). This app does exactly three
-things, all in `src/lib/consolidation.ts`:
+The admin owns every rule — SwiftboxAdmin `CLAUDE.md` → "Consolidated Billing v2"
+(R1–R13) and `CONSOLIDATED_BILLING_PLAN.md`. v1 (hold after clearance, one combined
+invoice, "Deliver what's here now", the released email) is REMOVED from this app.
 
-1. **Reads** the opt-in (`users.consolidated_billing`) and the open HOLDING group,
-   including the admin's "still expected" snapshot (`expected_count`). The app
-   NEVER re-derives what is expected — one rule, one place (admin `expectedFor`).
-2. **Opts in / out.** Business-tier and `auto_hold` customers cannot opt in — they
-   are billed on terms. **`auto_hold` is NOT consolidation** and is never read as
-   a hold. Opting OUT releases any open group immediately.
-3. **Releases** the open group ("Deliver what's here now", or opting out) with the
-   SAME conditional UPDATE the admin uses (`WHERE status = 'holding'`), setting
-   `open_user_id = NULL`, `release_reason = 'customer'`, UTC times. It sends the
-   released email itself and stamps `released_notified_at` (+ the members'
-   `joined_notified_at`) so the admin's sweep never sends a second one. The admin
-   then drafts the ONE consolidated invoice; the app never writes an invoice.
-   Straight after a release the app calls the admin's
-   `POST /api/consolidation/release-hook` (`requestInstantDraft`, header
-   `x-consolidation-key` = `CONSOLIDATION_HOOK_KEY`, `ADMIN_URL` default
-   https://admin.swiftboxtt.com, 10 s timeout) so the draft exists at once. A failed
-   call never fails the release — the admin's daily cron drafts it instead.
+**The rules, as they touch this app:** R1 per-customer ON/OFF, free. R2/R3 a group
+opens on the first Miami-warehouse entry and runs 20 days (`HOLD_DAYS`). R4 members
+fly and clear as normal, then wait. R5 the group closes on day 21 and goes out once
+the last package lands. R6 turning it OFF sends out what's ready now; the rest go
+separately. R7 released packages show the stage of the last to arrive and come as
+ONE delivery. R8 a Miami entry after the window opens a new group. R9 one
+Consolidated Bill (CB-######) per release, per package and per customs item. R10 the
+per-package invoices are unchanged; the bill only sums them; paying it pays them all.
+R11 a package with no invoice at release is billed on its own. R12 rates unchanged:
+US$1.99/lb + 20% fuel (US$2.39/lb all-in), actual weight per package, no repacking.
+**R13 the app NEVER says a package is in, or held in, Trinidad.**
 
-- Status/reason values are VARCHAR vocabularies owned by the admin
-  (`holding|released|invoiced`, `all_arrived|deadline|customer|admin`); live MySQL
-  is not strict, so never write any other value.
-- Notifications are email + the in-app status only (no WhatsApp). The app has no
-  notification feed; its in-app surface is the "Held for consolidation · x of y
-  arrived · delivers by …" banner (`src/components/ConsolidationBanner.tsx`) and
-  the held badge (`packageBadge` in `src/lib/status.ts`).
-- The released-email wording is duplicated from the admin
-  (`lib/consolidation-email.ts` there) — keep the two in step.
-- The invoice view shows "Consolidated Billing saved you TT$X" only when
-  `billing_basis = 'consolidated'` AND the stored saving is > 0.
-- `scripts/consolidation-cli.ts` drives this module from the command line (the
-  admin's `scripts/verify-consolidation-live.ts` uses it for the live check).
+**How this app keeps them:**
+- **It never writes a Consolidated Billing table or an invoice.** `src/lib/consolidated-billing.ts`
+  only reads `swiftbox_cb_*`; the switch calls the admin
+  (`POST /api/consolidated-billing/customer-toggle`) and the PDF button fetches it
+  (`GET /api/consolidated-billing/bill-pdf`), both with header `x-consolidation-key` =
+  `CONSOLIDATION_HOOK_KEY` (`ADMIN_URL` default https://admin.swiftboxtt.com). If the
+  admin refuses or can't be reached the switch does not move.
+- **R13 in code:** a member of an unreleased group shows `CB_WAITING_LABEL` from the
+  moment it leaves Miami (switching only at landing would itself reveal it), and the
+  package APIs send such a package as `shipStatus: 1` with every later date nulled —
+  its real stage never reaches the browser. Its invoice is hidden (list and detail
+  404) until the group releases.
+- **Invoices:** a bill's invoices are listed AS the bill (`/dashboard/bills/[billNo]`,
+  live totals, PDF via the admin). A child invoice stays viewable and links its bill.
+- **All copy lives in `src/lib/consolidatedBilling.ts`** (short line, long
+  description, confirm, card texts, FAQ, HOLD_DAYS). The arithmetic mirrors the
+  admin's pure core in `src/lib/consolidatedBillingCore.ts` — keep the two in step.
+- Until the admin's migration 038 runs the tables are missing and every read answers
+  "nothing" (`safe()`), so the rest of the app is unaffected.
+- **Play Store data safety: unchanged** — a preference flag and figures already
+  declared (purchase history, declared value); the PDF comes from our own admin.
+
+**Copy rules:** only these claims — free; 20 days from the first Miami arrival;
+delivered together as soon as the last package lands; one bill with a per-item
+customs breakdown; rates unchanged per package; no repacking. Never "cheapest", "no
+hidden fees", delivery dates or times, competitor names or volume numbers. Wherever
+US$1.99 appears, the 20% fuel is on the same line. The only phone number is
+(868) 609-3000.
 
 ## Install page and reminder (2026-09-29)
 

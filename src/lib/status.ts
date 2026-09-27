@@ -17,6 +17,8 @@
  * Swiftbox's admin owns these stages; provider warehouse states are separate.
  */
 
+import { CB_WAITING_LABEL } from "./consolidatedBilling";
+
 export type Stage = 0 | 1 | 2 | 3 | 4;
 
 export type StageMeta = {
@@ -77,16 +79,15 @@ export function freightLabel(pkType: number | null | undefined, mode?: string | 
 }
 
 /**
- * Consolidated Billing: a cleared package the customer asked us to HOLD until
- * the rest arrives. Shown in place of the stage badge while it is held; the
- * stepper underneath still shows the real stage (cleared).
+ * Consolidated Billing: a package that has left Miami and is waiting for the
+ * rest of its group. Shown in place of the stage — never where it is (R13).
  */
-export const HELD_BADGE = {
-  label: "Held for consolidation",
+export const CB_WAITING_BADGE = {
+  label: CB_WAITING_LABEL,
   badge: "bg-violet-400/10 text-violet-300 border border-violet-400/25",
 };
 
-/** The badge for a package card: the hold wins while the package is held. */
-export function packageBadge(shipStatus: number | null | undefined, held?: boolean): { label: string; badge: string } {
-  return held ? HELD_BADGE : stageMeta(shipStatus);
+/** The badge for a package card: waiting for its group wins over the stage. */
+export function packageBadge(shipStatus: number | null | undefined, cbWaiting?: boolean): { label: string; badge: string } {
+  return cbWaiting ? CB_WAITING_BADGE : stageMeta(shipStatus);
 }

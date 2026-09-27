@@ -50,8 +50,8 @@ type Invoice = {
   shipNo: string | null;
   status: InvoiceStatus;
   billingMode: "air" | "ocean";
-  consolidated?: boolean;
-  consolidationSavingTtd?: number;
+  /** Set when this invoice is part of a Consolidated Bill. */
+  consolidatedBillNo?: string | null;
   roe: number;
   shippingTtd: number;
   customsTotalTtd: number;
@@ -230,6 +230,15 @@ export default function InvoiceDetailPage() {
             </p>
           </section>
 
+          {invoice.consolidatedBillNo && (
+            <Link
+              href={`/dashboard/bills/${invoice.consolidatedBillNo}`}
+              className="rounded-lg border border-green/30 bg-green/10 px-4 py-3 text-sm text-mist"
+            >
+              Part of Consolidated Bill <span className="font-bold text-green">{invoice.consolidatedBillNo}</span> — pay the whole bill at once.
+            </Link>
+          )}
+
           {/* Invoice details */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 px-4 py-1">
             <dl>
@@ -369,11 +378,6 @@ export default function InvoiceDetailPage() {
                 emphasis
                 divider
               />
-              {invoice.consolidated && (invoice.consolidationSavingTtd ?? 0) > 0 && (
-                <p className="py-1.5 text-right text-sm font-bold text-green">
-                  Consolidated Billing saved you {formatTtd(invoice.consolidationSavingTtd ?? 0)}
-                </p>
-              )}
               <TotalRow label="Amount paid" value={formatTtd(invoice.amountPaid)} />
               <TotalRow
                 label="Balance due"

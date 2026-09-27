@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import ConsolidationBanner from "@/components/ConsolidationBanner";
+import ConsolidatedBillingCard from "@/components/ConsolidatedBillingCard";
 import PackageCard, { type PackageSummary } from "@/components/PackageCard";
 import InvoiceCard, { type InvoiceSummary } from "@/components/InvoiceCard";
 
@@ -80,7 +80,7 @@ export default function DashboardHome() {
 
   return (
     <>
-      <ConsolidationBanner />
+      <ConsolidatedBillingCard />
 
       {/* Recent Packages */}
       <section>

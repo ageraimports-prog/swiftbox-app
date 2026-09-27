@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import ConsolidationBanner from "@/components/ConsolidationBanner";
 import PackageCard, { type PackageSummary } from "@/components/PackageCard";
 
 function SkeletonCard() {
@@ -67,7 +66,6 @@ export default function PackagesPage() {
   const [packages, setPackages] = React.useState<PackageSummary[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [reload, setReload] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -86,13 +84,12 @@ export default function PackagesPage() {
     return () => {
       cancelled = true;
     };
-  }, [reload]);
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="sb-disp text-xl text-mist">Packages</h1>
 
-      <ConsolidationBanner onReleased={() => setReload((n) => n + 1)} />
 
       {error && (
         <div role="alert" className="rounded-md bg-red-400/10 px-4 py-3 text-sm text-red-300">

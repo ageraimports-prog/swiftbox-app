@@ -18,10 +18,11 @@ describe("canonical Swiftbox shipment progress",()=>{
 });
 
 describe("packageBadge (Consolidated Billing)", () => {
-  it("shows the hold while a package is held", () => {
-    expect(packageBadge(3, true).label).toBe("Held for consolidation");
+  it("shows 'waiting for your group' while a package waits (never where it is)", () => {
+    expect(packageBadge(3, true).label).toBe("Consolidated Billing: waiting for your group");
+    expect(packageBadge(2, true).label).not.toMatch(/trinidad|clearance|arriv/i);
   });
-  it("falls back to the real stage when not held", () => {
+  it("falls back to the real stage when not waiting", () => {
     expect(packageBadge(3, false).label).toBe(stageMeta(3).label);
     expect(packageBadge(5).label).toBe(stageMeta(5).label);
   });

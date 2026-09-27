@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { cbHiddenInvoiceIds, listCbBills } from "@/lib/consolidated-billing";
 
 type Row = {
+  invoice_id: number;
   invoice_no: string;
   scope: "package" | "shipment";
   total_ttd: string;
@@ -35,7 +37,7 @@ export async function GET() {
   // this line everywhere already (email refuses a non-issued invoice; the customer
   // delete-block counts issued-unpaid only); this reader never got it.
   const rows = await query<Row>(
-    `SELECT invoice_no, scope, total_ttd, amount_paid, status, created_at
+    `SELECT invoice_id, invoice_no, scope, total_ttd, amount_paid, status, created_at
        FROM swiftbox_invoices
       WHERE user_id = :userId
         AND lifecycle = 'issued'
@@ -43,12 +45,18 @@ export async function GET() {
     { userId: session.id }
   );
 
+  // Consolidated Billing: a bill's invoices are shown AS the bill, and an
+  // invoice whose packages are still waiting for their group is not shown yet.
+  const hidden = await cbHiddenInvoiceIds(session.id).catch(() => new Set<number>());
+  const bills = await listCbBills(session.id).catch(() => []);
+  const visible = rows.filter((r) => !hidden.has(Number(r.invoice_id)));
+
   // What each invoice bills for, so a row can lead with the package the customer
   // recognises (description + carrier tracking). Same header filter as above —
   // the child rows are reached only THROUGH this customer's issued headers, so an
   // orphaned or foreign swiftbox_invoice_packages row can never surface here.
   // Shipment-scope invoices carry no membership rows and simply get none.
-  const pkgRows = rows.length
+  const pkgRows = visible.length
     ? await query<PackageRow>(
         `SELECT i.invoice_no, p.wr, p.tracking, p.commodities
            FROM swiftbox_invoices i
@@ -71,7 +79,7 @@ export async function GET() {
     byInvoice.set(p.invoice_no, list);
   }
 
-  const invoices = rows.map((r) => ({
+  const invoices = visible.map((r) => ({
     invoiceNo: r.invoice_no,
     scope: r.scope,
     totalTtd: Number(r.total_ttd),
@@ -81,5 +89,16 @@ export async function GET() {
     packages: byInvoice.get(r.invoice_no) ?? [],
   }));
 
-  return NextResponse.json({ invoices });
+  return NextResponse.json({
+    invoices,
+    bills: bills.map((b) => ({
+      billNo: b.billNo,
+      date: b.date,
+      packageCount: b.packages.length,
+      packages: b.packages,
+      totalTtd: b.totals.totalTtd,
+      dueTtd: b.totals.dueTtd,
+      status: b.totals.status,
+    })),
+  });
 }

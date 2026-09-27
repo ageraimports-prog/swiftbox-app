@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import InvoiceCard, { type InvoiceSummary } from "@/components/InvoiceCard";
+import BillCard, { type BillSummary } from "@/components/BillCard";
 
 function SkeletonCard() {
   return (
@@ -47,6 +48,7 @@ function EmptyState() {
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = React.useState<InvoiceSummary[] | null>(null);
+  const [bills, setBills] = React.useState<BillSummary[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -57,7 +59,10 @@ export default function InvoicesPage() {
         return res.json();
       })
       .then((data) => {
-        if (!cancelled) setInvoices(data.invoices);
+        if (!cancelled) {
+          setInvoices(data.invoices);
+          setBills(data.bills ?? []);
+        }
       })
       .catch(() => {
         if (!cancelled)
@@ -86,7 +91,10 @@ export default function InvoicesPage() {
         </>
       )}
 
-      {invoices && invoices.length === 0 && <EmptyState />}
+      {/* Consolidated Bills: one per delivery, instead of their invoices one by one. */}
+      {bills.map((b) => <BillCard key={b.billNo} bill={b} />)}
+
+      {invoices && invoices.length === 0 && bills.length === 0 && <EmptyState />}
 
       {invoices?.map((inv) => <InvoiceCard key={inv.invoiceNo} inv={inv} />)}
     </div>

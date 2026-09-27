@@ -15,15 +15,17 @@ export type InvoiceSummary = {
   packages?: { wr: string; tracking: string; commodities: string }[];
 };
 
-function scopeLabel(scope: InvoiceSummary["scope"]): string {
-  return scope.charAt(0).toUpperCase() + scope.slice(1);
+/** Headline for an invoice with no package rows — never the invoice number. */
+function fallbackTitle(scope: InvoiceSummary["scope"]): string {
+  return scope === "shipment" ? "Shipment charges" : "Package";
 }
 
 /**
  * One invoice in a list (Invoices, Dashboard). Leads with what it is FOR — the
  * package description and its tracking number — and keeps the invoice number,
  * which is what the PDF says, on the line below. An invoice with no package rows
- * (shipment scope) is headed by its invoice number, as before.
+ * (shipment scope) is headed by what kind of charge it is — never by its
+ * invoice number, which stays the small line underneath either way.
  */
 export default function InvoiceCard({ inv }: { inv: InvoiceSummary }) {
   const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.unpaid;
@@ -37,7 +39,7 @@ export default function InvoiceCard({ inv }: { inv: InvoiceSummary }) {
       className="block rounded-lg border border-mist/10 bg-ink-2 p-4 transition-colors hover:border-mist/25 active:border-green/40"
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="sb-disp min-w-0 truncate text-lg text-mist">{title || inv.invoiceNo}</p>
+        <p className="sb-disp min-w-0 truncate text-lg text-mist">{title || fallbackTitle(inv.scope)}</p>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.cls}`}>
           {badge.label}
         </span>
@@ -46,15 +48,9 @@ export default function InvoiceCard({ inv }: { inv: InvoiceSummary }) {
       {numbers[0] && <TrackingLine tracking={numbers[0]} more={numbers.length - 1} className="mt-1" />}
 
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-dark">
-        {/* Headed by its packages → the invoice number moves here. Headed by the
-            invoice number (no package rows) → say what kind of invoice it is. */}
+        {/* The invoice number (what the PDF says) always sits here, below the headline. */}
         <span className="min-w-0 truncate">
-          {title ? (
-            <span className="font-semibold text-mist">{inv.invoiceNo}</span>
-          ) : (
-            scopeLabel(inv.scope)
-          )}{" "}
-          · {formatDate(inv.createdAt)}
+          <span className="font-semibold text-mist">{inv.invoiceNo}</span> · {formatDate(inv.createdAt)}
         </span>
         <span className="ml-auto shrink-0 text-sm font-bold text-white">{formatTtd(inv.totalTtd)}</span>
         <svg

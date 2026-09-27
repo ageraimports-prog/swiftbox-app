@@ -20,7 +20,12 @@ export type PackageSummary = {
   commodities: string;
   date: string;
   shipStatus: number | null;
-  held?: boolean;
+  /**
+   * Consolidated Billing: waiting for its group (R13). The API already sends a
+   * waiting package's stage as In Miami with later dates nulled; the card shows
+   * the waiting badge in place of any stage.
+   */
+  cbWaiting?: boolean;
 };
 
 /** "UPS" / "FedEx" chip before a tracking number. Only ever a certain carrier. */
@@ -84,7 +89,7 @@ function formatDate(date: string): string {
  * No tracking number → the ref takes the tracking line's place instead.
  */
 export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
-  const meta = packageBadge(pkg.shipStatus, pkg.held);
+  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting);
   const id = packageIdentity(pkg);
   return (
     <Link

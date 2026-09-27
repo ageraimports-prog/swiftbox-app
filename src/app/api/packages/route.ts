@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
-import { heldPackageIds } from "@/lib/consolidation";
+import { cbPackageDisplay } from "@/lib/consolidated-billing";
 
 type Row = {
   pk_id: number;
@@ -39,8 +39,10 @@ export async function GET() {
     { userId: session.id }
   );
 
-  // Consolidated Billing: which of these are held until the rest arrive.
-  const held = await heldPackageIds(session.id).catch(() => new Set<number>());
+  // Consolidated Billing: which of these are waiting for their group (shown as
+  // such, never as a stage — R13), and which released group members show the
+  // last arrival's stage (R7).
+  const cb = await cbPackageDisplay(session.id).catch(() => new Map());
 
   const packages = rows.map((r) => ({
     id: Number(r.pk_id),
@@ -56,8 +58,14 @@ export async function GET() {
     commodities: r.commodities,
     date: r.date,
     shipNo: r.ship_no,
-    shipStatus: r.ship_status == null ? null : Number(r.ship_status),
-    held: held.has(Number(r.pk_id)),
+    // A waiting package reports only that it has left Miami — its real stage
+    // (and with it, whether it has landed) is not sent to the browser at all.
+    shipStatus: cb.get(Number(r.pk_id))?.waiting
+      ? 1
+      : cb.get(Number(r.pk_id))?.override
+        ? cb.get(Number(r.pk_id))!.override!.shipStatus
+        : r.ship_status == null ? null : Number(r.ship_status),
+    cbWaiting: cb.get(Number(r.pk_id))?.waiting ?? false,
   }));
 
   return NextResponse.json({ packages });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
-import { heldPackageIds } from "@/lib/consolidation";
+import { cbPackageDisplay } from "@/lib/consolidated-billing";
 
 type Row = {
   pk_id: number;
@@ -62,10 +62,16 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const held = (await heldPackageIds(session.id).catch(() => new Set<number>())).has(Number(r.pk_id));
+  // Consolidated Billing. WAITING: only "left Miami" is sent — no later stage,
+  // no later date — because the customer must not learn when it lands (R13).
+  // RELEASED: the group's last arrival's stage and date (R7).
+  const cb = (await cbPackageDisplay(session.id).catch(() => new Map())).get(Number(r.pk_id));
+  const waiting = cb?.waiting ?? false;
+  const shownStatus = waiting ? 1 : cb?.override ? cb.override.shipStatus : Number(r.ship_status);
+  const shownAwaiting = waiting ? null : cb?.override ? cb.override.awaitingDate : r.awaiting_date;
 
   return NextResponse.json({
-    held,
+    cbWaiting: waiting,
     package: {
       id: Number(r.pk_id),
       wr: r.wr,
@@ -86,12 +92,12 @@ export async function GET(
         ? null
         : {
             shipNo: r.ship_no,
-            shipStatus: Number(r.ship_status),
+            shipStatus: shownStatus,
             miamiDate: r.miami_date,
-            transitDate: r.transit_date,
-            awaitingDate: r.awaiting_date,
-            ofdDate: r.ofd_date,
-            deliveredDate: r.delivered_date,
+            transitDate: waiting ? null : r.transit_date,
+            awaitingDate: shownAwaiting,
+            ofdDate: waiting ? null : r.ofd_date,
+            deliveredDate: waiting ? null : r.delivered_date,
           },
   });
 }

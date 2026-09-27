@@ -56,6 +56,9 @@ US$1.99/lb + 20% fuel (US$2.39/lb all-in), actual weight per package, no repacki
 - **All copy lives in `src/lib/consolidatedBilling.ts`** (short line, long
   description, confirm, card texts, FAQ, HOLD_DAYS). The arithmetic mirrors the
   admin's pure core in `src/lib/consolidatedBillingCore.ts` — keep the two in step.
+- **Buy For Me is completely separate:** a package in `swiftbox_bfm_packages` is never
+  shown as waiting for a group, and its invoice is never hidden for one — the reads
+  exclude it even before the admin's next run takes it out of its group.
 - Until the admin's migration 038 runs the tables are missing and every read answers
   "nothing" (`safe()`), so the rest of the app is unaffected.
 - **Play Store data safety: unchanged** — a preference flag and figures already

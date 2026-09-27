@@ -12,7 +12,6 @@ const LABEL: Record<string, string> = {
   wire: "Wire",
   cheque: "Cheque",
   other: "Other",
-  bfm_credit: "Buy For Me credit",
 };
 
 export function paymentLabel(method: string | null | undefined): string {

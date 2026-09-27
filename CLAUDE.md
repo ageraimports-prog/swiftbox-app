@@ -81,5 +81,6 @@ Don't run a build while a dev server for this app is running (it corrupts `.next
   answers 404 to anyone else.
 - All customer text goes through `cleanText` (the bfm tables are 3-byte utf8).
 - Payment methods are shown with `paymentLabel` (`src/lib/payment-label.ts`),
-  never raw — `bfm_credit` is "Buy For Me credit".
+  never raw. There is NO Buy For Me credit (2026-09-27): refunds are bank
+  transfer only, and nothing is ever applied to an invoice.
 - Login returns to `?next=` only through `safeNext` (`src/lib/next-path.ts`).

@@ -107,7 +107,7 @@ describe("login return path", () => {
 
 describe("payment labels", () => {
   it("never shows a raw stored value", () => {
-    expect(paymentLabel("bfm_credit")).toBe("Buy For Me credit");
+    expect(paymentLabel("bfm_credit")).toBe("Payment"); // there is no Buy For Me credit payment type
     expect(paymentLabel("linx")).toBe("LINX");
     expect(paymentLabel("something_new")).toBe("Payment");
   });

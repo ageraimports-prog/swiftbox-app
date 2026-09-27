@@ -315,7 +315,8 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
     }),
     refunds: refunds.map((f) => ({
       amountTtdCents: decimalToCents(f.amount_ttd),
-      method: isRefundMethod(f.method) ? REFUND_METHOD_LABEL[f.method].replace("Credit on their next", "Credit on your next").replace("back to the customer", "back to you") : String(f.method ?? ""),
+      // Refunds are money returned by bank transfer only — there is no Buy For Me credit.
+      method: isRefundMethod(f.method) ? REFUND_METHOD_LABEL[f.method].replace("back to the customer", "back to you") : "Refund",
       date: (f.refund_date as string | null) ?? null,
       note: (f.note as string | null) ?? null,
     })),

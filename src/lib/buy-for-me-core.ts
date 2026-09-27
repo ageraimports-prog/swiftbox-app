@@ -391,12 +391,16 @@ export function topUpError(c: { itemValueCents: number; usTaxCents: number; usSh
 
 /* ───────────────────────── refunds ───────────────────────── */
 
-export const REFUND_METHODS = ["bank_transfer", "invoice_credit"] as const;
+/**
+ * A refund is money RETURNED by bank transfer — a record of money going back.
+ * There is NO Buy For Me credit (Brent, 2026-09-27): what the customer paid is
+ * what is spent; nothing is ever held as credit or applied to another invoice.
+ */
+export const REFUND_METHODS = ["bank_transfer"] as const;
 export type RefundMethod = (typeof REFUND_METHODS)[number];
 
 export const REFUND_METHOD_LABEL: Record<RefundMethod, string> = {
   bank_transfer: "Bank transfer back to the customer",
-  invoice_credit: "Credit on their next Swiftbox invoice",
 };
 
 export function isRefundMethod(s: unknown): s is RefundMethod {
@@ -410,7 +414,7 @@ export function isRefundMethod(s: unknown): s is RefundMethod {
  */
 export function refundError(r: { amountCents: number; method: unknown; refundDate: string; refundableCents: number }): string | null {
   if (!Number.isInteger(r.amountCents) || r.amountCents <= 0) return "Enter the refund amount.";
-  if (!isRefundMethod(r.method)) return "Choose how the money is going back.";
+  if (!isRefundMethod(r.method)) return "Refunds go back by bank transfer only.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(r.refundDate) || Number.isNaN(Date.parse(`${r.refundDate}T12:00:00Z`))) {
     return "Enter the refund date.";
   }
@@ -419,36 +423,6 @@ export function refundError(r: { amountCents: number; method: unknown; refundDat
     return `That is more than can be refunded — at most ${ttdText(r.refundableCents)} (received minus already refunded).`;
   }
   return null;
-}
-
-/* ───────────────────────── invoice credit (refund as credit) ───────────────────────── */
-
-export type OpenCredit = { refundId: number; remainingCents: number };
-export type CreditUse = { refundId: number; amountCents: number };
-
-/**
- * Apply open Buy For Me credits (oldest first, as given) to an invoice balance.
- * PARTIAL use is allowed — a TT$800 credit is not stuck behind a TT$200 invoice:
- * it covers the 200 and keeps 600 for the next one. Never takes the invoice
- * below zero and never uses more than a credit has left.
- */
-export function allocateCredits(credits: readonly OpenCredit[], invoiceBalanceCents: number): CreditUse[] {
-  let left = Math.max(0, Math.trunc(invoiceBalanceCents));
-  const uses: CreditUse[] = [];
-  for (const c of credits) {
-    if (left <= 0) break;
-    const avail = Math.max(0, Math.trunc(c.remainingCents));
-    if (avail <= 0) continue;
-    const take = Math.min(avail, left);
-    uses.push({ refundId: c.refundId, amountCents: take });
-    left -= take;
-  }
-  return uses;
-}
-
-/** The invoice line a credit becomes: "Buy For Me credit (BFM-00012)". */
-export function creditLineDescription(requestId: number): string {
-  return `Buy For Me credit (${requestNo(requestId)})`;
 }
 
 /* ───────────────────────── WR# ───────────────────────── */
@@ -505,7 +479,6 @@ export const BFM_EVENT_DEFS = {
   arrived_miami: { title: "Arrived at our Miami warehouse", notify: true },
   unable_to_purchase: { title: "We were unable to purchase this", notify: true },
   refund_recorded: { title: "Refund recorded", notify: true },
-  credit_returned: { title: "Credit moved to your next invoice", notify: false },
   refunded: { title: "Refunded", notify: false },
   closed: { title: "Complete", notify: false },
   cancelled_by_customer: { title: "You cancelled this request", notify: false },

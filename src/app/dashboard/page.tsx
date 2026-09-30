@@ -8,6 +8,8 @@ import {
   shareMessage,
   whatsappShareUrl,
   getReferralStats,
+  getReferralList,
+  type ReferralListItem,
   ZERO_REFERRAL_STATS,
   REFERRAL_CREDIT_TTD,
   REFERRAL_WELCOME_CREDIT_TTD,
@@ -18,6 +20,7 @@ import DashboardHome from "./DashboardHome";
 import PrealertWaitingCard from "./PrealertWaitingCard";
 import ReferralCard from "./ReferralCard";
 import ReferralEarningsCard from "./ReferralEarningsCard";
+import ReferralListCard from "./ReferralListCard";
 
 type UserRow = {
   fname: string;
@@ -82,6 +85,14 @@ export default async function DashboardPage() {
     referralStats = ZERO_REFERRAL_STATS;
   }
 
+  // "Your referrals" list — secondary like the stats: on failure it is skipped.
+  let referralList: ReferralListItem[] = [];
+  try {
+    referralList = await getReferralList(session.id);
+  } catch {
+    referralList = [];
+  }
+
   // Packages already in Miami waiting for a pre-alert. Secondary, like the two
   // above — on failure the card is simply skipped this load.
   let prealertCount = 0;
@@ -125,6 +136,8 @@ export default async function DashboardPage() {
       )}
 
       {referralCode && <ReferralEarningsCard stats={referralStats} />}
+
+      {referralCode && <ReferralListCard items={referralList} creditTtd={REFERRAL_CREDIT_TTD} />}
 
       <DashboardHome />
     </div>

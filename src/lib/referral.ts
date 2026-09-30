@@ -1,6 +1,7 @@
 import "server-only";
 import { randomInt } from "node:crypto";
 import { query, execute } from "@/lib/db";
+import { friendDisplayName, referralStage, type ReferralStage } from "@/lib/referral-list";
 
 /* ───────────────────────── Sub-piece D: earnings stats ───────────────────────── */
 
@@ -83,6 +84,75 @@ export async function getReferralStats(referrerId: number): Promise<ReferralStat
     qualifiedCount: Number(n?.qualified_count ?? 0),
     pendingCount: Number(n?.pending_count ?? 0),
   };
+}
+
+/* ───────────────────────── "Your referrals" list ───────────────────────── */
+
+export type ReferralListItem = { id: number; name: string; stage: ReferralStage; since: string | null };
+
+type ReferralListRow = {
+  id: number;
+  status: string;
+  created_at: string | null;
+  fname: string | null;
+  lname: string | null;
+  packages: string;
+  delivered: string;
+  paid: string;
+};
+
+/**
+ * The referrer's friends, newest first: first name + last initial and a stage
+ * (lib/referral-list.ts). Scoped to ONE referrer — the signed-in customer.
+ * "Delivered" is mod_shipment.ship_status = 5, the same test SwiftboxAdmin's
+ * credit issuance uses. The owner's decision on a held credit
+ * (swiftbox_referral_reviews, migration 042) is read separately and ignored if
+ * that table is not there yet.
+ */
+export async function getReferralList(referrerId: number): Promise<ReferralListItem[]> {
+  const rows = await query<ReferralListRow>(
+    `SELECT r.id, r.status, r.created_at, u.fname, u.lname,
+            (SELECT COUNT(*) FROM mod_packages p WHERE p.user_id = r.referred_id) AS packages,
+            (SELECT COUNT(*)
+               FROM mod_shipment s
+               JOIN mod_packages p2 ON p2.pk_id = s.package_id
+              WHERE p2.user_id = r.referred_id AND s.ship_status = 5) AS delivered,
+            (SELECT COUNT(*)
+               FROM referral_credits c
+              WHERE c.referrer_id = r.referrer_id AND c.referred_id = r.referred_id
+                AND c.kind = 'referrer') AS paid
+       FROM referrals r
+       LEFT JOIN users u ON u.id = r.referred_id
+      WHERE r.referrer_id = :referrerId
+      ORDER BY r.created_at DESC, r.id DESC
+      LIMIT 50`,
+    { referrerId }
+  );
+  if (rows.length === 0) return [];
+
+  const decisions = new Map<number, string>();
+  try {
+    const d = await query<{ referral_id: number; decision: string }>(
+      "SELECT referral_id, decision FROM swiftbox_referral_reviews WHERE referrer_id = :referrerId",
+      { referrerId }
+    );
+    for (const row of d) decisions.set(Number(row.referral_id), String(row.decision));
+  } catch {
+    // migration 042 not applied yet — no decisions to show
+  }
+
+  return rows.map((r) => ({
+    id: Number(r.id),
+    name: friendDisplayName(r.fname, r.lname),
+    stage: referralStage({
+      packages: Number(r.packages),
+      delivered: Number(r.delivered),
+      qualified: r.status === "qualified",
+      paid: Number(r.paid) > 0,
+      decision: decisions.get(Number(r.id)) ?? null,
+    }),
+    since: r.created_at,
+  }));
 }
 
 /**

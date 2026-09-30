@@ -104,6 +104,22 @@ pre-alert and lets the customer confirm one.
 - Deep link `/dashboard/prealert/{pk_id}` survives login through `?next=`
   (`src/lib/next-path.ts` `safeNext`, `/dashboard` and `/account` only).
 
+## Pre-alert invoice upload (since 2026-09-30)
+
+- Optional invoice/receipt on BOTH pre-alert forms (`src/components/InvoiceFileField.tsx`).
+  The pre-alert is saved FIRST; the file is attached afterwards by
+  `POST /api/prealerts/[id]/file`, so a failed upload never loses the pre-alert —
+  the customer is told ("saved, but the invoice didn't upload"). Never make the
+  file required and never send it with the pre-alert itself.
+- Stored like Buy For Me slips: through this server into the PRIVATE blob store
+  (`BLOB_READ_WRITE_TOKEN`, store swiftbox-admin-blob), type from the first bytes
+  (JPEG/PNG/WebP/PDF), 4 MB, random path `prealert-invoices/<id>/<32 hex>`, one
+  file per pre-alert (UNIQUE), ownership in the query. The blob URL is never
+  returned. The admin streams it to staff.
+- `GET /api/prealerts/uploads` switches the field on only when the table
+  (`swiftbox_prealert_files`, SwiftboxAdmin migration 041) exists and a token is set.
+- The pick submit returns `prealertId` on "saved" so the file can attach to it.
+
 ## Verification
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.

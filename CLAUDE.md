@@ -82,6 +82,28 @@ things, all in `src/lib/consolidation.ts`:
   fixed near the bottom of the dashboard must add it (main's padding and the
   pre-alerts "+" do).
 
+## Pick-to-prealert (since 2026-09-29)
+
+The admin owns the rule (SwiftboxAdmin `CLAUDE.md` → "Pick-to-prealert nudges",
+`PREALERT_PICK_PLAN.md`). This app shows packages we already hold that still need a
+pre-alert and lets the customer confirm one.
+
+- **NEEDS_PREALERT lives in `src/lib/prealert-needs.ts`, code-identical to the
+  admin's `lib/prealert-needs.ts`.** Every list, count, form and submit goes
+  through it (`src/lib/prealert-pick-server.ts`); never write a second copy.
+- **Ownership is in every query** (`p.user_id = :userId`), so another customer's
+  package id answers exactly like a missing one — the closed message.
+- **A picked pre-alert is an ordinary `swiftbox_prealerts` row** (the manual
+  form's table and tracking-string link). It is written by ONE conditional
+  `INSERT … SELECT` whose SELECT carries ownership + NEEDS_PREALERT; tracking,
+  store, freight and piece count come from the package row, never the client.
+  0 rows → re-check → "already" or closed; a deadlock victim whose package is
+  still open retries. Don't add a pre-check-then-insert.
+- **Demo account (#0364)**: its packages show in the card/list/badge, but a
+  submit is a dry run — nothing is ever written for it (`isPlayDemoSql`).
+- Deep link `/dashboard/prealert/{pk_id}` survives login through `?next=`
+  (`src/lib/next-path.ts` `safeNext`, `/dashboard` and `/account` only).
+
 ## Verification
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.

@@ -6,8 +6,8 @@
 
 /** Shown when a package is closed, not the customer's, or doesn't exist. */
 export const CLOSED_MESSAGE =
-  "This package is already on its way to customs, so it can't be pre-alerted here. WhatsApp us on (868) 703-3600 and we'll sort it out.";
-export const WHATSAPP_URL = "https://wa.me/18687033600";
+  "This package is already on its way to customs, so it can't be pre-alerted here. WhatsApp us on (868) 609-3000 and we'll sort it out.";
+export const WHATSAPP_URL = "https://wa.me/18686093000";
 
 /**
  * THE GOOGLE PLAY REVIEW DEMO ACCOUNT — member #0364. Same two-way match as the

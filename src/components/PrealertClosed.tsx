@@ -12,7 +12,7 @@ export default function PrealertClosed() {
         rel="noopener noreferrer"
         className="mt-4 inline-flex rounded-lg border border-green/40 bg-ink px-4 py-3 text-sm font-bold text-green transition-colors hover:border-green hover:bg-green/5"
       >
-        WhatsApp (868) 703-3600
+        WhatsApp (868) 609-3000
       </a>
     </section>
   );

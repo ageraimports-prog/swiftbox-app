@@ -216,7 +216,9 @@ function StepsVideo({ video, label }: { video: InstallVideo | null; label: strin
   return (
     <figure className="mt-6">
       <video
-        className="w-full rounded-2xl border border-mist/10 bg-black"
+        // Portrait phone recordings (iphone.mp4 is 576x1280): sized by a capped
+        // height so a full-width player can't be ~700px tall on a 360px phone.
+        className="mx-auto block aspect-[9/20] h-[min(65vh,520px)] w-auto max-w-full rounded-2xl border border-mist/10 bg-black"
         // #t=0.1 makes iOS paint the first frame when there's no poster image.
         src={video.poster ? video.src : `${video.src}#t=0.1`}
         poster={video.poster ?? undefined}

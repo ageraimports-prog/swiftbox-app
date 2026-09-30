@@ -174,8 +174,9 @@ export async function getReferralList(referrerId: number): Promise<ReferralListI
  *
  *   REFERRAL_CREDIT_TTD  (100) → the REFERRER, when the referred customer's
  *                                first package is DELIVERED.
- *   REFERRAL_WELCOME_TTD  (50) → the REFERRED customer, credited at SIGNUP and
- *                                applied to their FIRST invoice.
+ *   REFERRAL_WELCOME_TTD  (50) → the REFERRED customer, created by SwiftboxAdmin
+ *                                when their FIRST invoice is issued and applied to
+ *                                it (carried forward if that invoice is smaller).
  *
  * Keep both in step with SwiftboxAdmin lib/referrals.ts (which issues the rows)
  * and with the public copy on swiftboxtt.com/referral and /terms.
@@ -195,7 +196,8 @@ export const REFERRAL_CREDIT_TTD: number = Number(
 /**
  * Welcome credit awarded to the REFERRED customer for signing up with a valid
  * code. Unlike the referrer credit this does not wait for a delivery — it is
- * issued at signup and applied to their first invoice, with no minimum spend.
+ * created when their first invoice is issued and applied to it; if that invoice
+ * is under the credit, it waits for the next one (credits never go below zero).
  * Override per-environment with REFERRAL_WELCOME_CREDIT_TTD.
  *
  * Business-confirmed at 50 TTD. Displayed on the dashboard share card and in

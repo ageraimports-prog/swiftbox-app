@@ -45,7 +45,7 @@ export default function ReferralEarningsCard({ stats }: { stats: ReferralStats }
       {hasWelcome && (
         <p className="mt-1 text-xs text-green">
           Plus {money(welcomeCredit)} welcome credit for joining with a referral code —
-          it comes off your first shipment.
+          it goes toward your first Swiftbox invoice.
         </p>
       )}
       <p className="mt-1 text-xs text-muted-dark">

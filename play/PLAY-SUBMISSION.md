@@ -307,7 +307,7 @@ SEE WHAT YOU OWE
 Every invoice in one place with freight, duty and charges broken out, so you know the total before you come in.
 
 EARN CREDIT FOR REFERRALS
-Share your referral code with friends and family. When someone you refer ships their first package, you earn TT$100 credit toward your own shipping.
+Share your referral code with friends and family. When someone you refer has their first package delivered, you earn TT$100 credit toward your own shipping.
 
 BUILT FOR TRINIDAD AND TOBAGO
 Swiftbox is a licensed Trinidad customs broker, not a middleman. Prices in TTD, WhatsApp support on a local number, and a team that knows what actually clears.

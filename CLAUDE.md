@@ -59,6 +59,29 @@ things, all in `src/lib/consolidation.ts`:
 - `scripts/consolidation-cli.ts` drives this module from the command line (the
   admin's `scripts/verify-consolidation-live.ts` uses it for the live check).
 
+## Install page and reminder (2026-09-29)
+
+- **`/install` is PUBLIC** ("Get the Swiftbox app"); swiftboxtt.com/app 307s to
+  it. It must stay on THIS origin — iPhone's Add to Home Screen saves the site
+  that is open. The home-screen icon still opens `/`: the manifest's
+  `start_url` is `/` and `scope` `/`, and current iOS launches web clips at
+  start_url. Never make /install the start_url.
+- Detection is pure in `src/lib/install-env.ts` (tested); browser reads are in
+  `src/lib/install-client.ts`. One panel shows at a time: installed / in-app
+  browser / Android / iPhone / computer (QR for swiftboxtt.com/app, a static SVG
+  in `public/install/`).
+- **`PLAY_STORE_URL` is empty on purpose** — the Play listing 404'd on
+  2026-09-29. Paste the listing URL there when it goes public; that is the only
+  change needed to show "Get it on Google Play".
+- Screen recordings: `public/install/iphone.mp4` / `android.mp4` (optional
+  `-poster.jpg`). Checked at BUILD time — a missing file renders nothing, and a
+  new file needs a redeploy.
+- The reminder bar (`InstallReminder`, inside TabBar's nav) shows only on a
+  phone, in a browser tab, not installed, not in the TWA, not snoozed (14 days,
+  localStorage). While visible it sets `--sb-reminder-h` on <html>; anything
+  fixed near the bottom of the dashboard must add it (main's padding and the
+  pre-alerts "+" do).
+
 ## Verification
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.

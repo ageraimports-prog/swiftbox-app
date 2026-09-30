@@ -193,7 +193,7 @@ export default function PreAlertsPage() {
 
       {/* Floating + button — empty state has its own CTA, so only show with items */}
       {hasItems && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-20 z-10 mx-auto flex max-w-md justify-end px-5">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--sb-reminder-h,0px))] z-10 mx-auto flex max-w-md justify-end px-5">
           <Link
             href="/dashboard/prealerts/new"
             aria-label="New pre-alert"

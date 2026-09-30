@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Archivo } from "next/font/google";
 import "./globals.css";
 import SwRegister from "@/components/SwRegister";
+import TwaMarker from "@/components/TwaMarker";
 
 const archivo = Archivo({
   variable: "--font-archivo",
@@ -44,6 +45,7 @@ export default function RootLayout({
       <body className={`${archivo.variable} antialiased`}>
         {children}
         <SwRegister />
+        <TwaMarker />
       </body>
     </html>
   );

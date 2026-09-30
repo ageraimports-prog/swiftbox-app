@@ -29,7 +29,8 @@ export default async function DashboardLayout({
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-5 pt-6 pb-28">{children}</main>
+      {/* --sb-reminder-h: room for the "add to home screen" bar while it shows */}
+      <main className="mx-auto max-w-md px-5 pt-6 pb-[calc(7rem+var(--sb-reminder-h,0px))]">{children}</main>
 
       <TabBar />
     </div>

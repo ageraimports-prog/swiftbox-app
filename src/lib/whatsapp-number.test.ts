@@ -3,9 +3,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Swiftbox's WhatsApp (and phone) number is (868) 609-3000. (868) 703-3600 is
- * WRONG and shipped once on the pre-alert screen; this sweep keeps it out of
- * every source file, in every spelling (703-3600, 7033600, 18687033600, ...).
+ * Swiftbox's WhatsApp (and phone) number is (868) 609-3000. A retired line
+ * shipped once on the pre-alert screen; this sweep keeps every retired number
+ * (the RETIRED pattern below, in any spelling) out of every source file.
  */
 const SRC = path.join(__dirname, "..");
 const RETIRED = /703[\s.-]?3600|795[\s.-]?3300|703[\s.-]?0069/;

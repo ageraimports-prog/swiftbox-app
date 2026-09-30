@@ -120,6 +120,25 @@ pre-alert and lets the customer confirm one.
   (`swiftbox_prealert_files`, SwiftboxAdmin migration 041) exists and a token is set.
 - The pick submit returns `prealertId` on "saved" so the file can attach to it.
 
+## How a package is named (since 2026-09-30)
+
+- **Headline = description, second line = carrier tracking number, WR/SWF =
+  small "Ref".** Every customer-facing package display goes through
+  `src/lib/packageDisplay.ts` (`packageIdentity`, `trackingNumbers`,
+  `displayTitle`, `detectCarrier`) and the shared `PackageCard` / `TrackingLine`
+  / `RefText` / `InvoiceCard` / `CopyTracking` components. Don't reintroduce
+  `packageCode || wr` as a title. Display only — nothing stored changes.
+- **A carrier label is shown only when the check digit agrees** (UPS 1Z, FedEx
+  12/15, USPS 9[1-5] 20–22/26, Amazon TBA). Never add a carrier on pattern
+  alone: a wrong label is worse than none. FedEx 34-digit and USPS 420+ZIP label
+  barcodes are unwrapped to the customer's number only after the inner number
+  validates; otherwise the stored value is shown as-is. DEMO numbers (Play
+  demo #0364) must never get a label — asserted in `packageDisplay.test.ts`.
+- `/api/invoices` returns each issued invoice's packages, reached only through
+  the customer's issued headers (never the child table on its own).
+- The Packages screen has no search box; if one is added, match tracking
+  (compacted, case-insensitive, last 4+), description and WR/SWF.
+
 ## Verification
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.

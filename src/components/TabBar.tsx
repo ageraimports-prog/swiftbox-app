@@ -62,7 +62,8 @@ const TABS = [
   },
 ];
 
-export default function TabBar() {
+/** `prealertCount`: packages waiting for a pre-alert — a badge on the Pre-alert tab. */
+export default function TabBar({ prealertCount = 0 }: { prealertCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -76,7 +77,9 @@ export default function TabBar() {
           const active =
             tab.href === "/dashboard"
               ? pathname === "/dashboard"
-              : pathname.startsWith(tab.href);
+              : pathname.startsWith(tab.href) ||
+                (tab.href === "/dashboard/prealerts" && pathname.startsWith("/dashboard/prealert/"));
+          const badge = tab.href === "/dashboard/prealerts" ? prealertCount : 0;
           return (
             <Link
               key={tab.href}
@@ -86,17 +89,25 @@ export default function TabBar() {
                 active ? "text-green" : "text-muted-dark hover:text-mist"
               }`}
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.7}
-                className="h-6 w-6"
-                aria-hidden
-              >
-                {tab.icon}
-              </svg>
+              <span className="relative">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.7}
+                  className="h-6 w-6"
+                  aria-hidden
+                >
+                  {tab.icon}
+                </svg>
+                {badge > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green px-1 text-[10px] leading-none font-bold text-ink">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </span>
               {tab.label}
+              {badge > 0 && <span className="sr-only">({badge} waiting)</span>}
             </Link>
           );
         })}

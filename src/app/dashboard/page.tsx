@@ -10,7 +10,9 @@ import {
   REFERRAL_WELCOME_CREDIT_TTD,
   type ReferralStats,
 } from "@/lib/referral";
+import { countPackagesNeedingPrealert } from "@/lib/prealert-pick-server";
 import DashboardHome from "./DashboardHome";
+import PrealertWaitingCard from "./PrealertWaitingCard";
 import ReferralCard from "./ReferralCard";
 import ReferralEarningsCard from "./ReferralEarningsCard";
 
@@ -65,8 +67,19 @@ export default async function DashboardPage() {
     referralStats = ZERO_REFERRAL_STATS;
   }
 
+  // Packages already in Miami waiting for a pre-alert. Secondary, like the two
+  // above — on failure the card is simply skipped this load.
+  let prealertCount = 0;
+  try {
+    prealertCount = await countPackagesNeedingPrealert(session.id);
+  } catch {
+    prealertCount = 0;
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      {prealertCount > 0 && <PrealertWaitingCard count={prealertCount} />}
+
       {/* Account number card */}
       <section className="relative overflow-hidden rounded-lg border border-mist/10 bg-ink-2 p-5">
         <div className="sb-glow absolute -top-16 -right-16 h-48 w-48" aria-hidden />

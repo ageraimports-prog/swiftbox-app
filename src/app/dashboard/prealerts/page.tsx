@@ -2,6 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
+import PrealertPickCard from "@/components/PrealertPickCard";
+import QueryToast from "@/components/QueryToast";
+import type { PickPackage } from "@/lib/prealert-pick";
 
 type PreAlert = {
   id: number;
@@ -115,6 +118,23 @@ export default function PreAlertsPage() {
   const [prealerts, setPrealerts] = React.useState<PreAlert[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Packages already at our warehouse waiting for a pre-alert. Secondary: a
+  // failed load just hides the section, the page below works as before.
+  const [waiting, setWaiting] = React.useState<PickPackage[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/prealerts/pending")
+      .then((res) => (res.ok ? res.json() : { packages: [] }))
+      .then((data) => {
+        if (!cancelled) setWaiting(Array.isArray(data.packages) ? data.packages : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   React.useEffect(() => {
     let cancelled = false;
     fetch("/api/prealerts")
@@ -138,7 +158,27 @@ export default function PreAlertsPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <QueryToast />
       <h1 className="sb-disp text-xl text-mist">Pre-alerts</h1>
+
+      {waiting.length > 0 && (
+        <>
+          <section className="flex flex-col gap-3" aria-labelledby="at-warehouse">
+            <div>
+              <h2 id="at-warehouse" className="sb-disp text-lg text-mist">
+                Already at our warehouse
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-dark">
+                We&apos;ve got these in Miami. Add what&apos;s inside and the value so customs clears them fast.
+              </p>
+            </div>
+            {waiting.map((pkg) => (
+              <PrealertPickCard key={pkg.pkId} pkg={pkg} />
+            ))}
+          </section>
+          <h2 className="sb-disp mt-2 text-lg text-mist">Expecting a package?</h2>
+        </>
+      )}
 
       {error && (
         <div role="alert" className="rounded-md bg-red-400/10 px-4 py-3 text-sm text-red-300">

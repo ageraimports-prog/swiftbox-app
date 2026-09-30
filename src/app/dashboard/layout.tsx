@@ -2,6 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import TabBar from "@/components/TabBar";
 import { getSession } from "@/lib/session";
+import { countPackagesNeedingPrealert } from "@/lib/prealert-pick-server";
 
 export default async function DashboardLayout({
   children,
@@ -10,6 +11,15 @@ export default async function DashboardLayout({
   if (!session) redirect("/login"); // middleware backstop
 
   const firstName = session.name.split(" ")[0] || "there";
+
+  // Badge on the Pre-alert tab. Secondary — a bridge hiccup hides the badge,
+  // never the page.
+  let prealertCount = 0;
+  try {
+    prealertCount = await countPackagesNeedingPrealert(session.id);
+  } catch {
+    prealertCount = 0;
+  }
 
   return (
     <div className="min-h-screen bg-ink">
@@ -32,7 +42,7 @@ export default async function DashboardLayout({
       {/* --sb-reminder-h: room for the "add to home screen" bar while it shows */}
       <main className="mx-auto max-w-md px-5 pt-6 pb-[calc(7rem+var(--sb-reminder-h,0px))]">{children}</main>
 
-      <TabBar />
+      <TabBar prealertCount={prealertCount} />
     </div>
   );
 }

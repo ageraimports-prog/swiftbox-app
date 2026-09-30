@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import PrealertClosed from "@/components/PrealertClosed";
+import InvoiceFileField, { uploadPrealertFile, useUploadsEnabled } from "@/components/InvoiceFileField";
 import { DESCRIPTION_MAX, parseDescription, parseValueUsd } from "@/lib/prealert-pick";
 
 const inputCls =
@@ -22,12 +23,16 @@ export default function PickForm({ packageId }: { packageId: number }) {
   const [error, setError] = React.useState<{ text: string; field?: Field } | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [closed, setClosed] = React.useState(false);
+  const uploadsOn = useUploadsEnabled();
+  const [file, setFile] = React.useState<File | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [preparing, setPreparing] = React.useState(false);
 
-  function go(next: number | null, remaining: number, status: "saved" | "already") {
+  function go(next: number | null, remaining: number, status: "saved" | "already" | "filefail" | "alreadyfile") {
     if (next) {
       router.push(`/dashboard/prealert/${next}?toast=${status}&left=${remaining}`);
     } else {
-      router.push(`/dashboard/prealerts?toast=${status === "saved" ? "done" : "already"}`);
+      router.push(`/dashboard/prealerts?toast=${status === "saved" ? "done" : status}`);
     }
     router.refresh();
   }
@@ -62,8 +67,17 @@ export default function PickForm({ packageId }: { packageId: number }) {
         setSubmitting(false);
         return;
       }
+      // The pre-alert is saved; the optional invoice attaches to it now. A failed
+      // upload never undoes the pre-alert — the toast says so instead.
+      let status: "saved" | "already" | "filefail" | "alreadyfile" = data.status;
+      // Already pre-alerted (another tab): the new file has nothing of ours to attach to — say so.
+      if (file && data.status === "already") status = "alreadyfile";
+      if (file && data.status === "saved" && Number(data.prealertId) > 0) {
+        setUploading(true);
+        if (!(await uploadPrealertFile(Number(data.prealertId), file))) status = "filefail";
+      }
       // Stay "submitting" while we navigate so a second tap can't fire.
-      go(data.next ?? null, Number(data.remaining) || 0, data.status);
+      go(data.next ?? null, Number(data.remaining) || 0, status);
     } catch {
       setError({ text: "Something went wrong. Please try again." });
       setSubmitting(false);
@@ -110,12 +124,14 @@ export default function PickForm({ packageId }: { packageId: number }) {
           <span className="mt-1.5 block text-xs text-muted">What you paid, as on your invoice.</span>
         </label>
 
+        {uploadsOn && <InvoiceFileField file={file} onChange={setFile} disabled={submitting} onBusy={setPreparing} />}
+
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || preparing}
           className="w-full rounded-xl bg-green px-6 py-3.5 text-sm font-bold text-ink transition-colors hover:bg-green-deep disabled:opacity-60"
         >
-          {submitting ? "Submitting…" : "Submit pre-alert"}
+          {uploading ? "Uploading invoice…" : submitting ? "Submitting…" : "Submit pre-alert"}
         </button>
       </form>
     </section>

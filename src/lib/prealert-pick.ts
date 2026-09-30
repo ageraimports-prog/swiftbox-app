@@ -122,5 +122,7 @@ export function toastMessage(toast: string | null, left: string | null): string 
   }
   if (toast === "done") return "All caught up";
   if (toast === "already") return "Already pre-alerted";
+  if (toast === "filefail") return "Pre-alert saved, but the invoice didn't upload — WhatsApp it to us on (868) 703-3600.";
+  if (toast === "alreadyfile") return "Already pre-alerted — the invoice wasn't attached. WhatsApp it to us on (868) 703-3600.";
   return null;
 }

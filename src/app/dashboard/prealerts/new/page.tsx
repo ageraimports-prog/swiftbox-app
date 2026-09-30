@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import InvoiceFileField, { uploadPrealertFile, useUploadsEnabled } from "@/components/InvoiceFileField";
 
 const inputCls =
   "w-full rounded-md border border-gray-200 bg-white px-4 py-3 text-base text-ink placeholder:text-gray-400 focus:outline-none focus:border-green focus:ring-2 focus:ring-green/40";
@@ -22,6 +23,10 @@ export default function NewPreAlertPage() {
 
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const uploadsOn = useUploadsEnabled();
+  const [file, setFile] = React.useState<File | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [preparing, setPreparing] = React.useState(false);
 
   function clientValidate(): string | null {
     if (!storeName.trim()) return "Store / merchant name is required.";
@@ -60,14 +65,21 @@ export default function NewPreAlertPage() {
           freightType,
         }),
       });
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
         setError(data?.error ?? "Something went wrong. Please try again.");
         setSubmitting(false);
         return;
       }
+      // The pre-alert is saved; the optional invoice attaches to it now. A
+      // failed upload never undoes the pre-alert — the list's toast says so.
+      let fileFailed = false;
+      if (file && Number(data?.prealert_id) > 0) {
+        setUploading(true);
+        fileFailed = !(await uploadPrealertFile(Number(data.prealert_id), file));
+      }
       // Back to the list — the new entry loads at the top.
-      router.push("/dashboard/prealerts");
+      router.push(fileFailed ? "/dashboard/prealerts?toast=filefail" : "/dashboard/prealerts");
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -203,12 +215,14 @@ export default function NewPreAlertPage() {
             </div>
           </div>
 
+          {uploadsOn && <InvoiceFileField file={file} onChange={setFile} disabled={submitting} onBusy={setPreparing} />}
+
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || preparing}
             className="w-full rounded-xl bg-green px-6 py-3.5 text-sm font-bold text-ink transition-colors hover:bg-green-deep disabled:opacity-60"
           >
-            {submitting ? "Submitting…" : "Submit Pre-alert"}
+            {uploading ? "Uploading invoice…" : submitting ? "Submitting…" : "Submit Pre-alert"}
           </button>
         </form>
       </section>

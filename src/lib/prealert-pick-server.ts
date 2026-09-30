@@ -109,7 +109,14 @@ function isDeadlock(e: unknown): boolean {
 }
 
 export type SubmitResult =
-  | { status: "saved" | "already"; next: number | null; remaining: number; dryRun?: true }
+  | {
+      status: "saved" | "already";
+      next: number | null;
+      remaining: number;
+      dryRun?: true;
+      /** The new swiftbox_prealerts row, on "saved" only — the optional invoice attaches to it. */
+      prealertId?: number;
+    }
   | { status: "closed" };
 
 /**
@@ -142,8 +149,8 @@ export async function submitPickedPrealert(
   // DIFFERENT packages of the same customer lock the same index range. So a
   // victim re-reads the package and, while it is still open, tries again.
   for (let attempt = 0; attempt < 3; attempt++) {
-    const inserted = await insertPick(session, pkId, fields);
-    if (inserted === 1) return { status: "saved", ...(await nextAfter(session.id, pkId)) };
+    const { inserted, id } = await insertPick(session, pkId, fields);
+    if (inserted === 1) return { status: "saved", ...(id > 0 ? { prealertId: id } : {}), ...(await nextAfter(session.id, pkId)) };
     const after = await loadPickState(session.id, pkId);
     if (after.state === "prealerted") return { status: "already", ...(await nextAfter(session.id, pkId)) };
     if (after.state === "closed" || inserted === 0) return { status: "closed" };
@@ -151,12 +158,12 @@ export async function submitPickedPrealert(
   throw new Error("Could not save the pre-alert (the database stayed busy).");
 }
 
-/** 1 = written, 0 = the SELECT matched nothing, -1 = deadlock victim (nothing written). */
+/** inserted: 1 = written (id = the new prealert_id), 0 = the SELECT matched nothing, -1 = deadlock victim. */
 async function insertPick(
   session: SessionUser,
   pkId: number,
   fields: { description: string; valueUsd: number }
-): Promise<1 | 0 | -1> {
+): Promise<{ inserted: 1 | 0 | -1; id: number }> {
   try {
     const res = await execute(
       `INSERT INTO swiftbox_prealerts
@@ -178,9 +185,9 @@ async function insertPick(
         userId: session.id,
       }
     );
-    return Number(res.affectedRows) === 1 ? 1 : 0;
+    return Number(res.affectedRows) === 1 ? { inserted: 1, id: Number(res.insertId) || 0 } : { inserted: 0, id: 0 };
   } catch (e) {
     if (!isDeadlock(e)) throw e;
-    return -1;
+    return { inserted: -1, id: 0 };
   }
 }

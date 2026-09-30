@@ -38,6 +38,20 @@ export function hasPrealertSql(alias = "p"): string {
                        AND TRIM(nsp.tracking_number) = TRIM(${a}.tracking)))`;
 }
 
+/**
+ * The same link rule as hasPrealertSql, as a JOIN condition between a pre-alert
+ * row (`pr`, either table) and a package (`p`): same customer, TRIM'd non-blank
+ * tracking. Used where the pre-alert rows themselves are needed (the
+ * admin's "Customer paid" gauge, lib/customer-paid.ts).
+ */
+export function prealertLinkOn(pr: string, p: string): string {
+  const a = safeAlias(pr);
+  const b = safeAlias(p);
+  return `(${a}.user_id = ${b}.user_id
+       AND LENGTH(TRIM(${a}.tracking_number)) > 0
+       AND TRIM(${a}.tracking_number) = TRIM(${b}.tracking))`;
+}
+
 /** TRUE when the package needs a pre-alert from its customer. */
 export function needsPrealertSql(alias = "p"): string {
   const a = safeAlias(alias);

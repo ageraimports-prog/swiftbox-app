@@ -48,5 +48,10 @@ export async function POST(req: Request) {
   if (result.status === "closed") {
     return NextResponse.json({ status: "closed", error: CLOSED_MESSAGE }, { status: 409 });
   }
-  return NextResponse.json({ status: result.status, next: result.next, remaining: result.remaining });
+  return NextResponse.json({
+    status: result.status,
+    next: result.next,
+    remaining: result.remaining,
+    ...(result.prealertId ? { prealertId: result.prealertId } : {}),
+  });
 }

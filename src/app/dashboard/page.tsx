@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import QRCode from "qrcode";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import {
   ensureReferralCode,
+  inviteLink,
+  shareMessage,
   whatsappShareUrl,
   getReferralStats,
   ZERO_REFERRAL_STATS,
@@ -52,11 +55,23 @@ export default async function DashboardPage() {
   } catch {
     referralCode = null;
   }
-  // Deep-link to the website's signup page (SIGNUP_URL), not the app (APP_URL) —
-  // the friend signs up on the marketing site, which reads ?ref= and prefills it.
+  // The friend's invite link is the WEBSITE's /r/CODE page (SIGNUP_URL is only a
+  // same-site override), never the app — the friend signs up on the marketing site.
   const referralShareUrl = referralCode
     ? whatsappShareUrl(referralCode, process.env.SIGNUP_URL)
     : null;
+  const referralLink = referralCode ? inviteLink(referralCode, process.env.SIGNUP_URL) : null;
+  const referralMessage = referralCode ? shareMessage(referralCode, process.env.SIGNUP_URL) : null;
+  // QR of the invite link, drawn here (no outside service). Optional — on any
+  // failure the card simply has no QR button.
+  let referralQr: string | null = null;
+  if (referralLink) {
+    try {
+      referralQr = await QRCode.toString(referralLink, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+    } catch {
+      referralQr = null;
+    }
+  }
 
   // Earnings stats for the panel (Sub-piece D). Secondary to the page like the
   // code-ensure above — a bridge hiccup falls back to zeros, never an error.
@@ -97,10 +112,13 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {referralCode && referralShareUrl && (
+      {referralCode && referralShareUrl && referralLink && referralMessage && (
         <ReferralCard
           code={referralCode}
           shareUrl={referralShareUrl}
+          inviteLink={referralLink}
+          message={referralMessage}
+          qrSvg={referralQr}
           creditTtd={REFERRAL_CREDIT_TTD}
           welcomeTtd={REFERRAL_WELCOME_CREDIT_TTD}
         />

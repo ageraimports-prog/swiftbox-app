@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SIGNUP_BASE_URL, whatsappShareUrl } from "@/lib/referral";
+import { SIGNUP_BASE_URL, inviteLink, shareMessage, whatsappShareUrl } from "@/lib/referral";
 
 /**
  * The share link is the one URL in the product a NON-customer clicks, usually
@@ -10,7 +10,7 @@ import { SIGNUP_BASE_URL, whatsappShareUrl } from "@/lib/referral";
  */
 
 const CODE = "J924PM";
-const CANONICAL_LINK = `${SIGNUP_BASE_URL}/signup?ref=${CODE}`;
+const CANONICAL_LINK = `${SIGNUP_BASE_URL}/r/${CODE}`;
 
 /**
  * Pull the signup link back out of a wa.me deep link the way WhatsApp does:
@@ -56,7 +56,7 @@ describe("whatsappShareUrl", () => {
       const link = signupLinkFrom(whatsappShareUrl(CODE, "https://swiftboxtt.com/"));
 
       expect(link).toBe(CANONICAL_LINK);
-      expect(link).not.toContain("//signup");
+      expect(link).not.toContain("//r/");
     });
 
     it("strips repeated trailing slashes", () => {
@@ -67,14 +67,14 @@ describe("whatsappShareUrl", () => {
 
     it("accepts the www host", () => {
       expect(signupLinkFrom(whatsappShareUrl(CODE, "https://www.swiftboxtt.com"))).toBe(
-        `https://www.swiftboxtt.com/signup?ref=${CODE}`
+        `https://www.swiftboxtt.com/r/${CODE}`
       );
     });
 
     it("tolerates surrounding whitespace on an otherwise valid value", () => {
       expect(
         signupLinkFrom(whatsappShareUrl(CODE, "  https://www.swiftboxtt.com  "))
-      ).toBe(`https://www.swiftboxtt.com/signup?ref=${CODE}`);
+      ).toBe(`https://www.swiftboxtt.com/r/${CODE}`);
     });
   });
 
@@ -128,14 +128,32 @@ describe("whatsappShareUrl", () => {
     const messy = "A B&C/D?E#F";
 
     expect(signupLinkFrom(whatsappShareUrl(messy))).toBe(
-      `${SIGNUP_BASE_URL}/signup?ref=A%20B%26C%2FD%3FE%23F`
+      `${SIGNUP_BASE_URL}/r/A%20B%26C%2FD%3FE%23F`
     );
   });
 
-  it("round-trips an encoded code back to the original through the query string", () => {
+  it("round-trips an encoded code back to the original through the path", () => {
     const messy = "A B&C/D?E#F";
     const link = signupLinkFrom(whatsappShareUrl(messy));
 
-    expect(new URL(link).searchParams.get("ref")).toBe(messy);
+    expect(decodeURIComponent(new URL(link).pathname.replace(/^\/r\//, ""))).toBe(messy);
+  });
+});
+
+describe("shareMessage", () => {
+  it("is the research copy: friend's credit toward the first invoice, link alone on the last line", () => {
+    const msg = shareMessage(CODE);
+    const lines = msg.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("TT$50 credit toward your first Swiftbox invoice");
+    expect(lines[1]).toBe(CANONICAL_LINK);
+    // No rates or prices in a message sent from a customer's own phone.
+    expect(msg).not.toMatch(/\/lb|US\$|unmatchable/i);
+  });
+
+  it("the invite link is the website's /r/ page, never the app", () => {
+    expect(inviteLink(CODE)).toBe(`https://swiftboxtt.com/r/${CODE}`);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(inviteLink(CODE, "https://app.swiftboxtt.com")).toBe(`https://swiftboxtt.com/r/${CODE}`);
   });
 });

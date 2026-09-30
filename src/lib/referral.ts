@@ -262,13 +262,10 @@ function resolveSignupBase(signupBaseUrl?: string): string {
 }
 
 /**
- * WhatsApp share deep link with a prefilled, natural recommendation message.
- * The program is double-sided, so the message leads with what the FRIEND gets
- * (REFERRAL_WELCOME_CREDIT_TTD off their first shipment) — that is the reason
- * they'd bother entering a code. The link always deep-links to the website
- * signup page with the referrer's code prefilled — `/signup?ref=CODE` — which
- * the signup page reads from the query string and uppercases into the referral
- * field (Sub-piece B).
+ * The friend's personal invite link: swiftboxtt.com/r/CODE (the website's
+ * invite page — the signup form with the referrer's first name, the code
+ * filled in and remembered for 60 days). Old /signup?ref=CODE links still
+ * work on the website; new shares use /r/.
  *
  * PRECEDENCE: SIGNUP_BASE_URL wins by default. `signupBaseUrl` (in practice
  * process.env.SIGNUP_URL) is a SAME-SITE override, not an escape hatch — it is
@@ -277,15 +274,26 @@ function resolveSignupBase(signupBaseUrl?: string): string {
  * SIGNUP_BASE_URL. The friend therefore cannot be sent to a 404 by a bad env
  * var; the worst a misconfigured deployment can do is log a warning.
  */
-export function whatsappShareUrl(code: string, signupBaseUrl?: string): string {
+export function inviteLink(code: string, signupBaseUrl?: string): string {
   const base = resolveSignupBase(signupBaseUrl).replace(/\/+$/, "");
-  const link = `${base}/signup?ref=${encodeURIComponent(code)}`;
-  const text = encodeURIComponent(
-    [
-      `Hey! I've been using Swift Box to ship my online orders down to Trinidad and the service and rates are unmatchable 📦 Use my referral code *${code}* when you sign up and you'll get TT$${REFERRAL_WELCOME_CREDIT_TTD} off your first shipment.`,
-      ``,
-      link,
-    ].join("\n")
-  );
-  return `https://wa.me/?text=${text}`;
+  return `${base}/r/${encodeURIComponent(code)}`;
+}
+
+/**
+ * The message a customer sends (REFERRAL_FLOW_RESEARCH.md §4.1). It leads with
+ * what the FRIEND gets and says "toward your first invoice" because the credit
+ * waits for an invoice of at least that much. No prices or rates, and no name —
+ * it is sent from the referrer's own phone. The link is alone on the LAST line:
+ * WhatsApp previews the first link and autolinks a clean line.
+ */
+export function shareMessage(code: string, signupBaseUrl?: string): string {
+  return [
+    `I use Swiftbox to get my online shopping from the US to T&T 📦 Sign up with my link and you'll get TT$${REFERRAL_WELCOME_CREDIT_TTD} credit toward your first Swiftbox invoice.`,
+    inviteLink(code, signupBaseUrl),
+  ].join("\n");
+}
+
+/** WhatsApp share deep link (opens the contact picker) carrying shareMessage. */
+export function whatsappShareUrl(code: string, signupBaseUrl?: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(shareMessage(code, signupBaseUrl))}`;
 }

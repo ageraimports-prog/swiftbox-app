@@ -124,3 +124,16 @@ pre-alert and lets the customer confirm one.
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.
 Don't run a build while a dev server for this app is running (it corrupts `.next`).
+
+## Referral sharing (2026-09-30)
+
+- The share link is `swiftboxtt.com/r/CODE` (`inviteLink` / `shareMessage` in
+  `src/lib/referral.ts`), still locked to swiftboxtt.com by `resolveSignupBase`.
+- Share taps go to `/api/referral/share`, which reads the code from the
+  signed-in customer's row and forwards to SwiftboxAdmin
+  (`REFERRAL_HOOK_KEY`). Never trust a code from the request.
+- "Your referrals" (`getReferralList`, `src/lib/referral-list.ts`): first name
+  + last initial only. "credit being checked" = the admin HELD the TT$100 as a
+  possible self-referral.
+- WhatsApp number is (868) 609-3000; `src/lib/whatsapp-number.test.ts` fails
+  on any retired number (703-3600 etc.) anywhere under src/.

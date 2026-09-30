@@ -19,9 +19,15 @@ export default function QueryToast() {
     url.searchParams.delete("toast");
     url.searchParams.delete("left");
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
+
+  // Separate from the read above so a re-run of that effect (React StrictMode
+  // in dev) can't cancel the timer after the params are already gone.
+  React.useEffect(() => {
+    if (!message) return;
     const t = setTimeout(() => setMessage(null), 5000);
     return () => clearTimeout(t);
-  }, []);
+  }, [message]);
 
   if (!message) return null;
   return (

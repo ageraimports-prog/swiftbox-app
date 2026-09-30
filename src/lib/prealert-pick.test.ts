@@ -84,6 +84,9 @@ describe("labels", () => {
     expect(parseDescription("  two   shirts ")).toBe("two shirts");
     expect(parseDescription("   ")).toBeNull();
     expect(parseDescription("x".repeat(501))).toBeNull();
+    expect(parseDescription("👟 sneakers")).toBe("sneakers");
+    expect(parseDescription("👟")).toBeNull();
+    expect(parseDescription("café crème")).toBe("café crème");
   });
 });
 

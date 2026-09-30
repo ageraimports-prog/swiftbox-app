@@ -122,8 +122,9 @@ export type SubmitResult =
  * NEEDS_PREALERT sees any committed pre-alert, and on live (REPEATABLE-READ,
  * statement binlog) the SELECT half takes shared next-key locks on the
  * customer's swiftbox_prealerts range, so two concurrent inserts serialise —
- * one waits and then finds the other's row, or is the deadlock victim. Either
- * way the loser inserts nothing and is answered "already".
+ * one waits and then finds the other's row, or is the deadlock victim. A victim
+ * that finds a pre-alert is answered "already"; one whose package is still
+ * open (a different package locked the same range) retries.
  *
  * The demo account is a dry run: validated, answered "saved", nothing written.
  */
@@ -137,7 +138,25 @@ export async function submitPickedPrealert(
   if (before.state === "prealerted") return { status: "already", ...(await nextAfter(session.id, pkId)) };
   if (before.demo) return { status: "saved", dryRun: true, ...(await nextAfter(session.id, pkId)) };
 
-  let inserted = 0;
+  // A deadlock victim is not necessarily a duplicate: two tabs submitting two
+  // DIFFERENT packages of the same customer lock the same index range. So a
+  // victim re-reads the package and, while it is still open, tries again.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const inserted = await insertPick(session, pkId, fields);
+    if (inserted === 1) return { status: "saved", ...(await nextAfter(session.id, pkId)) };
+    const after = await loadPickState(session.id, pkId);
+    if (after.state === "prealerted") return { status: "already", ...(await nextAfter(session.id, pkId)) };
+    if (after.state === "closed" || inserted === 0) return { status: "closed" };
+  }
+  throw new Error("Could not save the pre-alert (the database stayed busy).");
+}
+
+/** 1 = written, 0 = the SELECT matched nothing, -1 = deadlock victim (nothing written). */
+async function insertPick(
+  session: SessionUser,
+  pkId: number,
+  fields: { description: string; valueUsd: number }
+): Promise<1 | 0 | -1> {
   try {
     const res = await execute(
       `INSERT INTO swiftbox_prealerts
@@ -159,13 +178,9 @@ export async function submitPickedPrealert(
         userId: session.id,
       }
     );
-    inserted = Number(res.affectedRows) || 0;
+    return Number(res.affectedRows) === 1 ? 1 : 0;
   } catch (e) {
     if (!isDeadlock(e)) throw e;
+    return -1;
   }
-
-  if (inserted === 1) return { status: "saved", ...(await nextAfter(session.id, pkId)) };
-  const after = await loadPickState(session.id, pkId);
-  if (after.state === "prealerted") return { status: "already", ...(await nextAfter(session.id, pkId)) };
-  return { status: "closed" };
 }

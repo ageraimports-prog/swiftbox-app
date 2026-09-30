@@ -97,9 +97,14 @@ export function parseValueUsd(raw: unknown): number | null {
 
 export const DESCRIPTION_MAX = 500;
 
-/** "What's inside?" → trimmed text, or null when empty / too long. */
+/**
+ * "What's inside?" → trimmed text, or null when empty / too long. Characters
+ * outside the Basic Multilingual Plane (emoji) are dropped: the bridge talks
+ * 3-byte utf8 and live MySQL isn't strict, so one would silently cut the
+ * stored text off at that point.
+ */
 export function parseDescription(raw: unknown): string | null {
-  const s = String(raw ?? "").replace(/\s+/g, " ").trim();
+  const s = String(raw ?? "").replace(/[\u{10000}-\u{10FFFF}]/gu, "").replace(/\s+/g, " ").trim();
   if (!s || s.length > DESCRIPTION_MAX) return null;
   return s;
 }

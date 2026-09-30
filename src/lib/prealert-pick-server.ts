@@ -25,7 +25,9 @@ import {
 
 type Row = {
   pk_id: number;
+  wr: string | null;
   tracking: string | null;
+  commodities: string | null;
   shipper: string | null;
   weight: number | string | null;
   actual_weight: number | string | null;
@@ -33,13 +35,15 @@ type Row = {
   hialeah: number | string;
 };
 
-const COLUMNS = `p.pk_id, TRIM(p.tracking) AS tracking, p.shipper, p.weight, p.actual_weight,
+const COLUMNS = `p.pk_id, p.wr, TRIM(p.tracking) AS tracking, p.commodities, p.shipper, p.weight, p.actual_weight,
                  DATE_FORMAT(p.date, '%Y-%m-%d') AS date, (p.airdrop_package_id IS NOT NULL) AS hialeah`;
 
 function toPick(r: Row): PickPackage {
   return {
     pkId: Number(r.pk_id),
+    wr: (r.wr ?? "").trim(),
     tracking: r.tracking ?? "",
+    description: (r.commodities ?? "").trim() || null,
     carrier: carrierLabel(r.shipper),
     weightLb: weightLabel(r.weight, r.actual_weight),
     arrivedLabel: arrivalDateLabel(r.date),

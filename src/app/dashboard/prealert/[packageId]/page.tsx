@@ -4,6 +4,8 @@ import { getSession } from "@/lib/session";
 import { loadPickState, nextAfter } from "@/lib/prealert-pick-server";
 import PrealertClosed from "@/components/PrealertClosed";
 import QueryToast from "@/components/QueryToast";
+import CopyTracking from "@/components/CopyTracking";
+import { displayTitle, trackingNumbers } from "@/lib/packageDisplay";
 import PickForm from "./PickForm";
 
 /**
@@ -23,6 +25,8 @@ export default async function PickPrealertPage({ params }: { params: Promise<{ p
     const { next } = await nextAfter(session.id, pkId);
     redirect(next ? `/dashboard/prealert/${next}?toast=already` : "/dashboard/prealerts?toast=already");
   }
+
+  const tracking = pick.state === "open" ? trackingNumbers(pick.pkg.tracking) : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -47,10 +51,19 @@ export default async function PickPrealertPage({ params }: { params: Promise<{ p
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">
               At our {pick.pkg.warehouse} warehouse
             </p>
+            <p className="sb-disp mt-2 text-xl text-mist">
+              {displayTitle(pick.pkg.description) ?? pick.pkg.carrier ?? "Package"}
+            </p>
+            {tracking.length > 0 && (
+              <div className="mt-1.5">
+                <CopyTracking numbers={tracking} />
+              </div>
+            )}
             <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-              <dt className="text-muted-dark">Tracking</dt>
-              <dd className="break-all font-semibold text-mist">{pick.pkg.tracking}</dd>
-              <dt className="text-muted-dark">Carrier</dt>
+              {/* `shipper` is the store OR the carrier as the warehouse typed it
+                  ("AMAZON"), so it is labelled "From", not "Carrier" — the
+                  carrier chip on the tracking number is the detected one. */}
+              <dt className="text-muted-dark">From</dt>
               <dd className="font-semibold text-mist">{pick.pkg.carrier ?? "—"}</dd>
               <dt className="text-muted-dark">Weight</dt>
               <dd className="font-semibold text-mist">{pick.pkg.weightLb} lb</dd>
@@ -58,6 +71,12 @@ export default async function PickPrealertPage({ params }: { params: Promise<{ p
               <dd className="font-semibold text-mist">{pick.pkg.arrivedLabel}</dd>
               <dt className="text-muted-dark">Warehouse</dt>
               <dd className="font-semibold text-mist">{pick.pkg.warehouse}</dd>
+              {pick.pkg.wr && (
+                <>
+                  <dt className="text-muted-dark">Swiftbox reference</dt>
+                  <dd className="text-muted-dark">{pick.pkg.wr}</dd>
+                </>
+              )}
             </dl>
             <p className="mt-3 text-xs text-muted-dark">
               We&apos;ve filled these in from the package. Just tell us what&apos;s inside and what it&apos;s worth.

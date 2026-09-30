@@ -1,37 +1,8 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { freightLabel, packageBadge } from "@/lib/status";
 import ConsolidationBanner from "@/components/ConsolidationBanner";
-
-type Pkg = {
-  id: number;
-  wr: string;
-  packageCode?: string;
-  transportMode?: string | null;
-  billableWeight?: number;
-  tracking: string;
-  freight: number;
-  weight: number;
-  pcs: number;
-  shipper: string;
-  commodities: string;
-  date: string;
-  shipNo: string | null;
-  shipStatus: number | null;
-  held?: boolean;
-};
-
-function formatDate(date: string): string {
-  const d = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return date;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import PackageCard, { type PackageSummary } from "@/components/PackageCard";
 
 function SkeletonCard() {
   return (
@@ -93,7 +64,7 @@ function EmptyState() {
 }
 
 export default function PackagesPage() {
-  const [packages, setPackages] = React.useState<Pkg[] | null>(null);
+  const [packages, setPackages] = React.useState<PackageSummary[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const [reload, setReload] = React.useState(0);
@@ -139,47 +110,7 @@ export default function PackagesPage() {
 
       {packages && packages.length === 0 && <EmptyState />}
 
-      {packages &&
-        packages.map((pkg) => {
-          const meta = packageBadge(pkg.shipStatus, pkg.held);
-          return (
-            <Link
-              key={pkg.id}
-              href={`/dashboard/packages/${pkg.id}`}
-              className="block rounded-lg border border-mist/10 bg-ink-2 p-4 transition-colors active:border-green/40"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <p className="sb-disp text-lg text-mist">{pkg.packageCode || pkg.wr}</p>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}
-                >
-                  {meta.label}
-                </span>
-              </div>
-
-              {pkg.commodities && (
-                <p className="mt-1 line-clamp-1 text-sm text-muted-dark">
-                  {pkg.commodities}
-                </p>
-              )}
-
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-dark">
-                <span>
-                  <span className="font-semibold text-mist">{pkg.weight}</span>{" "}
-                  lb
-                </span>
-                <span>
-                  <span className="font-semibold text-mist">{pkg.pcs}</span>{" "}
-                  {pkg.pcs === 1 ? "pc" : "pcs"}
-                </span>
-                <span className="rounded-sm bg-mist/10 px-1.5 py-0.5 font-semibold text-mist">
-                  {freightLabel(pkg.freight, pkg.transportMode)}
-                </span>
-                <span className="ml-auto">{formatDate(pkg.date)}</span>
-              </div>
-            </Link>
-          );
-        })}
+      {packages?.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
     </div>
   );
 }

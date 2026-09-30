@@ -11,6 +11,8 @@ import {
   invoiceLineBasis,
   type InvoiceStatus,
 } from "@/lib/invoice-line";
+import { packageIdentity } from "@/lib/packageDisplay";
+import { RefText, TrackingLine } from "@/components/PackageCard";
 
 type Line = {
   lineType: string;
@@ -257,44 +259,44 @@ export default function InvoiceDetailPage() {
                 {pkgs.length === 1 ? "Package" : "Packages"}
               </h2>
 
-              {pkgs.map((p) => (
-                <div key={p.pkId} className="mt-3 first:mt-1">
-                  {/* Closes the loop: bill → package → tracking timeline. That
-                      route runs its own ownership check, so linking is safe. */}
-                  <Link
-                    href={`/dashboard/packages/${p.pkId}`}
-                    className="flex w-fit items-center gap-1 transition-colors active:text-mist"
+              {pkgs.map((p) => {
+                const id = packageIdentity(p);
+                return (
+                  <div
+                    key={p.pkId}
+                    className="mt-3 border-b border-mist/10 pb-3 first:mt-1 last:border-b-0 last:pb-0"
                   >
-                    <span className="sb-disp text-lg text-green">{p.wr}</span>
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      className="h-4 w-4 text-green"
-                      aria-hidden
+                    {/* Closes the loop: bill → package → tracking timeline. That
+                        route runs its own ownership check, so linking is safe. */}
+                    <Link
+                      href={`/dashboard/packages/${p.pkId}`}
+                      className="flex w-fit max-w-full items-center gap-1 transition-colors active:text-mist"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m8.25 4.5 7.5 7.5-7.5 7.5"
-                      />
-                    </svg>
-                  </Link>
+                      <span className="sb-disp min-w-0 truncate text-lg text-green">{id.title}</span>
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        className="h-4 w-4 shrink-0 text-green"
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="m8.25 4.5 7.5 7.5-7.5 7.5"
+                        />
+                      </svg>
+                    </Link>
 
-                  <dl>
-                    {p.tracking && (
-                      <DetailRow
-                        label="Tracking"
-                        value={<span className="break-all">{p.tracking}</span>}
-                      />
+                    {id.tracking && (
+                      <TrackingLine tracking={id.tracking} more={id.moreTracking} className="mt-1" />
                     )}
-                    {p.commodities && (
-                      <DetailRow label="Contents" value={p.commodities} />
-                    )}
-                  </dl>
-                </div>
-              ))}
+                    {/* The WR stays visible here: it is what the invoice PDF prints. */}
+                    <RefText refCode={id.ref} className="mt-1 block" />
+                  </div>
+                );
+              })}
             </section>
           )}
 

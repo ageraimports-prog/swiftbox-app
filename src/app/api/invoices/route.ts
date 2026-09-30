@@ -11,6 +11,13 @@ type Row = {
   created_at: string;
 };
 
+type PackageRow = {
+  invoice_no: string;
+  wr: string | null;
+  tracking: string | null;
+  commodities: string | null;
+};
+
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -36,6 +43,34 @@ export async function GET() {
     { userId: session.id }
   );
 
+  // What each invoice bills for, so a row can lead with the package the customer
+  // recognises (description + carrier tracking). Same header filter as above —
+  // the child rows are reached only THROUGH this customer's issued headers, so an
+  // orphaned or foreign swiftbox_invoice_packages row can never surface here.
+  // Shipment-scope invoices carry no membership rows and simply get none.
+  const pkgRows = rows.length
+    ? await query<PackageRow>(
+        `SELECT i.invoice_no, p.wr, p.tracking, p.commodities
+           FROM swiftbox_invoices i
+           JOIN swiftbox_invoice_packages ip ON ip.invoice_id = i.invoice_id
+           JOIN mod_packages p ON p.pk_id = ip.pk_id
+          WHERE i.user_id = :userId
+            AND i.lifecycle = 'issued'
+          ORDER BY i.invoice_id, p.wr`,
+        { userId: session.id }
+      )
+    : [];
+  const byInvoice = new Map<string, { wr: string; tracking: string; commodities: string }[]>();
+  for (const p of pkgRows) {
+    const list = byInvoice.get(p.invoice_no) ?? [];
+    list.push({
+      wr: (p.wr ?? "").trim(),
+      tracking: (p.tracking ?? "").trim(),
+      commodities: (p.commodities ?? "").trim(),
+    });
+    byInvoice.set(p.invoice_no, list);
+  }
+
   const invoices = rows.map((r) => ({
     invoiceNo: r.invoice_no,
     scope: r.scope,
@@ -43,6 +78,7 @@ export async function GET() {
     amountPaid: Number(r.amount_paid),
     status: r.status,
     createdAt: r.created_at,
+    packages: byInvoice.get(r.invoice_no) ?? [],
   }));
 
   return NextResponse.json({ invoices });

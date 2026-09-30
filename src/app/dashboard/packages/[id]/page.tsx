@@ -5,6 +5,8 @@ import Link from "next/link";
 import ConsolidationBanner from "@/components/ConsolidationBanner";
 import { HELD_BADGE } from "@/lib/status";
 import AirdropDocuments from "../AirdropDocuments";
+import CopyTracking from "@/components/CopyTracking";
+import { displayTitle, shortRef, trackingNumbers } from "@/lib/packageDisplay";
 import { useParams } from "next/navigation";
 import {
   STAGES,
@@ -177,6 +179,8 @@ export default function PackageDetailPage() {
     };
   }, [id]);
 
+  const tracking = data ? trackingNumbers(data.package.tracking) : [];
+
   return (
     <div className="flex flex-col gap-4">
       <Link
@@ -206,15 +210,26 @@ export default function PackageDetailPage() {
 
       {data && (
         <>
-          <div className="flex items-start justify-between gap-3">
-            <h1 className="sb-disp text-2xl text-mist">{data.package.packageCode || data.package.wr}</h1>
-            <span
-              className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                data.held ? HELD_BADGE.badge : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
-              }`}
-            >
-              {data.held ? HELD_BADGE.label : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].label}
-            </span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="sb-disp min-w-0 break-words text-2xl text-mist">
+                {displayTitle(data.package.commodities) ?? "Package"}
+              </h1>
+              <span
+                className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                  data.held ? HELD_BADGE.badge : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
+                }`}
+              >
+                {data.held ? HELD_BADGE.label : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].label}
+              </span>
+            </div>
+            {tracking.length > 0 ? (
+              <CopyTracking numbers={tracking} />
+            ) : (
+              <p className="text-sm font-medium text-muted-dark">
+                Ref {shortRef(data.package.wr, data.package.packageCode)}
+              </p>
+            )}
           </div>
 
           {data.held && <ConsolidationBanner />}
@@ -222,20 +237,10 @@ export default function PackageDetailPage() {
           {/* Package details */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 px-4 py-1">
             <dl>
-              {data.package.commodities && (
-                <DetailRow label="Contents" value={data.package.commodities} />
-              )}
-              {data.package.tracking && (
-                <DetailRow
-                  label="Tracking"
-                  value={<span className="break-all">{data.package.tracking}</span>}
-                />
-              )}
               {data.package.shipper && (
                 <DetailRow label="Shipper" value={data.package.shipper} />
               )}
               <DetailRow label="Billing weight" value={`${data.package.weight} lb`} />
-              {data.package.packageCode !== data.package.wr && <DetailRow label="Swiftbox reference" value={data.package.wr} />}
               {data.package.volumetricWeight > 0 && (
                 <DetailRow
                   label="Volumetric"
@@ -247,6 +252,11 @@ export default function PackageDetailPage() {
               <DetailRow label="Received" value={formatDate(data.package.date)} />
               {data.shipment?.shipNo && (
                 <DetailRow label="Shipment" value={data.shipment.shipNo} />
+              )}
+              {/* Our own codes — staff and WhatsApp support still ask for them. */}
+              <DetailRow label="Swiftbox reference" value={shortRef(data.package.wr, data.package.packageCode)} />
+              {data.package.packageCode && data.package.packageCode !== data.package.wr && (
+                <DetailRow label="Warehouse receipt" value={data.package.wr} />
               )}
             </dl>
           </section>

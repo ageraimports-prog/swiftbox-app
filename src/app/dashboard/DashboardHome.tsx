@@ -2,61 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { packageBadge, freightLabel } from "@/lib/status";
 import ConsolidationBanner from "@/components/ConsolidationBanner";
-
-type Pkg = {
-  id: number;
-  wr: string;
-  packageCode?: string;
-  transportMode?: string | null;
-  billableWeight?: number;
-  freight: number;
-  weight: number;
-  pcs: number;
-  commodities: string;
-  date: string;
-  shipStatus: number | null;
-  held?: boolean;
-};
-
-type Invoice = {
-  invoiceNo: string;
-  scope: "package" | "shipment";
-  totalTtd: number;
-  amountPaid: number;
-  status: "unpaid" | "partial" | "paid";
-  createdAt: string;
-};
-
-const INVOICE_BADGE: Record<Invoice["status"], { label: string; cls: string }> = {
-  paid: { label: "Paid", cls: "bg-green/10 text-green border border-green/25" },
-  partial: { label: "Partial", cls: "bg-amber-400/10 text-amber-300 border border-amber-400/25" },
-  unpaid: { label: "Unpaid", cls: "bg-amber-400/10 text-amber-300 border border-amber-400/25" },
-};
-
-/** Handles both date-only (packages) and datetime (invoices) strings. */
-function formatDate(s: string): string {
-  const iso = s.includes(" ") ? s.replace(" ", "T") : `${s}T00:00:00`;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTtd(amount: number): string {
-  return `TTD $${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function scopeLabel(scope: Invoice["scope"]): string {
-  return scope.charAt(0).toUpperCase() + scope.slice(1);
-}
+import PackageCard, { type PackageSummary } from "@/components/PackageCard";
+import InvoiceCard, { type InvoiceSummary } from "@/components/InvoiceCard";
 
 function SectionHeading({
   title,
@@ -97,70 +45,9 @@ function PackageSkeleton() {
   );
 }
 
-function PackageCard({ pkg }: { pkg: Pkg }) {
-  const meta = packageBadge(pkg.shipStatus, pkg.held);
-  return (
-    <Link
-      href={`/dashboard/packages/${pkg.id}`}
-      className="block rounded-lg border border-mist/10 bg-ink-2 p-4 transition-colors active:border-green/40"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="sb-disp text-lg text-mist">{pkg.packageCode || pkg.wr}</p>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}>
-          {meta.label}
-        </span>
-      </div>
-      {pkg.commodities && (
-        <p className="mt-1 line-clamp-1 text-sm text-muted-dark">{pkg.commodities}</p>
-      )}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-dark">
-        <span>
-          <span className="font-semibold text-mist">{pkg.weight}</span> lb
-        </span>
-        <span>
-          <span className="font-semibold text-mist">{pkg.pcs}</span>{" "}
-          {pkg.pcs === 1 ? "pc" : "pcs"}
-        </span>
-        <span className="rounded-sm bg-mist/10 px-1.5 py-0.5 font-semibold text-mist">
-          {freightLabel(pkg.freight, pkg.transportMode)}
-        </span>
-        <span className="ml-auto">{formatDate(pkg.date)}</span>
-      </div>
-    </Link>
-  );
-}
-
-function InvoiceCard({ inv }: { inv: Invoice }) {
-  const badge = INVOICE_BADGE[inv.status] ?? INVOICE_BADGE.unpaid;
-  return (
-    <div className="rounded-lg border border-mist/10 bg-ink-2 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <p className="sb-disp text-lg text-mist">{inv.invoiceNo}</p>
-          <span className="rounded-sm bg-mist/10 px-1.5 py-0.5 text-[10px] font-semibold text-mist">
-            {scopeLabel(inv.scope)}
-          </span>
-        </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.cls}`}>
-          {badge.label}
-        </span>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-dark">
-        <span>{formatDate(inv.createdAt)}</span>
-        <span className="text-sm font-bold text-white">{formatTtd(inv.totalTtd)}</span>
-      </div>
-      {inv.status === "partial" && (
-        <p className="mt-2 text-xs text-amber-300">
-          {formatTtd(inv.amountPaid)} of {formatTtd(inv.totalTtd)} paid
-        </p>
-      )}
-    </div>
-  );
-}
-
 export default function DashboardHome() {
-  const [packages, setPackages] = React.useState<Pkg[] | null>(null);
-  const [invoices, setInvoices] = React.useState<Invoice[] | null>(null);
+  const [packages, setPackages] = React.useState<PackageSummary[] | null>(null);
+  const [invoices, setInvoices] = React.useState<InvoiceSummary[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {

@@ -27,7 +27,12 @@ export function isPlayDemoSql(alias = "p"): string {
 /** A package that is waiting for its pre-alert, as the app shows it. */
 export type PickPackage = {
   pkId: number;
+  /** Our warehouse receipt — shown small, as "Ref WR1193". */
+  wr: string;
   tracking: string;
+  /** What the warehouse wrote on intake, if anything (mod_packages.commodities). */
+  description: string | null;
+  /** The merchant or carrier as entered in `shipper` ("Amazon") — not a detected carrier. */
   carrier: string | null;
   weightLb: string;
   arrivedLabel: string;

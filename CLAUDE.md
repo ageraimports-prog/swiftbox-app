@@ -136,4 +136,4 @@ Don't run a build while a dev server for this app is running (it corrupts `.next
   + last initial only. "credit being checked" = the admin HELD the TT$100 as a
   possible self-referral.
 - WhatsApp number is (868) 609-3000; `src/lib/whatsapp-number.test.ts` fails
-  on any retired number (703-3600 etc.) anywhere under src/.
+  on any retired number (the old WhatsApp lines) anywhere under src/.

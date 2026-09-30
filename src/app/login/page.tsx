@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { safeNext } from "@/lib/next-path";
 
 const inputCls =
   "w-full rounded-md border border-gray-200 bg-white px-4 py-3.5 text-base text-ink placeholder:text-gray-400 focus:outline-none focus:border-green focus:ring-2 focus:ring-green/40";
@@ -49,7 +50,7 @@ export default function LoginPage() {
         setSubmitting(false);
         return;
       }
-      router.push("/dashboard");
+      router.push(safeNext(new URLSearchParams(window.location.search).get("next")) ?? "/dashboard");
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");

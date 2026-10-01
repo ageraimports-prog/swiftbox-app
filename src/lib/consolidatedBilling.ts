@@ -93,7 +93,10 @@ export function cbWhatsAppUrl(swiftCode: string): string {
   return `https://wa.me/${SWIFTBOX_WHATSAPP}?text=${encodeURIComponent(text)}`;
 }
 
-/** The FAQ — word for word the website's (swiftboxtt.com/blog/consolidated-billing-trinidad). */
+/** The FAQ. https://swiftboxtt.com/consolidated-billing shows six of these, word for
+ *  word (the website has no blog post on it). The website's src/lib/consolidatedBilling.ts holds the same wording and its own
+ *  copy of the 20-day figure (CB_HOLD_DAYS), as does SwiftboxAdmin (HOLD_DAYS in
+ *  lib/consolidated-billing-core.ts): change all three repos together. */
 export const CB_FAQ: { q: string; a: string }[] = [
   {
     q: "Is Consolidated Billing the same as package consolidation?",

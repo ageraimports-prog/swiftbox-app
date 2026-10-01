@@ -39,6 +39,16 @@ R11 a package with no invoice at release is billed on its own. R12 rates unchang
 US$1.99/lb + 20% fuel (US$2.39/lb all-in), actual weight per package, no repacking.
 **R13 the app NEVER says a package is in, or held in, Trinidad.**
 
+**LIVE since 2026-09-30** (this app `27cf1ba`, admin `50f3046`; admin migration
+038 applied). v1's tables are dormant on live pending a separate removal; nothing
+here reads them. v1's 4 opt-ins (#0292, #0406, #0410, #0413) start ON in v2 — the
+switch reads `users.consolidated_billing`, which v2 reuses.
+**How a group closes** is the admin's rule (its CLAUDE.md, "How a group closes"):
+day 21 closes it, it goes out once every member is cleared AND its bill is issued,
+and the office's Release now or the customer turning the switch OFF sends what has
+landed and lets the rest travel on their own. A package that never arrives keeps a
+closed group waiting until the office releases it.
+
 **How this app keeps them:**
 - **It never writes a Consolidated Billing table or an invoice.** `src/lib/consolidated-billing.ts`
   only reads `swiftbox_cb_*`; the switch calls the admin
@@ -53,6 +63,18 @@ US$1.99/lb + 20% fuel (US$2.39/lb all-in), actual weight per package, no repacki
   404) until the group releases.
 - **Invoices:** a bill's invoices are listed AS the bill (`/dashboard/bills/[billNo]`,
   live totals, PDF via the admin). A child invoice stays viewable and links its bill.
+- **Rendering goes through the shared cards only** (see "How a package is named"):
+  `PackageCard` reads `cbWaiting` (never v1's `held`) and puts the waiting badge on
+  its OWN line under the name — a sentence beside the name squeezes it to two letters
+  at 360px; the package detail page shows no header badge while waiting (the
+  Consolidated Billing box says it). `BillCard` (Invoices list) and the bill page
+  are headed by the packages ("Shoes + 4 more", `billHeadline` / `packagesSummary`)
+  with the CB number as the small Ref; each package block leads with description +
+  carrier tracking, WR as the ref. `InvoiceCard` never falls back to the invoice
+  number as its headline ("Shipment charges" / "Package" instead).
+- `/api/invoices` returns each visible invoice's packages AND `bills[]` with
+  `packageCount` + `packages` ({wr, tracking, commodities}) read through the bill's
+  own links (`listCbBills` → `billPackages`).
 - **All copy lives in `src/lib/consolidatedBilling.ts`** (short line, long
   description, confirm, card texts, FAQ, HOLD_DAYS). The arithmetic mirrors the
   admin's pure core in `src/lib/consolidatedBillingCore.ts` — keep the two in step.

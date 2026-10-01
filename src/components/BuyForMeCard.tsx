@@ -31,7 +31,7 @@ export default function BuyForMeCard() {
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Buy For Me</p>
           <p className="mt-2 text-base font-semibold text-mist">We&apos;ll buy it for you</p>
           <p className="mt-1 text-xs text-muted-dark">
-            Send us a product link — we quote, you pay by bank transfer, we buy and ship it with your packages.
+            Send us a product link — we send one all-in price to Trinidad (duty and VAT included), you pay by bank deposit or transfer, then we buy it and ship it to you.
           </p>
         </div>
         {c && c.updates > 0 && (

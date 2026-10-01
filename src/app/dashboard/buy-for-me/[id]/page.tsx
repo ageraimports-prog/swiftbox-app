@@ -3,10 +3,22 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { BfmStatus, QuoteFigures } from "@/lib/buy-for-me-core";
-import { BuyForMeRules, StatusPill, card, formatDate, ghostButton, greenButton, ttd, usd } from "../ui";
+import { usdText, type BfmStatus, type QuoteFigures } from "@/lib/buy-for-me-core";
+import { allInNotice, type BfmAllIn } from "@/lib/buy-for-me-quote";
+import { BuyForMeRules, PAYMENT_ONLY_LINE, StatusPill, card, formatDate, ghostButton, greenButton, ttd, usd } from "../ui";
 
-type Quote = { id: number; seq: number; ref: string; kind: "original" | "topup"; status: "awaiting_payment" | "paid"; reason: string | null; figures: QuoteFigures; paidTtdCents: number | null };
+type Quote = {
+  id: number;
+  seq: number;
+  ref: string;
+  kind: "original" | "topup";
+  status: "awaiting_payment" | "paid";
+  reason: string | null;
+  figures: QuoteFigures;
+  allIn: BfmAllIn | null;
+  amountDueTtdCents: number;
+  paidTtdCents: number | null;
+};
 type Detail = {
   id: number;
   no: string;
@@ -25,6 +37,7 @@ type Detail = {
   history: Array<{ title: string; message: string | null; at: string | null }>;
   canUploadSlip: boolean;
   canCancel: boolean;
+  feePct: number;
 };
 
 /** Phone photos are often 3–8 MB: shrink big images before upload so they fit the 4 MB limit. */
@@ -45,38 +58,66 @@ async function shrinkIfNeeded(file: File): Promise<File> {
   }
 }
 
+type QuoteRow = { label: string; ttdCents: number; usdCents?: number; caption?: string };
+
+/**
+ * One quote, exactly as the admin froze it — this app never recalculates. TTD
+ * first, USD in brackets. An all-in quote adds the Trinidad part (courier, then
+ * duty/OPT/VAT/other) and its total is grand_total_ttd; a purchase-only quote
+ * (legacy, or before migration 043) stops at the service fee.
+ */
 function QuoteBlock({ q }: { q: Quote }) {
   const f = q.figures;
-  const rows: Array<[string, number, number]> = [
-    ["Item value", f.ttd.itemValue, f.usd.itemValue],
-    ["US sales tax", f.ttd.usTax, f.usd.usTax],
-    ["US shipping to Miami", f.ttd.usShipping, f.usd.usShipping],
-    [`Service fee (${f.feePct}% of item value)`, f.ttd.fee, f.usd.fee],
+  const a = q.allIn;
+  const rows: QuoteRow[] = [
+    { label: "Item value", ttdCents: f.ttd.itemValue, usdCents: f.usd.itemValue },
+    { label: "US sales tax", ttdCents: f.ttd.usTax, usdCents: f.usd.usTax },
+    { label: "US shipping to Miami", ttdCents: f.ttd.usShipping, usdCents: f.usd.usShipping },
+    { label: `Service fee (${f.feePct}% of item value)`, ttdCents: f.ttd.fee, usdCents: f.usd.fee },
   ];
+  if (a) {
+    rows.push({
+      label: "Freight, fuel & insurance to Trinidad",
+      ttdCents: a.courierTtdCents,
+      usdCents: a.freightUsdCents + a.fuelUsdCents + a.insuranceUsdCents,
+      caption: `Freight ${usdText(a.freightUsdCents)} · Fuel ${usdText(a.fuelUsdCents)} · Insurance ${usdText(a.insuranceUsdCents)}`,
+    });
+    rows.push({ label: "Duty", ttdCents: a.dutyTtdCents });
+    if (a.optTtdCents > 0) rows.push({ label: "OPT", ttdCents: a.optTtdCents });
+    rows.push({ label: "VAT", ttdCents: a.vatTtdCents });
+    if (a.otherTtdCents > 0) rows.push({ label: "Other taxes", ttdCents: a.otherTtdCents });
+  }
   return (
     <div>
       {q.kind === "topup" && q.reason && <p className="mb-2 text-sm text-mist">Why: {q.reason}</p>}
       <table className="w-full text-sm">
         <tbody>
-          {rows.map(([l, t, u]) => (
-            <tr key={l}>
-              <td className="py-1 pr-2 text-muted-dark">{l}</td>
-              <td className="py-1 text-right text-mist">
-                {ttd(t)} <span className="text-xs text-muted-dark">({usd(u)})</span>
+          {rows.map((r) => (
+            <tr key={r.label}>
+              <td className="py-1 pr-2 align-top text-muted-dark">
+                {r.label}
+                {r.caption && <span className="mt-0.5 block text-[11px] text-muted-dark/80">{r.caption}</span>}
+              </td>
+              <td className="py-1 text-right align-top text-mist">
+                {ttd(r.ttdCents)}
+                {r.usdCents != null && <span className="text-xs text-muted-dark"> ({usd(r.usdCents)})</span>}
               </td>
             </tr>
           ))}
           <tr className="border-t border-mist/15">
             <td className="pt-2 pr-2 font-semibold text-mist">Total to pay</td>
             <td className="pt-2 text-right font-semibold text-green">
-              {ttd(f.ttd.total)} <span className="text-xs font-normal text-muted-dark">({usd(f.usd.total)})</span>
+              {ttd(q.amountDueTtdCents)}
+              {!a && <span className="text-xs font-normal text-muted-dark"> ({usd(f.usd.total)})</span>}
             </td>
           </tr>
         </tbody>
       </table>
+      {a && <p className="mt-3 text-xs text-muted-dark">{allInNotice(a.estWeightLb)}</p>}
     </div>
   );
 }
+
 
 export default function BuyForMeRequestPage() {
   const { id } = useParams<{ id: string }>();
@@ -164,7 +205,7 @@ export default function BuyForMeRequestPage() {
 
       {d.status === "submitted" && (
         <section className={card}>
-          <p className="text-sm text-mist">Thanks — we&apos;ve got your request. A Swiftbox team member will check the items and send you a quote with our bank details.</p>
+          <p className="text-sm text-mist">Thanks — we&apos;ve got your request. A Swiftbox team member will check the items and send you one all-in quote — the item, our fee, freight to Trinidad, duty, OPT and VAT — with our bank details. You don&apos;t pay anything until then.</p>
         </section>
       )}
 
@@ -173,7 +214,17 @@ export default function BuyForMeRequestPage() {
           <p className="text-sm font-semibold text-mist">{d.openQuote.kind === "topup" ? "Top-up needed" : "Your quote"}</p>
           <div className="mt-3"><QuoteBlock q={d.openQuote} /></div>
 
-          <div className="mt-5 rounded-lg bg-ink p-4">
+          <div className="mt-5 border-t border-mist/10 pt-4">
+            <p className="text-sm font-semibold text-mist">How to pay</p>
+            <p className="mt-1 text-sm text-mist">
+              Pay <span className="font-semibold text-green">{ttd(d.openQuote.amountDueTtdCents)}</span> by bank deposit or bank
+              transfer, using the reference below.
+            </p>
+            <p className="mt-2 rounded-md bg-amber-400/10 px-3 py-2 text-xs text-amber-200">{PAYMENT_ONLY_LINE}</p>
+            <p className="mt-2 text-xs text-muted-dark">Nothing is bought until our team confirms your payment.</p>
+          </div>
+
+          <div className="mt-4 rounded-lg bg-ink p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-dark">Payment reference</p>
             <div className="mt-1 flex items-center justify-between gap-3">
               <p className="sb-disp font-mono text-2xl tracking-wider text-green">{d.openQuote.ref}</p>
@@ -195,7 +246,7 @@ export default function BuyForMeRequestPage() {
 
           {d.bank ? (
             <div className="mt-4 text-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-dark">Pay by bank deposit or bank transfer only</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-dark">Our bank details</p>
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
                 <dt className="text-muted-dark">Bank</dt><dd className="text-mist">{d.bank.bank}</dd>
                 <dt className="text-muted-dark">Account name</dt><dd className="text-mist">{d.bank.accountName}</dd>
@@ -280,7 +331,11 @@ export default function BuyForMeRequestPage() {
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-muted-dark">Freight, duty and delivery are billed on this package as usual.</p>
+          <p className="mt-2 text-xs text-muted-dark">
+            {d.quotes.some((q) => q.allIn)
+              ? "Delivery to Trinidad, duty and VAT were included in your quote. If the actual weight or the customs assessment is higher, the difference may be charged on delivery."
+              : "Freight, duty and delivery for this package are billed on its own invoice."}
+          </p>
         </section>
       )}
 
@@ -358,7 +413,7 @@ export default function BuyForMeRequestPage() {
 
       {(d.status === "submitted" || d.status === "quoted") && (
         <section className={card}>
-          <BuyForMeRules />
+          <BuyForMeRules feePct={d.feePct} />
         </section>
       )}
     </div>

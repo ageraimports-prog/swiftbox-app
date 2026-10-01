@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { createRequest, listMyRequests } from "@/lib/buy-for-me";
+import { createRequest, getBfmFeePct, listMyRequests } from "@/lib/buy-for-me";
 
 /** GET — the logged-in customer's Buy For Me requests, newest first. */
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json({ requests: await listMyRequests(session.id) });
+  const [requests, feePct] = await Promise.all([listMyRequests(session.id), getBfmFeePct()]);
+  return NextResponse.json({ requests, feePct });
 }
 
 /** POST — a new request: { items: [{ productUrl, qty, variant, priceSeen, note }], note }. */

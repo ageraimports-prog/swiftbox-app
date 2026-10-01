@@ -12,6 +12,9 @@ const LABEL: Record<string, string> = {
   wire: "Wire",
   cheque: "Cheque",
   other: "Other",
+  // System-only (never picked by staff): the landed invoice of a Buy For Me
+  // package, settled from the all-in amount the customer paid upfront.
+  bfm_prepaid: "Paid in advance (Buy For Me)",
 };
 
 export function paymentLabel(method: string | null | undefined): string {

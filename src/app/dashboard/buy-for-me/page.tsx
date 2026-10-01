@@ -19,6 +19,7 @@ type Row = {
 export default function BuyForMePage() {
   const [rows, setRows] = React.useState<Row[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [feePct, setFeePct] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -27,7 +28,11 @@ export default function BuyForMePage() {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
-      .then((d) => !cancelled && setRows(d.requests))
+      .then((d) => {
+        if (cancelled) return;
+        setRows(d.requests);
+        if (typeof d.feePct === "number") setFeePct(d.feePct);
+      })
       .catch(() => !cancelled && setError("Couldn't load your requests. Please try again."));
     return () => {
       cancelled = true;
@@ -45,10 +50,10 @@ export default function BuyForMePage() {
 
       <section className={card}>
         <p className="text-sm text-mist">
-          Can&apos;t buy it yourself? Send us the link and we&apos;ll buy it for you and ship it to Trinidad with your other packages.
+          Can&apos;t buy it yourself? Send us the link and we&apos;ll send you one all-in price — the item, our fee, freight to Trinidad, duty and VAT. Once your payment is confirmed, we buy it and ship it to you.
         </p>
         <div className="mt-3">
-          <BuyForMeRules />
+          <BuyForMeRules feePct={feePct} />
         </div>
       </section>
 
@@ -84,7 +89,11 @@ export default function BuyForMePage() {
             </div>
             <StatusPill status={r.status} label={r.statusLabel} />
           </div>
-          {r.totalTtdCents != null && <p className="mt-3 text-sm font-semibold text-mist">{ttd(r.totalTtdCents)}</p>}
+          {r.totalTtdCents != null && (
+            <p className="mt-3 text-sm font-semibold text-mist">
+              {ttd(r.totalTtdCents)}
+            </p>
+          )}
         </Link>
       ))}
     </div>

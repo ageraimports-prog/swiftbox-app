@@ -19,6 +19,8 @@ export function safeNext(raw: string | null | undefined): string | null {
   if (!s.startsWith("/") || s.startsWith("//") || s.includes("\\") || /[\u0000-\u001f]/.test(s)) return null;
   if (/^\/[^/]*:/.test(s)) return null;
   const path = s.split(/[?#]/)[0];
+  // No dot segments: "/dashboard/../login" must not climb out of the allowed area.
+  if (path.split("/").some((seg) => seg === ".." || seg === ".")) return null;
   if (!ALLOWED.some((p) => path === p || path.startsWith(`${p}/`))) return null;
   return s;
 }

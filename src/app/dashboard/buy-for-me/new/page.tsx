@@ -20,6 +20,18 @@ export default function NewBuyForMePage() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [itemErrors, setItemErrors] = React.useState<Record<number, string>>({});
+  const [feePct, setFeePct] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/buy-for-me/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => !cancelled && d && typeof d.feePct === "number" && setFeePct(d.feePct))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const set = (i: number, k: keyof Item, v: string) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
 
@@ -59,7 +71,8 @@ export default function NewBuyForMePage() {
       </div>
 
       <section className={card}>
-        <BuyForMeRules />
+        <p className="mb-2 text-sm font-semibold text-mist">How Buy For Me works</p>
+        <BuyForMeRules feePct={feePct} />
       </section>
 
       {items.map((it, i) => (

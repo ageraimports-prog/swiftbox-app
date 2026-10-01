@@ -24,6 +24,7 @@ import {
   type QuoteFigures,
 } from "@/lib/buy-for-me-core";
 import { detectSlipType, randomSlipName, slipPath, SLIP_MAX_BYTES } from "@/lib/slip-file";
+import { allInFromRow, amountDueTtdCents, bfmEventTitle, parseFeePct, BFM_FEE_PCT_FALLBACK, type BfmAllIn } from "@/lib/buy-for-me-quote";
 
 /**
  * Buy For Me — the customer side (SwiftboxAdmin BUY_FOR_ME_PLAN.md, Block D).
@@ -88,14 +89,30 @@ async function alertStaff(subject: string, lines: string[]) {
 
 /* ───────────────────────── list + dashboard ───────────────────────── */
 
+/**
+ * The Buy For Me service fee % (admin setting `bfm_fee_pct`), for the rules
+ * copy. Falls back to 15 when the row is missing or the read fails — a quote
+ * itself always shows its OWN frozen fee_pct, never this.
+ */
+export async function getBfmFeePct(): Promise<number> {
+  try {
+    const [row] = await query<{ setting_value: string | null }>(
+      `SELECT setting_value FROM swiftbox_settings WHERE setting_key = 'bfm_fee_pct' LIMIT 1`
+    );
+    return parseFeePct(row?.setting_value);
+  } catch (e) {
+    console.error("[buy-for-me] fee setting read failed:", e instanceof Error ? e.message : e);
+    return BFM_FEE_PCT_FALLBACK;
+  }
+}
+
 export async function listMyRequests(userId: number): Promise<BfmSummary[]> {
   const rows = await query<{
     id: number; status: string; created_at: string | null; customer_seen_at: string | null;
-    item_count: number; total_ttd: string | null; last_notify: string | null;
+    item_count: number; last_notify: string | null;
   }>(
     `SELECT r.id, r.status, r.created_at, r.customer_seen_at,
             (SELECT COUNT(*) FROM swiftbox_bfm_items i WHERE i.request_id = r.id) AS item_count,
-            (SELECT SUM(q.total_ttd) FROM swiftbox_bfm_quotes q WHERE q.request_id = r.id AND q.status <> 'void') AS total_ttd,
             (SELECT MAX(e.created_at) FROM swiftbox_bfm_events e WHERE e.request_id = r.id AND e.notify = 1) AS last_notify
        FROM swiftbox_bfm_requests r
       WHERE r.user_id = :userId
@@ -103,6 +120,20 @@ export async function listMyRequests(userId: number): Promise<BfmSummary[]> {
       LIMIT 100`,
     { userId }
   );
+  // The amount to pay per request = Σ over its live quotes of grand_total_ttd
+  // (all-in) or total_ttd (purchase-only). Read with SELECT * so a missing
+  // migration-043 column is just absent, never an "Unknown column" error.
+  const ids = rows.map((r) => Number(r.id)).filter((n) => Number.isInteger(n) && n > 0);
+  const quoteRows = ids.length
+    ? await query<Record<string, unknown>>(
+        `SELECT * FROM swiftbox_bfm_quotes WHERE request_id IN (${ids.join(",")}) AND status <> 'void'`
+      )
+    : [];
+  const dueByRequest = new Map<number, number>();
+  for (const q of quoteRows) {
+    const rid = Number(q.request_id);
+    dueByRequest.set(rid, (dueByRequest.get(rid) ?? 0) + amountDueTtdCents(q));
+  }
   return rows
     .filter((r) => isBfmStatus(r.status))
     .map((r) => {
@@ -113,7 +144,7 @@ export async function listMyRequests(userId: number): Promise<BfmSummary[]> {
         status,
         statusLabel: BFM_STATUS_LABEL[status].customer,
         itemCount: Number(r.item_count),
-        totalTtdCents: r.total_ttd == null ? null : decimalToCents(r.total_ttd),
+        totalTtdCents: dueByRequest.has(Number(r.id)) ? dueByRequest.get(Number(r.id))! : null,
         createdAt: r.created_at,
         hasUpdate: !!r.last_notify && (!r.customer_seen_at || r.last_notify > r.customer_seen_at),
       };
@@ -202,7 +233,21 @@ export async function createRequest(
 
 /* ───────────────────────── detail ───────────────────────── */
 
-export type BfmCustomerQuote = { id: number; seq: number; ref: string; kind: "original" | "topup"; status: "awaiting_payment" | "paid"; reason: string | null; figures: QuoteFigures; paidTtdCents: number | null };
+export type BfmCustomerQuote = {
+  id: number;
+  seq: number;
+  ref: string;
+  kind: "original" | "topup";
+  status: "awaiting_payment" | "paid";
+  reason: string | null;
+  /** The purchase part (item, US tax, US shipping, fee), as frozen. */
+  figures: QuoteFigures;
+  /** The frozen Trinidad part, or null for a purchase-only quote (or before migration 043). */
+  allIn: BfmAllIn | null;
+  /** What the customer pays for this quote: grand_total_ttd, else total_ttd. */
+  amountDueTtdCents: number;
+  paidTtdCents: number | null;
+};
 
 export type BfmCustomerDetail = {
   id: number;
@@ -222,6 +267,8 @@ export type BfmCustomerDetail = {
   history: Array<{ title: string; message: string | null; at: string | null }>;
   canUploadSlip: boolean;
   canCancel: boolean;
+  /** The CURRENT bfm_fee_pct, for the rules copy only (each quote shows its own frozen fee). */
+  feePct: number;
 };
 
 const SHOW_ORDER_FROM = new Set<BfmStatus>(["purchased", "arrived_miami", "closed"]);
@@ -235,7 +282,7 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
   if (!r || !isBfmStatus(r.status)) return null;
   const status = r.status as BfmStatus;
 
-  const [items, quotes, slips, refunds, packages, events, bankRows] = await Promise.all([
+  const [items, quotes, slips, refunds, packages, events, bankRows, feePct] = await Promise.all([
     query<Record<string, unknown>>(`SELECT line_no, product_url, qty, variant, price_seen_usd, customer_note, retailer_order_no, us_tracking FROM swiftbox_bfm_items WHERE request_id = :id ORDER BY line_no`, { id }),
     query<Record<string, unknown>>(`SELECT * FROM swiftbox_bfm_quotes WHERE request_id = :id AND status <> 'void' ORDER BY seq`, { id }),
     // blob_url is deliberately NOT selected: it never leaves the server except through the slip route.
@@ -244,6 +291,7 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
     query<Record<string, unknown>>(`SELECT b.pk_id, p.wr FROM swiftbox_bfm_packages b LEFT JOIN mod_packages p ON p.pk_id = b.pk_id WHERE b.request_id = :id ORDER BY b.id`, { id }),
     query<Record<string, unknown>>(`SELECT kind, message, created_at FROM swiftbox_bfm_events WHERE request_id = :id ORDER BY id`, { id }),
     query<{ setting_key: string; setting_value: string }>(`SELECT setting_key, setting_value FROM swiftbox_text_settings WHERE setting_key LIKE 'bfm\\_bank\\_%'`),
+    getBfmFeePct(),
   ]);
 
   const c = (row: Record<string, unknown>, k: string) => decimalToCents(row[k]);
@@ -260,6 +308,8 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
       usd: { itemValue: c(q, "item_value_usd"), usTax: c(q, "us_tax_usd"), usShipping: c(q, "us_shipping_usd"), fee: c(q, "fee_usd"), total: c(q, "total_usd") },
       ttd: { itemValue: c(q, "item_value_ttd"), usTax: c(q, "us_tax_ttd"), usShipping: c(q, "us_shipping_ttd"), fee: c(q, "fee_ttd"), total: c(q, "total_ttd") },
     },
+    allIn: allInFromRow(q),
+    amountDueTtdCents: amountDueTtdCents(q),
     paidTtdCents: decimalToCentsOrNull(q.paid_ttd),
   }));
   const openQuote = mappedQuotes.find((q) => q.status === "awaiting_payment") ?? null;
@@ -321,12 +371,14 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
       note: (f.note as string | null) ?? null,
     })),
     packages: packages.map((p) => ({ pkId: Number(p.pk_id), wr: (p.wr as string | null) ?? null })),
-    history: events.map((e) => {
-      const def = (BFM_EVENT_DEFS as Record<string, { title: string }>)[String(e.kind)];
-      return { title: def?.title ?? String(e.kind), message: (e.message as string | null) ?? null, at: (e.created_at as string | null) ?? null };
-    }),
+    history: events.map((e) => ({
+      title: bfmEventTitle(e.kind, BFM_EVENT_DEFS as Record<string, { title: string }>),
+      message: (e.message as string | null) ?? null,
+      at: (e.created_at as string | null) ?? null,
+    })),
     canUploadSlip: status === "quoted" && openQuote !== null,
     canCancel: status === "submitted" || (status === "quoted" && !hasPaid),
+    feePct,
   };
 }
 

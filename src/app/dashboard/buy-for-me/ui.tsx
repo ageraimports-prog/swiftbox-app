@@ -1,6 +1,7 @@
 "use client";
 
 import { formatMoney, type BfmStatus } from "@/lib/buy-for-me-core";
+import { formatPct } from "@/lib/buy-for-me-quote";
 
 /** The app's money style: "TTD $1,234.56" with "(USD $181.55)" beside it. */
 export const ttd = (cents: number) => `TTD $${formatMoney(cents)}`;
@@ -37,14 +38,28 @@ export const greenButton =
 export const ghostButton =
   "rounded-xl border border-mist/20 px-4 py-2.5 text-sm font-semibold text-mist transition-colors hover:bg-mist/5 disabled:opacity-50";
 
-/** The rules, stated plainly wherever someone could start or pay a request. */
-export function BuyForMeRules() {
+/** The one payment rule, word for word wherever money is mentioned. */
+export const PAYMENT_ONLY_LINE = "We only accept bank deposit or bank transfer — no card, LINX, PayPal or cash on delivery.";
+
+/**
+ * The rules, stated plainly wherever someone could start or pay a request.
+ * `feePct` is the admin setting bfm_fee_pct (the server falls back to 15); it is
+ * never hardcoded here. While it loads the fee line is worded without a number.
+ */
+export function BuyForMeRules({ feePct }: { feePct: number | null }) {
+  const fee = `Our service fee is ${feePct == null ? "a percentage" : `${formatPct(feePct)}%`} of the item value`;
   return (
     <ul className="space-y-1 text-xs text-muted-dark">
-      <li>• Paid upfront — we buy your item once your payment is confirmed.</li>
-      <li>• Bank deposit or bank transfer only.</li>
-      <li>• A Swiftbox team member sends you the full quote first.</li>
-      <li>• Freight, duty and delivery are billed separately, as usual, when it lands in Trinidad.</li>
+      <li>• Paid upfront — nothing is bought until our team confirms your payment.</li>
+      <li>• {PAYMENT_ONLY_LINE}</li>
+      <li>• {fee} (price × quantity) — it is not charged on US sales tax or US shipping.</li>
+      <li>
+        • One all-in quote: the item, US sales tax, US shipping to Miami, our service fee, freight to Trinidad, duty, OPT and
+        VAT — all paid upfront.
+      </li>
+      <li>• A Swiftbox team member checks your items and sends you the quote before you pay anything.</li>
+      <li>• If the actual weight or the customs assessment is higher than estimated, the difference may be charged on delivery.</li>
+      <li>• Refunds are made by bank transfer only. We don&apos;t give credit of any kind.</li>
     </ul>
   );
 }

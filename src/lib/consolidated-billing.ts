@@ -43,6 +43,23 @@ const BI = "swiftbox_cb_bill_invoices";
  */
 const BFM_PKS = "SELECT pk_id FROM swiftbox_bfm_packages";
 
+/**
+ * Run a read that excludes Buy For Me packages (`notBfm` = an `AND … NOT IN`
+ * clause on the given pk column). If the Buy For Me table itself is missing
+ * there are no Buy For Me packages, so the read is retried WITHOUT the clause —
+ * Consolidated Billing must never go blank just because Buy For Me's table is
+ * absent.
+ */
+async function excludingBfm<T>(pkCol: string, run: (notBfm: string) => Promise<T>): Promise<T> {
+  try {
+    return await run(` AND ${pkCol} NOT IN (${BFM_PKS})`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/swiftbox_bfm_packages/i.test(msg) && /doesn't exist|no such table/i.test(msg)) return run("");
+    throw e;
+  }
+}
+
 /** A read that answers `fallback` when migration 038 has not run. */
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
@@ -153,15 +170,14 @@ export type CbPackageDisplay = {
 /** pk_id → how the package list / detail should show it. Only packages in a group appear. */
 export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPackageDisplay>> {
   const rows = await safe(
-    () => query<{ pk_id: number; group_id: number; state: string; ship_status: number | null; awaiting_date: string | null }>(
+    () => excludingBfm("m.pk_id", (notBfm) => query<{ pk_id: number; group_id: number; state: string; ship_status: number | null; awaiting_date: string | null }>(
       `SELECT m.pk_id, g.group_id, g.state, s.ship_status, s.awaiting_date
          FROM ${M} m
          JOIN ${G} g ON g.group_id = m.group_id
          LEFT JOIN mod_shipment s ON s.package_id = m.pk_id
-        WHERE m.user_id = :userId AND m.removed_at IS NULL
-          AND m.pk_id NOT IN (${BFM_PKS})`,
+        WHERE m.user_id = :userId AND m.removed_at IS NULL${notBfm}`,
       { userId }
-    ),
+    )),
     []
   );
   const out = new Map<number, CbPackageDisplay>();
@@ -200,16 +216,16 @@ export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
     []
   );
   const held = await safe(
-    () => query<{ invoice_id: number }>(
+    () => excludingBfm("m.pk_id", (notBfm) => query<{ invoice_id: number }>(
       `SELECT ip.invoice_id
          FROM swiftbox_invoice_packages ip
          JOIN swiftbox_invoices i ON i.invoice_id = ip.invoice_id AND i.user_id = :userId
-         LEFT JOIN ${M} m ON m.pk_id = ip.pk_id AND m.removed_at IS NULL AND m.pk_id NOT IN (${BFM_PKS})
+         LEFT JOIN ${M} m ON m.pk_id = ip.pk_id AND m.removed_at IS NULL${notBfm}
          LEFT JOIN ${G} g ON g.group_id = m.group_id AND g.state IN ('open','closed')
         GROUP BY ip.invoice_id
        HAVING COUNT(*) = SUM(g.group_id IS NOT NULL)`,
       { userId }
-    ),
+    )),
     []
   );
   return new Set([...onBill, ...held].map((r) => Number(r.invoice_id)));

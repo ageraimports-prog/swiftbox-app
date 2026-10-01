@@ -98,17 +98,17 @@ function QuoteBlock({ q }: { q: Quote }) {
                 {r.label}
                 {r.caption && <span className="mt-0.5 block text-[11px] text-muted-dark/80">{r.caption}</span>}
               </td>
-              <td className="py-1 text-right align-top text-mist">
+              <td className="whitespace-nowrap py-1 text-right align-top text-mist">
                 {ttd(r.ttdCents)}
-                {r.usdCents != null && <span className="text-xs text-muted-dark"> ({usd(r.usdCents)})</span>}
+                {r.usdCents != null && <span className="block text-xs text-muted-dark">({usd(r.usdCents)})</span>}
               </td>
             </tr>
           ))}
           <tr className="border-t border-mist/15">
             <td className="pt-2 pr-2 font-semibold text-mist">Total to pay</td>
-            <td className="pt-2 text-right font-semibold text-green">
+            <td className="whitespace-nowrap pt-2 text-right align-top font-semibold text-green">
               {ttd(q.amountDueTtdCents)}
-              {!a && <span className="text-xs font-normal text-muted-dark"> ({usd(f.usd.total)})</span>}
+              {!a && <span className="block text-xs font-normal text-muted-dark">({usd(f.usd.total)})</span>}
             </td>
           </tr>
         </tbody>

@@ -210,4 +210,26 @@ Don't run a build while a dev server for this app is running (it corrupts `.next
 - Payment methods are shown with `paymentLabel` (`src/lib/payment-label.ts`),
   never raw. There is NO Buy For Me credit (2026-09-27): refunds are bank
   transfer only, and nothing is ever applied to an invoice.
-- Login returns to `?next=` only through `safeNext` (`src/lib/next-path.ts`).
+- Login returns to `?next=` only through `safeNext` (`src/lib/next-path.ts`). It
+  accepts only a plain path under `/dashboard` or `/account` — no scheme, `//`,
+  backslash, control characters or `.`/`..` segments (`src/lib/next-path.test.ts`).
+- **ALL-IN quotes (admin migration 043, BUY_FOR_ME_PLAN.md §10).** The amount to
+  pay for a quote is `grand_total_ttd` when set, else `total_ttd` (purchase-only,
+  or 043 not run). Read through `src/lib/buy-for-me-quote.ts` (`allInFromRow`,
+  `amountDueTtdCents`) — never recalculated. `swiftbox_bfm_quotes` is read with
+  `SELECT *` so the 043 columns are NEVER named in SQL: a missing column is just
+  absent and reads as a purchase-only quote. The breakdown is item · US tax · US
+  shipping · service fee (the quote's frozen `fee_pct`) · "Freight, fuel &
+  insurance to Trinidad" (`courier_ttd`, with a US$ caption) · Duty · OPT (> 0) ·
+  VAT · Other taxes (> 0) · Total to pay, then the estimated-weight sentence
+  (`allInNotice`).
+- **Payment is bank deposit / bank transfer ONLY** — every payment screen shows
+  `PAYMENT_ONLY_LINE` (no card, LINX, PayPal or cash on delivery). The rules copy
+  reads `bfm_fee_pct` from `swiftbox_settings` (`getBfmFeePct`, fallback 15);
+  never hardcode the percentage. Nothing is bought until staff confirm payment.
+- History titles go through `bfmEventTitle` (base titles from the core copy, plus
+  `landed_invoiced` / `extra_charges`); an unknown kind shows "Update on your
+  request", never the raw code.
+- **Separate from Consolidated Billing.** `src/lib/consolidated-billing.ts`
+  excludes `swiftbox_bfm_packages` from every "waiting for your group" read
+  (`excludingBfm`, which retries without the clause if that table is missing).

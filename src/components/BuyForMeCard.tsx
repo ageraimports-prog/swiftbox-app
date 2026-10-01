@@ -48,3 +48,19 @@ export default function BuyForMeCard() {
     </Link>
   );
 }
+
+/**
+ * While Buy For Me is PAUSED (src/lib/bfm-switch-core.ts) the card above is not
+ * shown. A customer who still has open requests gets this instead: a plain link
+ * to follow them, with no offer to start a new one.
+ */
+export function BuyForMeOrdersLink({ open }: { open: number }) {
+  return (
+    <Link
+      href="/dashboard/buy-for-me"
+      className="block rounded-lg border border-mist/10 bg-ink-2 px-5 py-4 text-sm text-mist transition-colors hover:border-mist/25"
+    >
+      Your Buy For Me order{open === 1 ? "" : "s"} <span className="text-muted-dark">· {open} open</span>
+    </Link>
+  );
+}

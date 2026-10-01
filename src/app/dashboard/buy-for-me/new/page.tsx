@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MAX_ITEMS_PER_REQUEST } from "@/lib/buy-for-me-core";
 import { BuyForMeRules, card, ghostButton, greenButton } from "../ui";
+import { BfmPaused, useBfmEnabled } from "../paused";
 
 type Item = { productUrl: string; qty: string; variant: string; priceSeen: string; note: string };
 const blank = (): Item => ({ productUrl: "", qty: "1", variant: "", priceSeen: "", note: "" });
@@ -13,7 +14,21 @@ const input =
   "w-full rounded-md border border-mist/15 bg-ink px-3 py-2.5 text-sm text-mist placeholder:text-muted-dark outline-none focus:border-green";
 const label = "mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-dark";
 
+/** Paused (src/lib/bfm-switch-core.ts): the message instead of the form. */
 export default function NewBuyForMePage() {
+  const enabled = useBfmEnabled();
+  if (!enabled) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="sb-disp text-xl text-mist">Buy For Me</h1>
+        <BfmPaused />
+      </div>
+    );
+  }
+  return <NewBuyForMeForm />;
+}
+
+function NewBuyForMeForm() {
   const router = useRouter();
   const [items, setItems] = React.useState<Item[]>([blank()]);
   const [note, setNote] = React.useState("");

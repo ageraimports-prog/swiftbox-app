@@ -1,18 +1,24 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { uploadMySlip } from "@/lib/buy-for-me";
+import { isBfmEnabled } from "@/lib/bfm-switch";
+import { BFM_PAUSED_MESSAGE } from "@/lib/bfm-switch-core";
 
 /**
  * POST (multipart, field "file") — the customer's payment slip. Goes THROUGH
  * this server into the private blob store (a browser-direct upload would hand
  * the blob URL back to the browser). Nothing about where it is stored is
  * returned — only ok / an error.
+ *
+ * 403 with the paused message while Buy For Me is switched off — refused before
+ * the upload is even read (uploadMySlip re-checks).
  */
 export const runtime = "nodejs";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isBfmEnabled())) return NextResponse.json({ error: BFM_PAUSED_MESSAGE, paused: true }, { status: 403 });
   const { id } = await params;
   let file: File | null = null;
   try {

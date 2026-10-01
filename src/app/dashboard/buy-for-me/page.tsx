@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import type { BfmStatus } from "@/lib/buy-for-me-core";
 import { BuyForMeRules, StatusPill, card, formatDate, greenButton, ttd } from "./ui";
+import { BfmPaused, useBfmEnabled } from "./paused";
 
 type Row = {
   id: number;
@@ -17,6 +18,7 @@ type Row = {
 };
 
 export default function BuyForMePage() {
+  const enabled = useBfmEnabled();
   const [rows, setRows] = React.useState<Row[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [feePct, setFeePct] = React.useState<number | null>(null);
@@ -43,19 +45,27 @@ export default function BuyForMePage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="sb-disp text-xl text-mist">Buy For Me</h1>
-        <Link href="/dashboard/buy-for-me/new" className={`${greenButton} px-4 py-2`}>
-          New request
-        </Link>
+        {enabled && (
+          <Link href="/dashboard/buy-for-me/new" className={`${greenButton} px-4 py-2`}>
+            New request
+          </Link>
+        )}
       </div>
 
-      <section className={card}>
-        <p className="text-sm text-mist">
-          Can&apos;t buy it yourself? Send us the link and we&apos;ll send you one all-in price — the item, our fee, freight to Trinidad, duty and VAT. Once your payment is confirmed, we buy it and ship it to you.
-        </p>
-        <div className="mt-3">
-          <BuyForMeRules feePct={feePct} />
-        </div>
-      </section>
+      {enabled ? (
+        <section className={card}>
+          <p className="text-sm text-mist">
+            Can&apos;t buy it yourself? Send us the link and we&apos;ll send you one all-in price — the item, our fee, freight to Trinidad, duty and VAT. Once your payment is confirmed, we buy it and ship it to you.
+          </p>
+          <div className="mt-3">
+            <BuyForMeRules feePct={feePct} />
+          </div>
+        </section>
+      ) : (
+        // Paused: no offer. A customer with no requests gets the full message
+        // below; one with requests keeps seeing them, read-only, under this note.
+        !(rows && rows.length === 0) && <BfmPaused compact />
+      )}
 
       {error && (
         <div role="alert" className="rounded-md bg-red-400/10 px-4 py-3 text-sm text-red-300">
@@ -65,7 +75,9 @@ export default function BuyForMePage() {
 
       {!rows && !error && <div className={`${card} animate-pulse h-20`} />}
 
-      {rows && rows.length === 0 && (
+      {rows && rows.length === 0 && !enabled && <BfmPaused />}
+
+      {rows && rows.length === 0 && enabled && (
         <section className="flex flex-col items-center rounded-lg border border-dashed border-mist/15 px-6 py-12 text-center">
           <p className="text-sm font-semibold text-mist">No requests yet</p>
           <p className="mt-1 max-w-[18rem] text-xs text-muted-dark">Paste a product link and we&apos;ll send you a quote.</p>

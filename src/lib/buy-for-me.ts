@@ -24,6 +24,8 @@ import {
   type QuoteFigures,
 } from "@/lib/buy-for-me-core";
 import { detectSlipType, randomSlipName, slipPath, SLIP_MAX_BYTES } from "@/lib/slip-file";
+import { isBfmEnabled } from "@/lib/bfm-switch";
+import { BFM_PAUSED_MESSAGE } from "@/lib/bfm-switch-core";
 import { allInFromRow, amountDueTtdCents, bfmEventTitle, parseFeePct, BFM_FEE_PCT_FALLBACK, type BfmAllIn } from "@/lib/buy-for-me-quote";
 
 /**
@@ -165,7 +167,10 @@ export type NewItemInput = { productUrl: unknown; qty: unknown; variant: unknown
 export async function createRequest(
   s: SessionUser,
   input: { items: unknown; note: unknown }
-): Promise<{ ok: true; id: number } | { ok: false; error: string; itemErrors?: Record<number, string> }> {
+): Promise<{ ok: true; id: number } | { ok: false; error: string; itemErrors?: Record<number, string>; paused?: true }> {
+  // Paused (src/lib/bfm-switch-core.ts): no new requests. Checked here as well as
+  // in the route, so no caller can create one while the service is off.
+  if (!(await isBfmEnabled())) return { ok: false, error: BFM_PAUSED_MESSAGE, paused: true };
   const raw = Array.isArray(input.items) ? (input.items as NewItemInput[]) : [];
   if (raw.length === 0) return { ok: false, error: "Add at least one item." };
   if (raw.length > MAX_ITEMS_PER_REQUEST) return { ok: false, error: `At most ${MAX_ITEMS_PER_REQUEST} items per request.` };
@@ -269,6 +274,12 @@ export type BfmCustomerDetail = {
   canCancel: boolean;
   /** The CURRENT bfm_fee_pct, for the rules copy only (each quote shows its own frozen fee). */
   feePct: number;
+  /**
+   * Buy For Me is switched OFF. The request is still shown, read-only: no
+   * payment is asked for (no bank details, no slip upload) until it is back on.
+   * Cancelling an unpaid request still works.
+   */
+  paused: boolean;
 };
 
 const SHOW_ORDER_FROM = new Set<BfmStatus>(["purchased", "arrived_miami", "closed"]);
@@ -282,7 +293,7 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
   if (!r || !isBfmStatus(r.status)) return null;
   const status = r.status as BfmStatus;
 
-  const [items, quotes, slips, refunds, packages, events, bankRows, feePct] = await Promise.all([
+  const [items, quotes, slips, refunds, packages, events, bankRows, feePct, enabled] = await Promise.all([
     query<Record<string, unknown>>(`SELECT line_no, product_url, qty, variant, price_seen_usd, customer_note, retailer_order_no, us_tracking FROM swiftbox_bfm_items WHERE request_id = :id ORDER BY line_no`, { id }),
     query<Record<string, unknown>>(`SELECT * FROM swiftbox_bfm_quotes WHERE request_id = :id AND status <> 'void' ORDER BY seq`, { id }),
     // blob_url is deliberately NOT selected: it never leaves the server except through the slip route.
@@ -292,6 +303,7 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
     query<Record<string, unknown>>(`SELECT kind, message, created_at FROM swiftbox_bfm_events WHERE request_id = :id ORDER BY id`, { id }),
     query<{ setting_key: string; setting_value: string }>(`SELECT setting_key, setting_value FROM swiftbox_text_settings WHERE setting_key LIKE 'bfm\\_bank\\_%'`),
     getBfmFeePct(),
+    isBfmEnabled(),
   ]);
 
   const c = (row: Record<string, unknown>, k: string) => decimalToCents(row[k]);
@@ -352,7 +364,8 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
     })),
     quotes: mappedQuotes,
     openQuote,
-    bank: openQuote ? bank : null,
+    // Paused: never show where to send money for a quote we can't take payment on.
+    bank: openQuote && enabled ? bank : null,
     slips: slips.map((s) => {
       const q = mappedQuotes.find((x) => x.id === Number(s.quote_id));
       return {
@@ -376,9 +389,10 @@ export async function getMyRequest(userId: number, id: number, opts: { markSeen?
       message: (e.message as string | null) ?? null,
       at: (e.created_at as string | null) ?? null,
     })),
-    canUploadSlip: status === "quoted" && openQuote !== null,
+    canUploadSlip: enabled && status === "quoted" && openQuote !== null,
     canCancel: status === "submitted" || (status === "quoted" && !hasPaid),
     feePct,
+    paused: !enabled,
   };
 }
 
@@ -419,6 +433,8 @@ export type UploadResult = { ok: true } | { ok: false; status: number; error: st
  * blob URL is written to the database and never returned.
  */
 export async function uploadMySlip(s: SessionUser, id: number, file: File): Promise<UploadResult> {
+  // Paused: no payment is taken (checked first — nothing is read or stored).
+  if (!(await isBfmEnabled())) return { ok: false, status: 403, error: BFM_PAUSED_MESSAGE };
   if (file.size <= 0) return { ok: false, status: 400, error: "The file is empty." };
   if (file.size > SLIP_MAX_BYTES) return { ok: false, status: 413, error: "That file is too big — please send a photo or PDF under 4 MB." };
   const bytes = new Uint8Array(await file.arrayBuffer());

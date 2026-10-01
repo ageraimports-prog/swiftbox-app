@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { usdText, type BfmStatus, type QuoteFigures } from "@/lib/buy-for-me-core";
 import { allInNotice, type BfmAllIn } from "@/lib/buy-for-me-quote";
 import { BuyForMeRules, PAYMENT_ONLY_LINE, StatusPill, card, formatDate, ghostButton, greenButton, ttd, usd } from "../ui";
+import { BfmPaused } from "../paused";
 
 type Quote = {
   id: number;
@@ -38,6 +39,8 @@ type Detail = {
   canUploadSlip: boolean;
   canCancel: boolean;
   feePct: number;
+  /** Buy For Me is switched off: shown read-only, no payment asked for. */
+  paused: boolean;
 };
 
 /** Phone photos are often 3–8 MB: shrink big images before upload so they fit the 4 MB limit. */
@@ -203,7 +206,9 @@ export default function BuyForMeRequestPage() {
         <div role="status" className={`rounded-md px-4 py-3 text-sm ${msg.ok ? "bg-green/10 text-green" : "bg-red-400/10 text-red-300"}`}>{msg.text}</div>
       )}
 
-      {d.status === "submitted" && (
+      {d.paused && <BfmPaused compact />}
+
+      {d.status === "submitted" && !d.paused && (
         <section className={card}>
           <p className="text-sm text-mist">Thanks — we&apos;ve got your request. A Swiftbox team member will check the items and send you one all-in quote — the item, our fee, freight to Trinidad, duty, OPT and VAT — with our bank details. You don&apos;t pay anything until then.</p>
         </section>
@@ -214,6 +219,14 @@ export default function BuyForMeRequestPage() {
           <p className="text-sm font-semibold text-mist">{d.openQuote.kind === "topup" ? "Top-up needed" : "Your quote"}</p>
           <div className="mt-3"><QuoteBlock q={d.openQuote} /></div>
 
+          {d.paused ? (
+            // Paused: the quote is shown for the record, but no payment is taken —
+            // no reference, no bank details, no upload (the API refuses a slip too).
+            <p className="mt-5 rounded-md bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
+              Payment for this quote is on hold while Buy For Me is paused — please don&apos;t send a payment.
+            </p>
+          ) : (
+          <>
           <div className="mt-5 border-t border-mist/10 pt-4">
             <p className="text-sm font-semibold text-mist">How to pay</p>
             <p className="mt-1 text-sm text-mist">
@@ -284,6 +297,8 @@ export default function BuyForMeRequestPage() {
               </button>
               <p className="mt-2 text-center text-xs text-muted-dark">A photo or screenshot of the slip, or a PDF.</p>
             </div>
+          )}
+          </>
           )}
         </section>
       )}
@@ -411,7 +426,7 @@ export default function BuyForMeRequestPage() {
         </section>
       )}
 
-      {(d.status === "submitted" || d.status === "quoted") && (
+      {(d.status === "submitted" || d.status === "quoted") && !d.paused && (
         <section className={card}>
           <BuyForMeRules feePct={d.feePct} />
         </section>

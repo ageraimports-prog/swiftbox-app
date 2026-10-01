@@ -22,7 +22,9 @@ import PrealertWaitingCard from "./PrealertWaitingCard";
 import ReferralCard from "./ReferralCard";
 import ReferralEarningsCard from "./ReferralEarningsCard";
 import ReferralListCard from "./ReferralListCard";
-import BuyForMeCard from "@/components/BuyForMeCard";
+import BuyForMeCard, { BuyForMeOrdersLink } from "@/components/BuyForMeCard";
+import { isBfmEnabled } from "@/lib/bfm-switch";
+import { myBuyForMeCounts } from "@/lib/buy-for-me";
 
 type UserRow = {
   fname: string;
@@ -95,6 +97,19 @@ export default async function DashboardPage() {
     referralList = [];
   }
 
+  // Buy For Me (src/lib/bfm-switch-core.ts). ON → the usual card. PAUSED → no
+  // offer at all; only a customer who still has an open request gets a plain
+  // link to it (read-only). Secondary: on failure nothing is shown.
+  const bfmEnabled = await isBfmEnabled();
+  let bfmOpenWhilePaused = 0;
+  if (!bfmEnabled) {
+    try {
+      bfmOpenWhilePaused = (await myBuyForMeCounts(session.id)).open;
+    } catch {
+      bfmOpenWhilePaused = 0;
+    }
+  }
+
   // Packages already in Miami waiting for a pre-alert. Secondary, like the two
   // above — on failure the card is simply skipped this load.
   let prealertCount = 0;
@@ -128,7 +143,7 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <BuyForMeCard />
+      {bfmEnabled ? <BuyForMeCard /> : bfmOpenWhilePaused > 0 && <BuyForMeOrdersLink open={bfmOpenWhilePaused} />}
 
       {referralCode && referralShareUrl && referralLink && referralMessage && (
         <ReferralCard

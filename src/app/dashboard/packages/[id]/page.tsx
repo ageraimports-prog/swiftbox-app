@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CB_WAITING_BADGE } from "@/lib/status";
 import { CB_WAITING_LABEL, CB_NAME, HOLD_DAYS } from "@/lib/consolidatedBilling";
 import AirdropDocuments from "../AirdropDocuments";
 import CopyTracking from "@/components/CopyTracking";
@@ -238,13 +237,18 @@ export default function PackageDetailPage() {
               <h1 className="sb-disp min-w-0 break-words text-2xl text-mist">
                 {displayTitle(data.package.commodities) ?? "Package"}
               </h1>
-              <span
-                className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                  data.cbWaiting ? CB_WAITING_BADGE.badge : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
-                }`}
-              >
-                {data.cbWaiting ? CB_WAITING_BADGE.label : STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].label}
-              </span>
+              {/* A waiting package has no stage badge here: the Consolidated Billing
+                  box right below says so in full, and a sentence-long badge beside
+                  the name would squeeze it to a few letters on a phone. */}
+              {!data.cbWaiting && (
+                <span
+                  className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                    STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
+                  }`}
+                >
+                  {STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].label}
+                </span>
+              )}
             </div>
             {tracking.length > 0 ? (
               <CopyTracking numbers={tracking} />

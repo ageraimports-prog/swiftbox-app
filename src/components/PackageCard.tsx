@@ -98,10 +98,19 @@ export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
     >
       <div className="flex items-start justify-between gap-3">
         <p className="sb-disp min-w-0 truncate text-lg text-mist">{id.title}</p>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}>
+        {!pkg.cbWaiting && (
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}>
+            {meta.label}
+          </span>
+        )}
+      </div>
+      {/* The waiting label is a sentence — on its own line it never squeezes the
+          package's name down to a few letters on a phone. */}
+      {pkg.cbWaiting && (
+        <span className={`mt-1.5 inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}>
           {meta.label}
         </span>
-      </div>
+      )}
 
       {id.tracking ? (
         <TrackingLine tracking={id.tracking} more={id.moreTracking} className="mt-1" />

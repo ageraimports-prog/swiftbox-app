@@ -52,10 +52,15 @@ export default function BillCard({ bill }: { bill: BillSummary }) {
 
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-dark">
         <span className="min-w-0 truncate">
-          <span className="rounded-sm bg-green/15 px-1.5 py-0.5 text-[10px] font-semibold text-green">
-            Consolidated Bill{count > 0 ? ` · ${count} ${count === 1 ? "package" : "packages"}` : ""}
-          </span>{" "}
-          · {formatDate(bill.date)}
+          {count > 0 && (
+            <>
+              <span className="font-semibold text-mist">
+                {count} {count === 1 ? "package" : "packages"}
+              </span>{" "}
+              ·{" "}
+            </>
+          )}
+          {formatDate(bill.date)}
         </span>
         <span className="ml-auto shrink-0 text-sm font-bold text-white">{formatTtd(bill.totalTtd)}</span>
         <svg
@@ -70,12 +75,14 @@ export default function BillCard({ bill }: { bill: BillSummary }) {
         </svg>
       </div>
 
+      {bill.status === "partial" && (
+        <p className="mt-2 text-xs text-amber-300">
+          {formatTtd(bill.totalTtd - bill.dueTtd)} of {formatTtd(bill.totalTtd)} paid
+        </p>
+      )}
+
       <div className="mt-2 flex items-center gap-3">
-        {bill.status === "partial" && (
-          <p className="text-xs text-amber-300">
-            {formatTtd(bill.totalTtd - bill.dueTtd)} of {formatTtd(bill.totalTtd)} paid
-          </p>
-        )}
+        <span className="rounded-sm bg-green/15 px-1.5 py-0.5 text-[10px] font-semibold text-green">Consolidated Bill</span>
         <RefText refCode={bill.billNo} className="ml-auto" />
       </div>
     </Link>

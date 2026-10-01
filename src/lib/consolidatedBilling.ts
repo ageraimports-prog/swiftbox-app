@@ -38,6 +38,34 @@ export function cbOpenCardText(day: number, windowEnd: string): string {
   return `Consolidated Billing: Free. Day ${day} of ${HOLD_DAYS}. Packages that reach our Miami warehouse by ${windowEnd} go out together.`;
 }
 
+/* ── "Send my packages now" (2026-10-01): 20 days is the MAXIMUM, not the wait. ── */
+
+export const CB_SEND_NOW_BUTTON = "Send my packages now";
+
+/** "3 packages waiting: Shoes, Headphones, Household Items" — what they ARE, never a WR. */
+export function cbWaitingSummary(titles: string[]): string {
+  const n = titles.length;
+  const head = `${n} ${n === 1 ? "package" : "packages"} waiting`;
+  return n === 0 ? head : `${head}: ${titles.join(", ")}`;
+}
+
+/** "Ships automatically in 15 days". The window is the latest it waits. */
+export function cbShipsAutomaticallyText(daysLeft: number): string {
+  if (daysLeft <= 1) return "Ships automatically after today";
+  return `Ships automatically in ${daysLeft} days`;
+}
+
+/** The confirmation, before anything happens. */
+export function cbSendNowConfirmText(count: number): string {
+  const these = count === 1 ? "this package" : `these ${count} packages`;
+  return `Send ${these} now? Anything that arrives after this ships separately, or starts a new group if Consolidated Billing is still on.`;
+}
+
+/** After the tap — and on every waiting package until the group goes out. Never says where (R13). */
+export const CB_PREPARING_TEXT = "Your packages are being prepared for delivery.";
+/** The short badge on a package card once the customer has said "send them". */
+export const CB_PREPARING_LABEL = "Being prepared for delivery";
+
 /** The card after the window closes, before release. */
 export const CB_CLOSED_CARD =
   "Your window has closed. We'll send everything out as soon as your last package lands.";
@@ -76,7 +104,10 @@ export const CB_FAQ: { q: string; a: string }[] = [
     q: "How long will you hold my packages?",
     a: "Your 20 days start when your first package arrives at our Miami warehouse. Everything that reaches Miami in those 20 days is delivered together, as soon as the last one lands.",
   },
-  { q: "Can I get my packages sooner?", a: "Yes. Turn Consolidated Billing off in the app and we'll send out what's ready." },
+  {
+    q: "Can I get my packages sooner?",
+    a: "Yes. 20 days is the most we wait. Once everything you ordered has reached Miami, tap “Send my packages now” in the app and they come to you together as soon as the last one lands. You can also turn Consolidated Billing off.",
+  },
   {
     q: "Does Consolidated Billing lower my freight charge?",
     a: "No. Each package is charged on its own actual weight at US$1.99/lb + 20% fuel (US$2.39/lb all-in). What you save is time and hassle: one delivery and one bill instead of several.",

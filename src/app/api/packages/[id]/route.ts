@@ -72,6 +72,8 @@ export async function GET(
 
   return NextResponse.json({
     cbWaiting: waiting,
+    cbPreparing: cb?.preparing ?? false,
+    cbInOpenGroup: cb?.inOpenGroup ?? false,
     package: {
       id: Number(r.pk_id),
       wr: r.wr,

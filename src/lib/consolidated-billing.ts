@@ -80,6 +80,13 @@ export type CbState = {
   open: { day: number; windowEnd: string } | null;
   /** A group whose window has closed and is waiting for its last package. */
   closedWaiting: boolean;
+  /**
+   * "Send my packages now" — the OPEN group with at least one package, for the
+   * button. Null when there is nothing to send.
+   */
+  group: CbSendGroup | null;
+  /** The customer already said "send them": "being prepared for delivery". */
+  preparing: boolean;
   /** The newest issued bill with money still due — the in-app notice. */
   billReady: { billNo: string; dueTtd: number } | null;
 };
@@ -88,6 +95,36 @@ function ineligibleReasonOf(rateTier: string, autoHold: boolean): string | null 
   if (rateTier === "business") return "Business accounts are billed on terms, so Consolidated Billing isn't available.";
   if (autoHold) return "Your account is billed on terms, so Consolidated Billing isn't available.";
   return null;
+}
+
+/** One package in the open group, for "3 packages waiting: Shoes, …". */
+export type CbSendPackage = { commodities: string; tracking: string; wr: string };
+
+export type CbSendGroup = {
+  groupId: number;
+  packages: CbSendPackage[];
+  /** Whole days left in the window, today included (0 once it is over). */
+  daysLeft: number;
+};
+
+const BFM_EXCLUDE = "AND m.pk_id NOT IN (SELECT pk_id FROM swiftbox_bfm_packages)";
+
+/** The open group's active members (Buy For Me never counts). */
+async function openGroupPackages(groupId: number): Promise<CbSendPackage[]> {
+  const run = (bfm: string) =>
+    query<{ commodities: string | null; tracking: string | null; wr: string | null }>(
+      `SELECT p.commodities, p.tracking, p.wr
+         FROM ${M} m JOIN mod_packages p ON p.pk_id = m.pk_id
+        WHERE m.group_id = :g AND m.removed_at IS NULL ${bfm}
+        ORDER BY m.entered_at, m.pk_id`,
+      { g: groupId }
+    );
+  const rows = await run(BFM_EXCLUDE).catch(() => run(""));
+  return rows.map((r) => ({
+    commodities: (r.commodities ?? "").trim(),
+    tracking: (r.tracking ?? "").trim(),
+    wr: (r.wr ?? "").trim(),
+  }));
 }
 
 export async function getCbState(userId: number): Promise<CbState> {
@@ -103,8 +140,8 @@ export async function getCbState(userId: number): Promise<CbState> {
     swiftCode: swiftCodeFromAc(u?.ac),
   };
   const groups = await safe(
-    () => query<{ group_id: number; state: string; first_miami_entry_at: string | null; window_ends_at: string | null }>(
-      `SELECT group_id, state, first_miami_entry_at, window_ends_at FROM ${G}
+    () => query<{ group_id: number; state: string; first_miami_entry_at: string | null; window_ends_at: string | null; close_reason: string | null }>(
+      `SELECT group_id, state, first_miami_entry_at, window_ends_at, close_reason FROM ${G}
         WHERE user_id = :userId AND state IN ('open','closed') ORDER BY group_id`,
       { userId }
     ),
@@ -119,10 +156,18 @@ export async function getCbState(userId: number): Promise<CbState> {
   const openStillRunning = !!(first && ends && ttDayNumber(now) <= ttDayNumber(ends));
   const bills = await listCbBills(userId);
   const ready = bills.find((b) => b.totals.dueTtd > 0) ?? null;
+  // The open group, even on the morning its window has just run out (the admin
+  // closes it on its next run): the customer can still say "send them".
+  const pkgs = openRow ? await openGroupPackages(Number(openRow.group_id)) : [];
+  const group: CbSendGroup | null = openRow && pkgs.length > 0
+    ? { groupId: Number(openRow.group_id), packages: pkgs, daysLeft: ends ? Math.max(0, ttDayNumber(ends) - ttDayNumber(now) + 1) : 0 }
+    : null;
   return {
     ...base,
     open: openStillRunning ? { day: windowDay(first!, now), windowEnd: ttDateLabel(ends!) } : null,
-    closedWaiting: groups.some((g) => g.state === "closed") || (!!openRow && !openStillRunning),
+    closedWaiting: groups.some((g) => g.state === "closed" && g.close_reason !== "customer") || (!!openRow && !openStillRunning),
+    group,
+    preparing: groups.some((g) => g.state === "closed" && g.close_reason === "customer"),
     billReady: ready ? { billNo: ready.billNo, dueTtd: ready.totals.dueTtd } : null,
   };
 }
@@ -160,9 +205,51 @@ export async function setCbSetting(userId: number, on: boolean): Promise<{ relea
   }
 }
 
+/**
+ * "Send my packages now" — through the admin, which closes the group exactly as
+ * on day 21 (reason 'customer') and owns every rule. The switch is untouched.
+ * `already` = the group had already stopped taking packages (a double tap, a
+ * retry, or the window closed meanwhile) — a friendly no-op, not an error.
+ * Throws a customer-safe sentence when the admin refuses or can't be reached.
+ */
+export async function releaseCbGroup(userId: number, groupId: number): Promise<{ already: boolean }> {
+  const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
+  if (!key) throw new Error("We couldn't send your packages right now. Please WhatsApp or call us.");
+  const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 60_000);
+  try {
+    const res = await fetch(`${base}/api/consolidated-billing/customer-release`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-consolidation-key": key },
+      body: JSON.stringify({ userId, groupId }),
+      signal: ctl.signal,
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => ({}))) as { already?: boolean; error?: string };
+    if (!res.ok) {
+      if (res.status === 404 && data.error) throw new Error(data.error);
+      throw new Error("Couldn't send your packages. Please try again.");
+    }
+    return { already: !!data.already };
+  } catch (e) {
+    if (e instanceof Error && e.name !== "AbortError" && !/fetch failed/i.test(e.message)) throw e;
+    throw new Error("Couldn't send your packages. Please try again.");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type CbPackageDisplay = {
   /** Show CB_WAITING_LABEL instead of the stage (unreleased group, left Miami). */
   waiting: boolean;
+  /**
+   * The customer said "send them" and the group is closed, not yet released:
+   * "Being prepared for delivery" in place of the stage (still never where).
+   */
+  preparing: boolean;
+  /** A member of the customer's OPEN group (Miami included) — where "Send my packages now" is offered. */
+  inOpenGroup: boolean;
   /** R7 — a released group's members show the last arrival's stage + date. */
   override: { shipStatus: number | null; awaitingDate: string | null } | null;
 };
@@ -170,8 +257,8 @@ export type CbPackageDisplay = {
 /** pk_id → how the package list / detail should show it. Only packages in a group appear. */
 export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPackageDisplay>> {
   const rows = await safe(
-    () => excludingBfm("m.pk_id", (notBfm) => query<{ pk_id: number; group_id: number; state: string; ship_status: number | null; awaiting_date: string | null }>(
-      `SELECT m.pk_id, g.group_id, g.state, s.ship_status, s.awaiting_date
+    () => excludingBfm("m.pk_id", (notBfm) => query<{ pk_id: number; group_id: number; state: string; close_reason: string | null; ship_status: number | null; awaiting_date: string | null }>(
+      `SELECT m.pk_id, g.group_id, g.state, g.close_reason, s.ship_status, s.awaiting_date
          FROM ${M} m
          JOIN ${G} g ON g.group_id = m.group_id
          LEFT JOIN mod_shipment s ON s.package_id = m.pk_id
@@ -187,7 +274,9 @@ export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPa
       if (!released.has(r.group_id)) released.set(r.group_id, []);
       released.get(r.group_id)!.push(r);
     } else {
-      out.set(Number(r.pk_id), { waiting: Number(r.ship_status ?? 0) >= 2, override: null });
+      // Only once it has left Miami: a package still in Miami simply shows In Miami.
+      const preparing = r.state === "closed" && r.close_reason === "customer" && Number(r.ship_status ?? 0) >= 2;
+      out.set(Number(r.pk_id), { waiting: Number(r.ship_status ?? 0) >= 2, preparing, inOpenGroup: r.state === "open", override: null });
     }
   }
   for (const members of released.values()) {
@@ -197,7 +286,7 @@ export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPa
     })));
     // Once everything is delivered each package shows its own record again.
     const override = show.shipStatus != null && show.shipStatus < 5 ? show : null;
-    for (const m of members) out.set(Number(m.pk_id), { waiting: false, override });
+    for (const m of members) out.set(Number(m.pk_id), { waiting: false, preparing: false, inOpenGroup: false, override });
   }
   return out;
 }

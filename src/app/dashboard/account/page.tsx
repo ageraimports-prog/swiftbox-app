@@ -24,7 +24,7 @@ export default async function AccountPage() {
       <ShippingAddress accountNo={session.ac} customerName={session.name} />
 
       {/* Consolidated Billing: switch, group, bill notice and its FAQ */}
-      <ConsolidatedBillingCard showFaq />
+      <ConsolidatedBillingCard showFaq showSendNow />
 
       {/* Support */}
       <section>

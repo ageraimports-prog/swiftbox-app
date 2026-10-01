@@ -155,5 +155,8 @@ describe("shareMessage", () => {
     expect(inviteLink(CODE)).toBe(`https://swiftboxtt.com/r/${CODE}`);
     vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(inviteLink(CODE, "https://app.swiftboxtt.com")).toBe(`https://swiftboxtt.com/r/${CODE}`);
+    // Regression: production's SIGNUP_URL carried a /signup path, which made /signup/r/CODE (404).
+    expect(inviteLink(CODE, "https://www.swiftboxtt.com/signup")).toBe(`https://www.swiftboxtt.com/r/${CODE}`);
+    expect(inviteLink(CODE, "https://swiftboxtt.com/signup/")).toBe(`https://swiftboxtt.com/r/${CODE}`);
   });
 });

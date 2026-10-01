@@ -17,6 +17,7 @@ import {
 } from "@/lib/referral";
 import { countPackagesNeedingPrealert } from "@/lib/prealert-pick-server";
 import DashboardHome from "./DashboardHome";
+import SendMyPackagesNow from "@/components/SendMyPackagesNow";
 import PrealertWaitingCard from "./PrealertWaitingCard";
 import ReferralCard from "./ReferralCard";
 import ReferralEarningsCard from "./ReferralEarningsCard";
@@ -105,6 +106,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Consolidated Billing: "that's everything, send my packages" — first thing on the page. */}
+      <SendMyPackagesNow />
+
       {prealertCount > 0 && <PrealertWaitingCard count={prealertCount} />}
 
       {/* Account number card */}

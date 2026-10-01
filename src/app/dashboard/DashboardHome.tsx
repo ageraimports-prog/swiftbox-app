@@ -5,6 +5,7 @@ import Link from "next/link";
 import ConsolidatedBillingCard from "@/components/ConsolidatedBillingCard";
 import PackageCard, { type PackageSummary } from "@/components/PackageCard";
 import InvoiceCard, { type InvoiceSummary } from "@/components/InvoiceCard";
+import { CB_STATE_EVENT } from "@/components/SendMyPackagesNow";
 
 function SectionHeading({
   title,
@@ -49,6 +50,19 @@ export default function DashboardHome() {
   const [packages, setPackages] = React.useState<PackageSummary[] | null>(null);
   const [invoices, setInvoices] = React.useState<InvoiceSummary[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  // After "Send my packages now" the cards below change from "waiting" to
+  // "being prepared" — re-read them rather than wait for a reload.
+  React.useEffect(() => {
+    const refresh = () => {
+      fetch("/api/packages")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setPackages(d.packages))
+        .catch(() => {});
+    };
+    window.addEventListener(CB_STATE_EVENT, refresh);
+    return () => window.removeEventListener(CB_STATE_EVENT, refresh);
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;

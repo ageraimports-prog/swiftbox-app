@@ -330,7 +330,11 @@ function resolveSignupBase(signupBaseUrl?: string): string {
     return SIGNUP_BASE_URL;
   }
 
-  return candidate;
+  // Only the ORIGIN is used. Production's SIGNUP_URL was set to
+  // https://www.swiftboxtt.com/signup, and appending /r/CODE to that produced
+  // /signup/r/CODE — a 404 on the website. The invite page always lives at the
+  // site root, whatever path the override carries.
+  return parsed.origin;
 }
 
 /**

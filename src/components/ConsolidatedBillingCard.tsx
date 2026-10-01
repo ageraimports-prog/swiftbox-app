@@ -13,7 +13,9 @@ import {
   cbOpenCardText,
   cbBillReadyText,
   cbWhatsAppUrl,
+  CB_PREPARING_TEXT,
 } from "@/lib/consolidatedBilling";
+import { SendNowPanel, CB_STATE_EVENT, type SendGroup } from "@/components/SendMyPackagesNow";
 import { formatTtd } from "@/lib/invoice-line";
 
 type State = {
@@ -23,6 +25,8 @@ type State = {
   swiftCode: string;
   open: { day: number; windowEnd: string } | null;
   closedWaiting: boolean;
+  group: SendGroup | null;
+  preparing: boolean;
   billReady: { billNo: string; dueTtd: number } | null;
 };
 
@@ -31,7 +35,14 @@ type State = {
  * "your bill is ready" notice, and (on Account) the FAQ. Every word comes from
  * src/lib/consolidatedBilling.ts. Nothing here says where a package is (R13).
  */
-export default function ConsolidatedBillingCard({ showFaq = false }: { showFaq?: boolean }) {
+export default function ConsolidatedBillingCard({
+  showFaq = false,
+  showSendNow = false,
+}: {
+  showFaq?: boolean;
+  /** "Send my packages now" beside the switch (Account). The Dashboard has its own card at the top. */
+  showSendNow?: boolean;
+}) {
   const [state, setState] = React.useState<State | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -41,6 +52,10 @@ export default function ConsolidatedBillingCard({ showFaq = false }: { showFaq?:
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setState(d))
       .catch(() => {});
+    // A "Send my packages now" tap anywhere on the page moves this card too.
+    const on = (e: Event) => setState((e as CustomEvent).detail as State);
+    window.addEventListener(CB_STATE_EVENT, on);
+    return () => window.removeEventListener(CB_STATE_EVENT, on);
   }, []);
 
   async function toggle() {
@@ -76,6 +91,8 @@ export default function ConsolidatedBillingCard({ showFaq = false }: { showFaq?:
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">{CB_NAME}</p>
           <div className="mt-2 space-y-2 text-sm text-mist">
             {!on && <p>{CB_LONG_DESCRIPTION}</p>}
+            {/* On the Dashboard the card at the top already says it. */}
+            {showSendNow && state.preparing && <p className="font-semibold">{CB_PREPARING_TEXT}</p>}
             {on && state.open && <p>{cbOpenCardText(state.open.day, state.open.windowEnd)}</p>}
             {on && state.closedWaiting && <p>{CB_CLOSED_CARD}</p>}
             {on && !state.open && !state.closedWaiting && (
@@ -101,6 +118,12 @@ export default function ConsolidatedBillingCard({ showFaq = false }: { showFaq?:
           <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
         </button>
       </div>
+
+      {showSendNow && state.group && (
+        <div className="mt-4 border-t border-mist/10 pt-4">
+          <SendNowPanel key={state.group.groupId} group={state.group} onDone={(d) => setState(d as State)} />
+        </div>
+      )}
 
       {state.billReady && (
         <Link

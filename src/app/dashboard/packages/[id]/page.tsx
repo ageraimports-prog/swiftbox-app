@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CB_WAITING_LABEL, CB_NAME, HOLD_DAYS } from "@/lib/consolidatedBilling";
+import { CB_WAITING_LABEL, CB_NAME, CB_PREPARING_TEXT, HOLD_DAYS } from "@/lib/consolidatedBilling";
+import SendMyPackagesNow from "@/components/SendMyPackagesNow";
 import AirdropDocuments from "../AirdropDocuments";
 import CopyTracking from "@/components/CopyTracking";
 import { displayTitle, shortRef, trackingNumbers } from "@/lib/packageDisplay";
@@ -61,7 +62,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function Stepper({ shipment, cbWaiting = false }: { shipment: Shipment | null; cbWaiting?: boolean }) {
+function Stepper({ shipment, cbWaiting = false, cbPreparing = false }: { shipment: Shipment | null; cbWaiting?: boolean; cbPreparing?: boolean }) {
   // No shipment row = logged at Miami, not yet manifested → stage 0 active.
   const current = shipStatusToStage(shipment?.shipStatus ?? null);
 
@@ -82,7 +83,7 @@ function Stepper({ shipment, cbWaiting = false }: { shipment: Shipment | null; c
           <span className="relative z-10 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
             <span className="relative h-3.5 w-3.5 rounded-full bg-violet-300" />
           </span>
-          <p className="text-sm font-semibold text-violet-300">{CB_WAITING_LABEL}</p>
+          <p className="text-sm font-semibold text-violet-300">{cbPreparing ? CB_PREPARING_TEXT : CB_WAITING_LABEL}</p>
         </li>
       </ol>
     );
@@ -174,6 +175,8 @@ export default function PackageDetailPage() {
     package: Pkg;
     shipment: Shipment | null;
     cbWaiting?: boolean;
+    cbPreparing?: boolean;
+    cbInOpenGroup?: boolean;
   } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -262,13 +265,18 @@ export default function PackageDetailPage() {
           {data.cbWaiting && (
             <section className="rounded-lg border border-violet-400/40 bg-violet-500/10 p-4">
               <p className="text-xs font-semibold uppercase tracking-widest text-violet-300">{CB_NAME}</p>
-              <p className="mt-1 text-sm font-semibold text-mist">{CB_WAITING_LABEL}</p>
-              <p className="mt-1 text-xs text-muted-dark">
-                Everything that reaches our Miami warehouse within {HOLD_DAYS} days of your first package comes to your door
-                together, with one bill.
-              </p>
+              <p className="mt-1 text-sm font-semibold text-mist">{data.cbPreparing ? CB_PREPARING_TEXT : CB_WAITING_LABEL}</p>
+              {!data.cbPreparing && (
+                <p className="mt-1 text-xs text-muted-dark">
+                  Everything that reaches our Miami warehouse within {HOLD_DAYS} days of your first package comes to your door
+                  together, with one bill.
+                </p>
+              )}
             </section>
           )}
+
+          {/* "Send my packages now" — any package in the customer's open group. */}
+          {data.cbInOpenGroup && <SendMyPackagesNow />}
 
           {/* Package details */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 px-4 py-1">
@@ -304,7 +312,7 @@ export default function PackageDetailPage() {
             <h2 className="mb-5 text-xs font-semibold uppercase tracking-widest text-muted-dark">
               Delivery status
             </h2>
-            <Stepper shipment={data.shipment} cbWaiting={!!data.cbWaiting} />
+            <Stepper shipment={data.shipment} cbWaiting={!!data.cbWaiting} cbPreparing={!!data.cbPreparing} />
           </section>
         </>
       )}

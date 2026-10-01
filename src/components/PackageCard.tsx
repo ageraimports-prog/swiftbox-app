@@ -26,6 +26,8 @@ export type PackageSummary = {
    * the waiting badge in place of any stage.
    */
   cbWaiting?: boolean;
+  /** The customer said "send them" — "Being prepared for delivery", still no stage. */
+  cbPreparing?: boolean;
 };
 
 /** "UPS" / "FedEx" chip before a tracking number. Only ever a certain carrier. */
@@ -89,7 +91,7 @@ function formatDate(date: string): string {
  * No tracking number → the ref takes the tracking line's place instead.
  */
 export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
-  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting);
+  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting, pkg.cbPreparing);
   const id = packageIdentity(pkg);
   return (
     <Link

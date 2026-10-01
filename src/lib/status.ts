@@ -17,7 +17,7 @@
  * Swiftbox's admin owns these stages; provider warehouse states are separate.
  */
 
-import { CB_WAITING_LABEL } from "./consolidatedBilling";
+import { CB_PREPARING_LABEL, CB_WAITING_LABEL } from "./consolidatedBilling";
 
 export type Stage = 0 | 1 | 2 | 3 | 4;
 
@@ -87,7 +87,18 @@ export const CB_WAITING_BADGE = {
   badge: "bg-violet-400/10 text-violet-300 border border-violet-400/25",
 };
 
-/** The badge for a package card: waiting for its group wins over the stage. */
-export function packageBadge(shipStatus: number | null | undefined, cbWaiting?: boolean): { label: string; badge: string } {
+/** The customer said "send them": still no stage shown (R13), just this. */
+export const CB_PREPARING_BADGE = {
+  label: CB_PREPARING_LABEL,
+  badge: "bg-green/10 text-green border border-green/25",
+};
+
+/** The badge for a package card: Consolidated Billing wins over the stage. */
+export function packageBadge(
+  shipStatus: number | null | undefined,
+  cbWaiting?: boolean,
+  cbPreparing?: boolean
+): { label: string; badge: string } {
+  if (cbPreparing) return CB_PREPARING_BADGE;
   return cbWaiting ? CB_WAITING_BADGE : stageMeta(shipStatus);
 }

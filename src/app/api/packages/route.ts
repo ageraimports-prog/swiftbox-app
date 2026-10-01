@@ -66,6 +66,8 @@ export async function GET() {
         ? cb.get(Number(r.pk_id))!.override!.shipStatus
         : r.ship_status == null ? null : Number(r.ship_status),
     cbWaiting: cb.get(Number(r.pk_id))?.waiting ?? false,
+    // The customer said "send them"; still waiting for the group to go out.
+    cbPreparing: cb.get(Number(r.pk_id))?.preparing ?? false,
   }));
 
   return NextResponse.json({ packages });

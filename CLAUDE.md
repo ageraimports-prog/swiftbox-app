@@ -49,6 +49,23 @@ and the office's Release now or the customer turning the switch OFF sends what h
 landed and lets the rest travel on their own. A package that never arrives keeps a
 closed group waiting until the office releases it.
 
+**"Send my packages now" (live 2026-10-01, app `928f521`, admin `3c5e874`).** 20 days
+is the most a group waits. `SendMyPackagesNow` (own card at the TOP of the Dashboard
+and on the page of any package in the open group — `cbInOpenGroup`, Miami included)
+and `SendNowPanel` inside the Account card (`showSendNow`). Shown only when
+`getCbState().group` is set: the OPEN group with ≥1 package (Buy For Me excluded).
+Names the group by description + tracking (`cbWaitingSummary`), "Ships automatically
+in N days", and confirms IN the page (no `window.confirm` — it froze the Chrome
+extension and is poor on phones). `POST /api/consolidated-billing/release` forwards
+only the session's user id + groupId to the admin, which owns every rule (closes the
+group as on day 21, refuses anyone else's group, answers "already" to a repeat). The
+switch stays ON. After: `preparing` → "Your packages are being prepared for delivery";
+cards read "Being prepared for delivery" (`cbPreparing`, only once a package has left
+Miami) — still never a stage or a place. A tap broadcasts `CB_STATE_EVENT` so the other
+cards on the page update. Copy: `consolidatedBilling.ts`; tests:
+`sendMyPackagesNow.test.ts`. The FAQ's "sooner" answer changed — the website's
+copy of that FAQ still has the old wording.
+
 **How this app keeps them:**
 - **It never writes a Consolidated Billing table or an invoice.** `src/lib/consolidated-billing.ts`
   only reads `swiftbox_cb_*`; the switch calls the admin

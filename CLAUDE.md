@@ -208,6 +208,35 @@ Don't run a build while a dev server for this app is running (it corrupts `.next
 - WhatsApp number is (868) 609-3000; `src/lib/whatsapp-number.test.ts` fails
   on any retired number (the old WhatsApp lines) anywhere under src/.
 
+## Buy For Me is PAUSED (2026-10-01) — behind the admin's settings switch
+
+Brent paused Buy For Me on 2026-10-01 (no USD to buy goods for customers). A
+PAUSE, not a removal: every page, route and table stays.
+
+- **The switch** is the `bfm_enabled` row in `swiftbox_settings`, set only in the
+  admin (Settings → **Buy For Me service**). ON only when it holds exactly 1;
+  missing, unreadable or a failed read = OFF. The ONLY reader here is
+  `isBfmEnabled()` in `src/lib/bfm-switch.ts` (pure part and the paused wording:
+  `src/lib/bfm-switch-core.ts`, an identical copy of the admin's). Never read the
+  row anywhere else.
+- **Turn it back on:** in the admin, Settings → Buy For Me service → "Turn Buy For
+  Me on…". No deploy needed here — the next request reads the switch. The public
+  website is separate: `BFM_ENABLED` in its `src/lib/buyForMe.ts`.
+- **While OFF:** the dashboard card is not shown (a customer with OPEN requests gets
+  `BuyForMeOrdersLink`, a plain link to them); `/dashboard/buy-for-me/new` shows
+  `BfmPaused` (the message + a link to the Miami address, `/dashboard/account`);
+  the list shows `BfmPaused` when empty, otherwise the requests read-only under the
+  compact note; a request page shows the paused note, the quote without bank
+  details, payment reference or upload (`getMyRequest` returns `paused`,
+  `bank: null`, `canUploadSlip: false`); cancelling an unpaid request still works.
+  `POST /api/buy-for-me` and `POST /api/buy-for-me/[id]/slip` answer 403
+  `{ error: BFM_PAUSED_MESSAGE, paused: true }`, and `createRequest` / `uploadMySlip`
+  refuse on their own too. The GET routes keep working.
+- The pages read the switch once in `src/app/dashboard/buy-for-me/layout.tsx`
+  (`BfmEnabledProvider` / `useBfmEnabled` in `paused.tsx`); the context defaults to
+  OFF.
+- Tests: `src/lib/bfm-switch.test.ts` (OFF hides and blocks; ON is today's behaviour).
+
 ## Buy For Me (SwiftboxAdmin BUY_FOR_ME_PLAN.md — the admin owns the rules)
 
 - `src/lib/buy-for-me-core.ts` is an IDENTICAL copy of the admin's

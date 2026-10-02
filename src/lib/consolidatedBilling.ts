@@ -3,10 +3,12 @@
  * Client-safe (no server imports): the cards, the switch, the badges and the FAQ
  * all read from here. The rules live in SwiftboxAdmin (CLAUDE.md, R1–R13).
  *
- * COPY RULES (Brent, 27 Sep 2026). Only these claims: free; 20 days from the
- * first Miami arrival; delivered together as soon as the last package lands; one
- * bill with a per-item customs breakdown; rates unchanged per package; no
- * repacking. Never "cheapest", "no hidden fees", delivery dates or times,
+ * COPY RULES (Brent, 27 Sep 2026; freight revised 1 Oct 2026). Only these claims:
+ * free; 20 days from the first Miami arrival; delivered together as soon as the
+ * last package lands; one bill with a per-item customs breakdown; the rate per lb
+ * is unchanged but the group's freight is charged on its COMBINED EXACT weight,
+ * rounded up once (two 0.5 lb packages = 1 lb, not 2); insurance, duty, OPT and
+ * VAT stay per package; no repacking. Never "cheapest", "no hidden fees", delivery dates or times,
  * competitor names or volume numbers. Wherever US$1.99 appears, the 20% fuel is
  * on the same line. The only phone number is (868) 609-3000.
  *
@@ -25,7 +27,7 @@ export const CB_SHORT_LINE =
 
 /** The card when the setting is OFF. */
 export const CB_LONG_DESCRIPTION =
-  "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill. Free.";
+  "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — and its freight is charged on the combined weight, rounded up once. Free.";
 
 /** Confirm before turning it OFF. */
 export const CB_OFF_CONFIRM = "Turning this off sends out what's ready now.";
@@ -100,7 +102,7 @@ export function cbWhatsAppUrl(swiftCode: string): string {
 export const CB_FAQ: { q: string; a: string }[] = [
   {
     q: "Is Consolidated Billing the same as package consolidation?",
-    a: "Not quite. Package consolidation usually means repacking several orders into one box in Miami. With Consolidated Billing, each package ships as it arrives, and they're delivered together with one bill.",
+    a: "Not quite. Package consolidation usually means repacking several orders into one box in Miami. With Consolidated Billing, each package ships as it arrives, and they're delivered together with one bill, charged on their combined weight.",
   },
   { q: "Does Consolidated Billing cost extra?", a: "No. Consolidated Billing is free." },
   {
@@ -113,11 +115,11 @@ export const CB_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Does Consolidated Billing lower my freight charge?",
-    a: "No. Each package is charged on its own actual weight at US$1.99/lb + 20% fuel (US$2.39/lb all-in). What you save is time and hassle: one delivery and one bill instead of several.",
+    a: "Yes. We weigh every package exactly and charge your group's freight on its combined weight, rounded up once. Two 0.5 lb packages are billed as 1 lb, not 2. The rate stays US$1.99/lb + 20% fuel (US$2.39/lb all-in), and insurance, duty, OPT and VAT stay per package.",
   },
   {
     q: "What does the bill look like?",
-    a: "One bill for the whole delivery. Each package is listed with its freight, and its customs duty, OPT and VAT are broken down item by item.",
+    a: "One bill for the whole delivery. It shows each package's exact weight, your group's combined weight and what you saved, and each package's customs duty, OPT and VAT broken down item by item.",
   },
   { q: "How do I turn on Consolidated Billing?", a: "In the Swiftbox app, or WhatsApp or call us on (868) 609-3000." },
   {
@@ -129,3 +131,17 @@ export const CB_FAQ: { q: string; a: string }[] = [
     a: "You pay the whole bill at once when your packages are delivered, including in TT$ cash to the driver at your door.",
   },
 ];
+
+/* ── Combined-weight freight (2026-10-01). The admin computes every figure; these
+   only print them, word for word as the bill PDF does (admin lib/cb-weight-core.ts). ── */
+
+/** "0.5 lb" / "1.25 lb" — an exact weight, up to 2 dp, no trailing zeros. */
+export function formatExactLb(lb: number): string {
+  return `${Number((Math.round(lb * 10000) / 10000).toFixed(2))} lb`;
+}
+
+/** "Saved with Consolidated Billing: 1 lb / US$2.39 (TT$16.25)", or null at 0. */
+export function cbSavingLine(savingLb: number, savingUsd: number, savingTtd: number): string | null {
+  if (!(savingUsd > 0)) return null;
+  return `Saved with Consolidated Billing: ${savingLb} lb / US$${savingUsd.toFixed(2)} (TT$${savingTtd.toFixed(2)})`;
+}

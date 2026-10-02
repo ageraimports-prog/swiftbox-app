@@ -35,8 +35,13 @@ separately. R7 released packages show the stage of the last to arrive and come a
 ONE delivery. R8 a Miami entry after the window opens a new group. R9 one
 Consolidated Bill (CB-######) per release, per package and per customs item. R10 the
 per-package invoices are unchanged; the bill only sums them; paying it pays them all.
-R11 a package with no invoice at release is billed on its own. R12 rates unchanged:
-US$1.99/lb + 20% fuel (US$2.39/lb all-in), actual weight per package, no repacking.
+R11 a package with no invoice at release is billed on its own. R12 (REVISED
+2026-10-01): the RATE is unchanged — US$1.99/lb + 20% fuel (US$2.39/lb all-in) — but
+the group's AIR freight is charged on its COMBINED EXACT weight, rounded up ONCE (two
+0.5 lb packages = 1 lb); insurance, duty, OPT, VAT stay per package; no repacking.
+The admin prices it (lib/cb-weight-core.ts there) and this app only SHOWS it: the bill
+page reads exact weights + the saving from admin `GET /api/consolidated-billing/bill-weights`
+(`fetchCbBillWeights`, same key; the bill still shows if it is unavailable).
 **R13 the app NEVER says a package is in, or held in, Trinidad.**
 
 **LIVE since 2026-09-30** (this app `27cf1ba`, admin `50f3046`; admin migration

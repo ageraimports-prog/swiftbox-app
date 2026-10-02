@@ -25,8 +25,21 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
     );
     expect(copy.CB_CLOSED_CARD).toBe("Your window has closed. We'll send everything out as soon as your last package lands.");
     expect(copy.CB_LONG_DESCRIPTION).toBe(
-      "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill. Free."
+      "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — and its freight is charged on the combined weight, rounded up once. Free."
     );
+  });
+  it("combined-weight freight (2026-10-01): the FAQ says Yes, with the 0.5 lb example", () => {
+    const f = copy.CB_FAQ.find((x) => x.q === "Does Consolidated Billing lower my freight charge?")!;
+    expect(f.a).toMatch(/^Yes./);
+    expect(f.a).toContain("Two 0.5 lb packages are billed as 1 lb, not 2.");
+    expect(f.a).toContain("insurance, duty, OPT and VAT stay per package");
+  });
+  it("the saving line matches the bill PDF word for word, and is omitted at 0", () => {
+    expect(copy.cbSavingLine(1, 2.39, 16.25)).toBe("Saved with Consolidated Billing: 1 lb / US$2.39 (TT$16.25)");
+    expect(copy.cbSavingLine(0, 0, 0)).toBeNull();
+    expect(copy.formatExactLb(0.5)).toBe("0.5 lb");
+    expect(copy.formatExactLb(1.25)).toBe("1.25 lb");
+    expect(copy.formatExactLb(2)).toBe("2 lb");
   });
   it("HOLD_DAYS is 20", () => expect(copy.HOLD_DAYS).toBe(20));
   it("has the nine FAQ entries", () => expect(copy.CB_FAQ).toHaveLength(9));

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { getCbBill } from "@/lib/consolidated-billing";
+import { fetchCbBillWeights, getCbBill } from "@/lib/consolidated-billing";
 
 /** GET — one of the customer's issued Consolidated Bills, per package and per item. */
 export async function GET(_req: Request, { params }: { params: Promise<{ billNo: string }> }) {
@@ -11,5 +11,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ billNo:
   // bill 404s rather than leaking that it exists.
   const bill = await getCbBill(session.id, decodeURIComponent(billNo));
   if (!bill) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ bill });
+  // Exact weights and the combined-weight saving come from the admin; a bill
+  // still shows without them if the admin can't be reached.
+  const weights = await fetchCbBillWeights(session.id, bill.billNo);
+  return NextResponse.json({ bill, weights });
 }

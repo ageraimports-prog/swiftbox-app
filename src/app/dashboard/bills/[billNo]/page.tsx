@@ -4,7 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { STATUS_BADGE, formatDate, formatTtd, type InvoiceStatus } from "@/lib/invoice-line";
-import type { CbBillDetail } from "@/lib/consolidated-billing";
+import type { CbBillDetail, CbBillWeights } from "@/lib/consolidated-billing";
+import { cbSavingLine, formatExactLb } from "@/lib/consolidatedBilling";
 import { displayTitle, packagesSummary, shortRef, trackingNumbers } from "@/lib/packageDisplay";
 import { RefText, TrackingLine } from "@/components/PackageCard";
 
@@ -21,6 +22,7 @@ import { RefText, TrackingLine } from "@/components/PackageCard";
 export default function BillPage() {
   const { billNo } = useParams<{ billNo: string }>();
   const [bill, setBill] = React.useState<CbBillDetail | null>(null);
+  const [weights, setWeights] = React.useState<CbBillWeights | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -31,7 +33,7 @@ export default function BillPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((d) => { if (!cancelled) setBill(d.bill); })
+      .then((d) => { if (!cancelled) { setBill(d.bill); setWeights(d.weights ?? null); } })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error && e.message === "notfound" ? "We couldn't find that bill." : "Couldn't load this bill. Please try again.");
       });
@@ -39,6 +41,11 @@ export default function BillPage() {
   }, [billNo]);
 
   const t = bill?.totals;
+  // Combined-weight freight: shown once the admin has priced the group on it.
+  const w = weights && weights.ready && weights.billedLb > 0 ? weights : null;
+  const saved = w ? cbSavingLine(w.savingLb, w.savingUsd, w.savingTtd) : null;
+  const exactFor = (pkId: number | null | undefined) =>
+    pkId == null ? null : weights?.packages.find((p) => p.pkId === pkId)?.exactLb ?? null;
   const badge = t ? STATUS_BADGE[t.status as InvoiceStatus] ?? STATUS_BADGE.unpaid : null;
 
   return (
@@ -88,6 +95,7 @@ export default function BillPage() {
                 {numbers[0] && <TrackingLine tracking={numbers[0]} more={numbers.length - 1} className="mt-1" />}
                 <p className="mt-1 text-[11px] text-muted-dark/70">
                   Ref {shortRef(p.wr)} · {p.invoiceNo}
+                  {exactFor(p.pkId) != null && <> · {formatExactLb(exactFor(p.pkId) as number)}</>}
                 </p>
 
                 <ul className="mt-3 flex flex-col text-sm">
@@ -121,6 +129,18 @@ export default function BillPage() {
             );
           })}
 
+          {w && (
+            <section className="rounded-lg border border-mist/10 bg-ink-2 p-5 text-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-dark">Weight</p>
+              <div className="mt-2">
+                <Weight label="Combined exact weight" value={formatExactLb(w.exactTotalLb)} />
+                <Weight label="Billed weight (rounded up once)" value={`${w.billedLb} lb`} strong />
+                {saved && <Weight label="Billed separately (each package rounded up)" value={`${w.separateLb} lb`} />}
+              </div>
+              {saved && <p className="mt-3 rounded-md bg-green/10 px-3 py-2 text-sm font-bold text-green">{saved}</p>}
+            </section>
+          )}
+
           <section className="rounded-lg border border-mist/10 bg-ink-2 p-5 text-sm">
             <Total label={`Total for ${bill.packages.length} ${bill.packages.length === 1 ? "package" : "packages"}`} value={t.chargesTtd} />
             {t.creditsTtd < 0 && <Total label="Credits applied" value={t.creditsTtd} />}
@@ -151,6 +171,15 @@ function Total({ label, value, strong, accent }: { label: string; value: number;
     <div className={`flex justify-between py-1 ${strong ? "font-bold" : ""} ${accent ? "text-green" : "text-mist"}`}>
       <span>{label}</span>
       <span>{formatTtd(value)}</span>
+    </div>
+  );
+}
+
+function Weight({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`flex justify-between py-1 ${strong ? "font-bold text-mist" : "text-mist"}`}>
+      <span>{label}</span>
+      <span>{value}</span>
     </div>
   );
 }

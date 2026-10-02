@@ -23,6 +23,8 @@ import {
  *    (x-consolidation-key = CONSOLIDATION_HOOK_KEY). Turning it off releases what
  *    is ready (R6) in the admin, which also builds and emails the bill.
  *  - The bill PDF → admin GET /api/consolidated-billing/bill-pdf, same key.
+ *  - The bill's weights (combined-weight freight, 2026-10-01) → admin GET
+ *    /api/consolidated-billing/bill-weights, same key. The admin computes them.
  *
  * Until the admin's migration 038 runs, the tables are missing: every read here
  * then answers "nothing", so the rest of the app is unaffected.
@@ -471,6 +473,39 @@ export async function fetchCbBillPdf(userId: number, billNo: string): Promise<Ar
   const res = await fetch(url, { headers: { "x-consolidation-key": key }, cache: "no-store" });
   if (!res.ok) return null;
   return res.arrayBuffer();
+}
+
+/**
+ * Combined-weight freight (admin lib/cb-weight-core.ts): each package's exact
+ * weight, the group's combined exact weight and billed weight (rounded up once),
+ * the same packages billed separately, and what that saved. Computed by the admin
+ * from the invoices' ACTUAL figures — never worked out here.
+ */
+export type CbBillWeights = {
+  ready: boolean;
+  packages: { pkId: number; wr: string; exactLb: number | null; wholeLb: number }[];
+  exactTotalLb: number;
+  billedLb: number;
+  separateLb: number;
+  savingLb: number;
+  savingUsd: number;
+  savingTtd: number;
+};
+
+/** The bill's weights from the admin. Null = not available (the bill still shows). */
+export async function fetchCbBillWeights(userId: number, billNo: string): Promise<CbBillWeights | null> {
+  try {
+    const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
+    if (!key) return null;
+    const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
+    const url = `${base}/api/consolidated-billing/bill-weights?billNo=${encodeURIComponent(billNo)}&userId=${Number(userId)}`;
+    const res = await fetch(url, { headers: { "x-consolidation-key": key }, cache: "no-store" });
+    if (!res.ok) return null;
+    const w = (await res.json()) as CbBillWeights;
+    return w && typeof w.billedLb === "number" && Array.isArray(w.packages) ? w : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The Consolidated Bill an invoice is on, or null. */

@@ -38,9 +38,12 @@ per-package invoices are unchanged; the bill only sums them; paying it pays them
 R11 a package with no invoice at release is billed on its own. R12 (REVISED
 2026-10-01): the RATE is unchanged — US$1.99/lb + 20% fuel (US$2.39/lb all-in) — but
 the group's AIR freight is charged on its COMBINED EXACT weight, rounded up ONCE (two
-0.5 lb packages = 1 lb); insurance, duty, OPT, VAT stay per package; no repacking.
+0.5 lb packages = 1 lb); since 2026-10-02 INSURANCE is charged ONCE on the group's
+combined declared value (each package still covered on its own, up to US$500 — never
+word it as one shared cap); duty, OPT, VAT stay per package; no repacking.
 The admin prices it (lib/cb-weight-core.ts there) and this app only SHOWS it: the bill
-page reads exact weights + the saving from admin `GET /api/consolidated-billing/bill-weights`
+page reads exact weights, the group insurance line and the saving (freight +
+insurance) from admin `GET /api/consolidated-billing/bill-weights`
 (`fetchCbBillWeights`, same key; the bill still shows if it is unavailable).
 **R13 the app NEVER says a package is in, or held in, Trinidad.**
 

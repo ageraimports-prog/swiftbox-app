@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { STATUS_BADGE, formatDate, formatTtd, type InvoiceStatus } from "@/lib/invoice-line";
 import type { CbBillDetail, CbBillWeights } from "@/lib/consolidated-billing";
-import { cbSavingLine, formatExactLb } from "@/lib/consolidatedBilling";
+import { cbGroupInsuranceLabel, cbSavingLine, formatExactLb } from "@/lib/consolidatedBilling";
 import { displayTitle, packagesSummary, shortRef, trackingNumbers } from "@/lib/packageDisplay";
 import { RefText, TrackingLine } from "@/components/PackageCard";
 
@@ -41,9 +41,10 @@ export default function BillPage() {
   }, [billNo]);
 
   const t = bill?.totals;
-  // Combined-weight freight: shown once the admin has priced the group on it.
+  // Combined-weight freight and group insurance: shown once the admin has priced the group.
   const w = weights && weights.ready && weights.billedLb > 0 ? weights : null;
-  const saved = w ? cbSavingLine(w.savingLb, w.savingUsd, w.savingTtd) : null;
+  const ins = w?.insurance ?? null;
+  const saved = w ? cbSavingLine(w.savingLb, w.savingUsd, w.savingTtd, ins?.savingUsd ?? 0) : null;
   // The weight that went into the group: the scale weight, or — for a package with
   // only a rounded intake weight — that whole pound.
   const exactFor = (pkId: number | null | undefined) => {
@@ -137,12 +138,20 @@ export default function BillPage() {
 
           {w && (
             <section className="rounded-lg border border-mist/10 bg-ink-2 p-5 text-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-dark">Weight</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-dark">{ins ? "Weight and insurance" : "Weight"}</p>
               <div className="mt-2">
                 <Weight label={w.allExact === false ? "Combined weight" : "Combined exact weight"} value={formatExactLb(w.exactTotalLb)} />
                 <Weight label="Billed weight (rounded up once)" value={`${w.billedLb} lb`} strong />
-                {saved && <Weight label="Billed separately (each package rounded up)" value={`${w.separateLb} lb`} />}
+                {w.savingLb > 0 && <Weight label="Billed separately (each package rounded up)" value={`${w.separateLb} lb`} />}
+                {ins && <Weight label={cbGroupInsuranceLabel(ins.combinedValueUsd)} value={`US$${ins.chargedUsd.toFixed(2)}`} strong />}
+                {ins && ins.savingUsd > 0 && <Weight label="Insurance billed separately (per package)" value={`US$${ins.separateUsd.toFixed(2)}`} />}
               </div>
+              {ins && (
+                <p className="mt-2 text-xs text-muted-dark">
+                  Each package is still covered on its own, up to US${ins.coverCapUsd.toFixed(0)}.
+                  {ins.tvWrs.length > 0 ? ` TVs are insured on their own (${ins.tvWrs.join(", ")}).` : ""}
+                </p>
+              )}
               {saved && <p className="mt-3 rounded-md bg-green/10 px-3 py-2 text-sm font-bold text-green">{saved}</p>}
             </section>
           )}

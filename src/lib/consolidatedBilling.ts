@@ -3,12 +3,14 @@
  * Client-safe (no server imports): the cards, the switch, the badges and the FAQ
  * all read from here. The rules live in SwiftboxAdmin (CLAUDE.md, R1–R13).
  *
- * COPY RULES (Brent, 27 Sep 2026; freight revised 1 Oct 2026). Only these claims:
- * free; 20 days from the first Miami arrival; delivered together as soon as the
- * last package lands; one bill with a per-item customs breakdown; the rate per lb
- * is unchanged but the group's freight is charged on its COMBINED EXACT weight,
- * rounded up once (two 0.5 lb packages = 1 lb, not 2); insurance, duty, OPT and
- * VAT stay per package; no repacking. Never "cheapest", "no hidden fees", delivery dates or times,
+ * COPY RULES (Brent, 27 Sep 2026; freight revised 1 Oct, insurance 2 Oct 2026).
+ * Only these claims: free; 20 days from the first Miami arrival; delivered
+ * together as soon as the last package lands; one bill with a per-item customs
+ * breakdown; the rate per lb is unchanged but the group's freight is charged on
+ * its COMBINED EXACT weight, rounded up once (two 0.5 lb packages = 1 lb, not 2);
+ * insurance is charged ONCE on the group's combined declared value, and each
+ * package is still covered on its own, up to US$500 (never imply one shared cap);
+ * duty, OPT and VAT stay per package; no repacking. Never "cheapest", "no hidden fees", delivery dates or times,
  * competitor names or volume numbers. Wherever US$1.99 appears, the 20% fuel is
  * on the same line. The only phone number is (868) 609-3000.
  *
@@ -27,7 +29,7 @@ export const CB_SHORT_LINE =
 
 /** The card when the setting is OFF. */
 export const CB_LONG_DESCRIPTION =
-  "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — and its freight is charged on the combined weight, rounded up once. Free.";
+  "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — its freight charged on the combined weight, rounded up once, and its insurance once on the combined value. Free.";
 
 /** Confirm before turning it OFF. */
 export const CB_OFF_CONFIRM = "Turning this off sends out what's ready now.";
@@ -95,6 +97,13 @@ export function cbWhatsAppUrl(swiftCode: string): string {
   return `https://wa.me/${SWIFTBOX_WHATSAPP}?text=${encodeURIComponent(text)}`;
 }
 
+/**
+ * Group insurance (2 Oct 2026): one premium on the combined declared value, cover
+ * still per package. US$500 is the admin's insurance_cover_cap setting.
+ */
+export const CB_INSURANCE_LINE =
+  "Insurance is charged once on your group's combined declared value, not a minimum on every package, and each package is still covered on its own, up to US$500.";
+
 /** The FAQ. https://swiftboxtt.com/consolidated-billing shows six of these, word for
  *  word (the website has no blog post on it). The website's src/lib/consolidatedBilling.ts holds the same wording and its own
  *  copy of the 20-day figure (CB_HOLD_DAYS), as does SwiftboxAdmin (HOLD_DAYS in
@@ -114,12 +123,12 @@ export const CB_FAQ: { q: string; a: string }[] = [
     a: "Yes. 20 days is the most we wait. Once everything you ordered has reached Miami, tap “Send my packages now” in the app and they come to you together as soon as the last one lands. You can also turn Consolidated Billing off.",
   },
   {
-    q: "Does Consolidated Billing lower my freight charge?",
-    a: "Yes. We weigh every package exactly and charge your group's freight on its combined weight, rounded up once. Two 0.5 lb packages are billed as 1 lb, not 2. The rate stays US$1.99/lb + 20% fuel (US$2.39/lb all-in), and insurance, duty, OPT and VAT stay per package.",
+    q: "Does Consolidated Billing lower my freight and insurance?",
+    a: `Yes. We weigh every package exactly and charge your group's freight on its combined weight, rounded up once. Two 0.5 lb packages are billed as 1 lb, not 2. The rate stays US$1.99/lb + 20% fuel (US$2.39/lb all-in). ${CB_INSURANCE_LINE} Duty, OPT and VAT stay per package.`,
   },
   {
     q: "What does the bill look like?",
-    a: "One bill for the whole delivery. It shows each package's exact weight, your group's combined weight and what you saved, and each package's customs duty, OPT and VAT broken down item by item.",
+    a: "One bill for the whole delivery. It shows each package's exact weight, your group's combined weight, the group's insurance and what you saved, and each package's customs duty, OPT and VAT broken down item by item.",
   },
   { q: "How do I turn on Consolidated Billing?", a: "In the Swiftbox app, or WhatsApp or call us on (868) 609-3000." },
   {
@@ -140,8 +149,20 @@ export function formatExactLb(lb: number): string {
   return `${Number((Math.round(lb * 10000) / 10000).toFixed(2))} lb`;
 }
 
-/** "Saved with Consolidated Billing: 1 lb / US$2.39 (TT$16.25)", or null at 0. */
-export function cbSavingLine(savingLb: number, savingUsd: number, savingTtd: number): string | null {
+/**
+ * "Saved with Consolidated Billing: US$17.57 (TT$119.48) — 4 lb of freight + US$8.00
+ * of insurance", or null at 0. savingUsd / savingTtd are the TOTAL (freight + fuel +
+ * insurance). Word for word the admin's savingLine (lib/cb-weight-core.ts).
+ */
+export function cbSavingLine(savingLb: number, savingUsd: number, savingTtd: number, insuranceSavingUsd = 0): string | null {
   if (!(savingUsd > 0)) return null;
-  return `Saved with Consolidated Billing: ${savingLb} lb / US$${savingUsd.toFixed(2)} (TT$${savingTtd.toFixed(2)})`;
+  const parts: string[] = [];
+  if (savingLb > 0) parts.push(`${savingLb} lb of freight`);
+  if (insuranceSavingUsd > 0) parts.push(`US$${insuranceSavingUsd.toFixed(2)} of insurance`);
+  return `Saved with Consolidated Billing: US$${savingUsd.toFixed(2)} (TT$${savingTtd.toFixed(2)})${parts.length ? ` — ${parts.join(" + ")}` : ""}`;
+}
+
+/** "Insurance (group, combined value US$90.00)" — the admin's groupInsuranceLabel, word for word. */
+export function cbGroupInsuranceLabel(combinedValueUsd: number): string {
+  return `Insurance (group, combined value US$${combinedValueUsd.toFixed(2)})`;
 }

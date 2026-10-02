@@ -491,8 +491,23 @@ export type CbBillWeights = {
   billedLb: number;
   separateLb: number;
   savingLb: number;
+  /** TOTAL saved — freight + fuel + insurance (2026-10-02). */
   savingUsd: number;
   savingTtd: number;
+  /** The freight + fuel part of savingUsd. Absent from an admin older than 2026-10-02. */
+  freightSavingUsd?: number;
+  /**
+   * Group insurance (2026-10-02): one premium on the combined declared value,
+   * cover still per package. Null/absent → every package carries its own.
+   */
+  insurance?: {
+    combinedValueUsd: number;
+    chargedUsd: number;
+    separateUsd: number;
+    savingUsd: number;
+    tvWrs: string[];
+    coverCapUsd: number;
+  } | null;
 };
 
 /** The bill's weights from the admin. Null = not available (the bill still shows). */

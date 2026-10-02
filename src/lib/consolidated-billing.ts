@@ -483,7 +483,10 @@ export async function fetchCbBillPdf(userId: number, billNo: string): Promise<Ar
  */
 export type CbBillWeights = {
   ready: boolean;
-  packages: { pkId: number; wr: string; exactLb: number | null; wholeLb: number }[];
+  /** False when some package joined at its rounded intake pound (no scale weight). */
+  allExact?: boolean;
+  /** kind: "exact" (scale), "rounded" (only the recorded whole pound), "missing". */
+  packages: { pkId: number; wr: string; exactLb: number | null; wholeLb: number; kind?: "exact" | "rounded" | "missing" }[];
   exactTotalLb: number;
   billedLb: number;
   separateLb: number;

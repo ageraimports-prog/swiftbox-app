@@ -44,8 +44,14 @@ export default function BillPage() {
   // Combined-weight freight: shown once the admin has priced the group on it.
   const w = weights && weights.ready && weights.billedLb > 0 ? weights : null;
   const saved = w ? cbSavingLine(w.savingLb, w.savingUsd, w.savingTtd) : null;
-  const exactFor = (pkId: number | null | undefined) =>
-    pkId == null ? null : weights?.packages.find((p) => p.pkId === pkId)?.exactLb ?? null;
+  // The weight that went into the group: the scale weight, or — for a package with
+  // only a rounded intake weight — that whole pound.
+  const exactFor = (pkId: number | null | undefined) => {
+    const p = pkId == null ? undefined : weights?.packages.find((x) => x.pkId === pkId);
+    if (!p) return null;
+    if (p.exactLb != null) return p.exactLb;
+    return p.kind === "rounded" && p.wholeLb > 0 ? p.wholeLb : null;
+  };
   const badge = t ? STATUS_BADGE[t.status as InvoiceStatus] ?? STATUS_BADGE.unpaid : null;
 
   return (
@@ -133,7 +139,7 @@ export default function BillPage() {
             <section className="rounded-lg border border-mist/10 bg-ink-2 p-5 text-sm">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-dark">Weight</p>
               <div className="mt-2">
-                <Weight label="Combined exact weight" value={formatExactLb(w.exactTotalLb)} />
+                <Weight label={w.allExact === false ? "Combined weight" : "Combined exact weight"} value={formatExactLb(w.exactTotalLb)} />
                 <Weight label="Billed weight (rounded up once)" value={`${w.billedLb} lb`} strong />
                 {saved && <Weight label="Billed separately (each package rounded up)" value={`${w.separateLb} lb`} />}
               </div>

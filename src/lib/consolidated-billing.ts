@@ -75,8 +75,8 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 
 export type CbState = {
   settingOn: boolean;
+  /** Every account may use it — business accounts included (2026-10-02). */
   eligible: boolean;
-  ineligibleReason: string | null;
   swiftCode: string;
   /** The open group, for "Day X of 20 … by <date>". */
   open: { day: number; windowEnd: string } | null;
@@ -92,12 +92,6 @@ export type CbState = {
   /** The newest issued bill with money still due — the in-app notice. */
   billReady: { billNo: string; dueTtd: number } | null;
 };
-
-function ineligibleReasonOf(rateTier: string, autoHold: boolean): string | null {
-  if (rateTier === "business") return "Business accounts are billed on terms, so Consolidated Billing isn't available.";
-  if (autoHold) return "Your account is billed on terms, so Consolidated Billing isn't available.";
-  return null;
-}
 
 /** One package in the open group, for "3 packages waiting: Shoes, …". */
 export type CbSendPackage = { commodities: string; tracking: string; wr: string };
@@ -130,15 +124,13 @@ async function openGroupPackages(groupId: number): Promise<CbSendPackage[]> {
 }
 
 export async function getCbState(userId: number): Promise<CbState> {
-  const u = (await query<{ consolidated_billing: number; rate_tier: string; auto_hold: number; ac: string }>(
-    "SELECT consolidated_billing, rate_tier, auto_hold, ac FROM users WHERE id = :userId LIMIT 1",
+  const u = (await query<{ consolidated_billing: number; ac: string }>(
+    "SELECT consolidated_billing, ac FROM users WHERE id = :userId LIMIT 1",
     { userId }
   ))[0];
-  const reason = u ? ineligibleReasonOf(u.rate_tier, Number(u.auto_hold) === 1) : null;
   const base = {
     settingOn: Number(u?.consolidated_billing ?? 0) === 1,
-    eligible: !!u && reason === null,
-    ineligibleReason: reason,
+    eligible: !!u,
     swiftCode: swiftCodeFromAc(u?.ac),
   };
   const groups = await safe(

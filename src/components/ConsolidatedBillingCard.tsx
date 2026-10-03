@@ -21,7 +21,6 @@ import { formatTtd } from "@/lib/invoice-line";
 type State = {
   settingOn: boolean;
   eligible: boolean;
-  ineligibleReason: string | null;
   swiftCode: string;
   open: { day: number; windowEnd: string } | null;
   closedWaiting: boolean;
@@ -154,7 +153,6 @@ export default function ConsolidatedBillingCard({
         </div>
       )}
 
-      {!state.eligible && state.ineligibleReason && <p className="mt-3 text-xs text-muted-dark">{state.ineligibleReason}</p>}
       {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
 
       {showFaq && (

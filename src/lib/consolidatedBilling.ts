@@ -3,41 +3,53 @@
  * Client-safe (no server imports): the cards, the switch, the badges and the FAQ
  * all read from here. The rules live in SwiftboxAdmin (CLAUDE.md, R1–R13).
  *
- * COPY RULES (Brent, 27 Sep 2026; freight revised 1 Oct, insurance 2 Oct 2026).
- * Only these claims: free; 20 days from the first Miami arrival; delivered
- * together as soon as the last package lands; one bill with a per-item customs
+ * COPY RULES (Brent, 27 Sep 2026; freight revised 1 Oct, insurance 2 Oct,
+ * R13a 4 Oct 2026). Only these claims: free; we consolidate your packages and
+ * deliver them together: one delivery, one bill, with a per-item customs
  * breakdown; the rate per lb is unchanged but the group's freight is charged on
  * its COMBINED EXACT weight, rounded up once (two 0.5 lb packages = 1 lb, not 2);
  * insurance is charged ONCE on the group's combined declared value, and each
  * package is still covered on its own, up to US$500 (never imply one shared cap);
- * duty, OPT and VAT stay per package; no repacking. Never "cheapest", "no hidden fees", delivery dates or times,
- * competitor names or volume numbers. Wherever US$1.99 appears, the 20% fuel is
- * on the same line. The only phone number is (868) 609-3000.
+ * duty, OPT and VAT stay per package; the switch is in the Account tab. Never
+ * "cheapest", "no hidden fees", typed savings figures in marketing lines,
+ * delivery dates or times, competitor names or volume numbers. Wherever US$1.99
+ * appears, the 20% fuel is on the same line. The only phone number is
+ * (868) 609-3000.
  *
  * R13: nothing the customer sees may say a package is in, or held in,
  * Trinidad. Held packages read CB_WAITING_LABEL.
+ *
+ * R13a (Brent, 4 Oct 2026): no specifics about WHERE packages are held or wait
+ * (no Miami, no warehouse), WHEN they ship or arrive (no "20 days", no "Day N
+ * of 20", no window dates, no "as soon as the last one lands"), or HOW the
+ * consolidation happens (no repacking / own-box talk). HOLD_DAYS stays for the
+ * logic but is never rendered. Locked by consolidatedBilling.test.ts ("R13a").
  */
 
-/** R3 — the window, in days. The admin's HOLD_DAYS is the rule; keep them equal. */
+/**
+ * R3 — the window, in days. The admin's HOLD_DAYS is the rule; keep them equal.
+ * LOGIC ONLY: never put it in customer text (R13a).
+ */
 export const HOLD_DAYS = 20;
 
 export const CB_NAME = "Consolidated Billing";
 
+/** Brent's approved sentence (R13a, 4 Oct 2026): the whole promise, nothing more. */
+export const CB_TOGETHER_LINE =
+  "With Consolidated Billing we consolidate your packages and deliver them together: one delivery, one bill.";
+
 /** One line, for tight spaces. */
-export const CB_SHORT_LINE =
-  "Everything that reaches Miami within 20 days, one delivery, one bill. Free.";
+export const CB_SHORT_LINE = "Your packages, consolidated and delivered together: one delivery, one bill. Free.";
 
 /** The card when the setting is OFF. */
 export const CB_LONG_DESCRIPTION =
-  "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — its freight charged on the combined weight, rounded up once, and its insurance once on the combined value. Free.";
+  "Ordering from more than one store? With Consolidated Billing we consolidate your packages and deliver them together: one delivery, one bill — its freight charged on the combined weight, rounded up once, and its insurance once on the combined value. Free.";
 
 /**
  * Under the OFF card (2026-10-03): turning it on also takes the packages the
- * customer already has with us. App-only — CB_LONG_DESCRIPTION stays word for
- * word with the website. Never says where they are (R13).
+ * customer already has with us. Never says where they are (R13/R13a).
  */
-export const CB_EXISTING_INCLUDED =
-  "Packages already at our Miami warehouse or on their way to you are included too.";
+export const CB_EXISTING_INCLUDED = "Packages you've already ordered are included too.";
 
 /** After turning it on, when packages already with us joined the group. */
 export function cbEnrolledText(count: number): string {
@@ -52,32 +64,32 @@ export const CB_OFF_CONFIRM = "Turning this off sends out what's ready now.";
 /** A held package, in place of its status. Never says where it is (R13). */
 export const CB_WAITING_LABEL = "Consolidated Billing: waiting for your group";
 
-/** The card while a group is open. `windowEnd` is a date, e.g. "Sat 17 Oct". */
-export function cbOpenCardText(day: number, windowEnd: string): string {
-  return `Consolidated Billing: Free. Day ${day} of ${HOLD_DAYS}. Packages that reach our Miami warehouse by ${windowEnd} go out together.`;
-}
+/**
+ * The card while the setting is ON (with or without a group yet). R13a: no day
+ * count, no window date, no place. Replaces "Day N of 20 … by <date>".
+ */
+export const CB_ON_TEXT =
+  "Consolidated Billing is on. Free. We consolidate your packages and deliver them together: one delivery, one bill.";
 
-/* ── "Send my packages now" (2026-10-01): 20 days is the MAXIMUM, not the wait. ── */
+/* ── "Send my packages now" (2026-10-01). A real feature; its text gives no timing or place (R13a). ── */
 
 export const CB_SEND_NOW_BUTTON = "Send my packages now";
 
-/** "3 packages waiting: Shoes, Headphones, Household Items" — what they ARE, never a WR. */
+/** Under the group's package list, in place of the old "Ships automatically in N days". */
+export const CB_SEND_NOW_HINT =
+  "Got everything you ordered? Tap Send my packages now and we'll deliver them together.";
+
+/** "3 packages in your group: Shoes, Headphones, Household Items" — what they ARE, never a WR. */
 export function cbWaitingSummary(titles: string[]): string {
   const n = titles.length;
-  const head = `${n} ${n === 1 ? "package" : "packages"} waiting`;
+  const head = `${n} ${n === 1 ? "package" : "packages"} in your group`;
   return n === 0 ? head : `${head}: ${titles.join(", ")}`;
-}
-
-/** "Ships automatically in 15 days". The window is the latest it waits. */
-export function cbShipsAutomaticallyText(daysLeft: number): string {
-  if (daysLeft <= 1) return "Ships automatically after today";
-  return `Ships automatically in ${daysLeft} days`;
 }
 
 /** The confirmation, before anything happens. */
 export function cbSendNowConfirmText(count: number): string {
   const these = count === 1 ? "this package" : `these ${count} packages`;
-  return `Send ${these} now? Anything that arrives after this ships separately, or starts a new group if Consolidated Billing is still on.`;
+  return `Send ${these} now? We'll deliver them together, with one bill. Any other packages come separately, or start a new group if Consolidated Billing is still on.`;
 }
 
 /** After the tap — and on every waiting package until the group goes out. Never says where (R13). */
@@ -85,9 +97,8 @@ export const CB_PREPARING_TEXT = "Your packages are being prepared for delivery.
 /** The short badge on a package card once the customer has said "send them". */
 export const CB_PREPARING_LABEL = "Being prepared for delivery";
 
-/** The card after the window closes, before release. */
-export const CB_CLOSED_CARD =
-  "Your window has closed. We'll send everything out as soon as your last package lands.";
+/** The card once the group has stopped taking packages, before release. No timing (R13a). */
+export const CB_CLOSED_CARD = "Your group is complete. We'll deliver your packages together, with one bill.";
 
 /** The in-app notice once a bill is ready (the email is the push). */
 export function cbBillReadyText(billNo: string): string {
@@ -119,23 +130,19 @@ export function cbWhatsAppUrl(swiftCode: string): string {
 export const CB_INSURANCE_LINE =
   "Insurance is charged once on your group's combined declared value, not a minimum on every package, and each package is still covered on its own, up to US$500.";
 
-/** The FAQ. https://swiftboxtt.com/consolidated-billing shows six of these, word for
- *  word (the website has no blog post on it). The website's src/lib/consolidatedBilling.ts holds the same wording and its own
- *  copy of the 20-day figure (CB_HOLD_DAYS), as does SwiftboxAdmin (HOLD_DAYS in
- *  lib/consolidated-billing-core.ts): change all three repos together. */
+/** The FAQ. R13a (4 Oct 2026) rewrote it: no place, no timing, no repacking talk.
+ *  https://swiftboxtt.com/consolidated-billing and the website's
+ *  src/lib/consolidatedBilling.ts still carry the OLD wording (and the 20-day
+ *  figure) until the website is changed to match. */
 export const CB_FAQ: { q: string; a: string }[] = [
   {
-    q: "Is Consolidated Billing the same as package consolidation?",
-    a: "Not quite. Package consolidation usually means repacking several orders into one box in Miami. With Consolidated Billing, each package ships as it arrives, and they're delivered together with one bill, charged on their combined weight.",
+    q: "What is Consolidated Billing?",
+    a: `${CB_TOGETHER_LINE} Your group's freight is charged on its combined weight, rounded up once.`,
   },
   { q: "Does Consolidated Billing cost extra?", a: "No. Consolidated Billing is free." },
   {
-    q: "How long will you hold my packages?",
-    a: "Your 20 days start when your first package arrives at our Miami warehouse. Everything that reaches Miami in those 20 days is delivered together, as soon as the last one lands.",
-  },
-  {
-    q: "Can I get my packages sooner?",
-    a: "Yes. 20 days is the most we wait. Once everything you ordered has reached Miami, tap “Send my packages now” in the app and they come to you together as soon as the last one lands. You can also turn Consolidated Billing off.",
+    q: "What does “Send my packages now” do?",
+    a: "Got everything you ordered? Tap “Send my packages now” in the app and we'll deliver them together, with one bill. You can also turn Consolidated Billing off in the Account tab.",
   },
   {
     q: "Does Consolidated Billing lower my freight and insurance?",
@@ -145,11 +152,11 @@ export const CB_FAQ: { q: string; a: string }[] = [
     q: "What does the bill look like?",
     a: "One bill for the whole delivery. It shows each package's exact weight, your group's combined weight, the group's insurance and what you saved, and each package's customs duty, OPT and VAT broken down item by item.",
   },
-  { q: "How do I turn on Consolidated Billing?", a: "In the Swiftbox app, or WhatsApp or call us on (868) 609-3000." },
   {
-    q: "How will I know my packages have arrived?",
-    a: "You get an email when each package reaches our Miami warehouse, and you can track every package in the Swiftbox app.",
+    q: "How do I turn on Consolidated Billing?",
+    a: "In the Account tab of the Swiftbox app, or WhatsApp or call us on (868) 609-3000.",
   },
+  { q: "Can I still follow my packages?", a: "Yes. Every package is in the Swiftbox app." },
   {
     q: "How do I pay?",
     a: "You pay the whole bill at once when your packages are delivered, including in TT$ cash to the driver at your door.",

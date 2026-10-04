@@ -10,9 +10,8 @@ import {
   CB_OFF_CONFIRM,
   CB_CLOSED_CARD,
   CB_FAQ,
-  HOLD_DAYS,
   SWIFTBOX_TEL,
-  cbOpenCardText,
+  CB_ON_TEXT,
   cbBillReadyText,
   cbWhatsAppUrl,
   CB_PREPARING_TEXT,
@@ -103,14 +102,9 @@ export default function ConsolidatedBillingCard({
             {on && note && <p className="font-semibold">{note}</p>}
             {/* On the Dashboard the card at the top already says it. */}
             {showSendNow && state.preparing && <p className="font-semibold">{CB_PREPARING_TEXT}</p>}
-            {on && state.open && <p>{cbOpenCardText(state.open.day, state.open.windowEnd)}</p>}
+            {/* R13a: no day count, window date or place, so an open group and no group yet read the same. */}
             {on && state.closedWaiting && <p>{CB_CLOSED_CARD}</p>}
-            {on && !state.open && !state.closedWaiting && (
-              <p>
-                Consolidated Billing is on. Free. Your {HOLD_DAYS} days start when your first package arrives at our Miami
-                warehouse.
-              </p>
-            )}
+            {on && !state.closedWaiting && <p>{CB_ON_TEXT}</p>}
             {!on && state.closedWaiting && <p>{CB_CLOSED_CARD}</p>}
           </div>
         </div>

@@ -5,8 +5,8 @@ import {
   CB_NAME,
   CB_PREPARING_TEXT,
   CB_SEND_NOW_BUTTON,
+  CB_SEND_NOW_HINT,
   cbSendNowConfirmText,
-  cbShipsAutomaticallyText,
   cbWaitingSummary,
 } from "@/lib/consolidatedBilling";
 import { formatDescription, trackingNumbers } from "@/lib/packageDisplay";
@@ -91,7 +91,7 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
           })}
           {count > 4 && <li className="text-xs text-muted-dark">+{count - 4} more</li>}
         </ul>
-        <p className="mt-2 text-xs text-muted-dark">{cbShipsAutomaticallyText(group.daysLeft)}</p>
+        <p className="mt-2 text-xs text-muted-dark">{CB_SEND_NOW_HINT}</p>
       </div>
 
       {step === "idle" && (

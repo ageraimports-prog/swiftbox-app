@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import * as copy from "./consolidatedBilling";
 import { packageSection, billTotals, groupDisplay, windowDay, ttDateLabel } from "./consolidatedBillingCore";
@@ -8,7 +10,8 @@ const allCopy = [
   copy.CB_OFF_CONFIRM,
   copy.CB_WAITING_LABEL,
   copy.CB_CLOSED_CARD,
-  copy.cbOpenCardText(3, "Sat 17 Oct"),
+  copy.CB_ON_TEXT,
+  copy.CB_TOGETHER_LINE,
   copy.cbBillReadyText("CB-000001"),
   copy.CB_EXISTING_INCLUDED,
   copy.cbEnrolledText(1),
@@ -23,18 +26,19 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
   it("uses the exact brief wording", () => {
     expect(copy.CB_OFF_CONFIRM).toBe("Turning this off sends out what's ready now.");
     expect(copy.CB_WAITING_LABEL).toBe("Consolidated Billing: waiting for your group");
-    expect(copy.cbOpenCardText(3, "Sat 17 Oct")).toBe(
-      "Consolidated Billing: Free. Day 3 of 20. Packages that reach our Miami warehouse by Sat 17 Oct go out together."
+    expect(copy.CB_TOGETHER_LINE).toBe(
+      "With Consolidated Billing we consolidate your packages and deliver them together: one delivery, one bill."
     );
-    expect(copy.CB_CLOSED_CARD).toBe("Your window has closed. We'll send everything out as soon as your last package lands.");
+    expect(copy.CB_ON_TEXT).toBe(
+      "Consolidated Billing is on. Free. We consolidate your packages and deliver them together: one delivery, one bill."
+    );
+    expect(copy.CB_CLOSED_CARD).toBe("Your group is complete. We'll deliver your packages together, with one bill.");
     expect(copy.CB_LONG_DESCRIPTION).toBe(
-      "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — its freight charged on the combined weight, rounded up once, and its insurance once on the combined value. Free."
+      "Ordering from more than one store? With Consolidated Billing we consolidate your packages and deliver them together: one delivery, one bill — its freight charged on the combined weight, rounded up once, and its insurance once on the combined value. Free."
     );
   });
   it("turning it on includes packages already with us (2026-10-03), never 'future packages only'", () => {
-    expect(copy.CB_EXISTING_INCLUDED).toBe(
-      "Packages already at our Miami warehouse or on their way to you are included too."
-    );
+    expect(copy.CB_EXISTING_INCLUDED).toBe("Packages you've already ordered are included too.");
     expect(copy.cbEnrolledText(1)).toBe("Your package already with us is in your group.");
     expect(copy.cbEnrolledText(2)).toBe("Your 2 packages already with us are in your group.");
     expect(allCopy).not.toMatch(/future packages|from now on only|only new packages/i);
@@ -64,7 +68,7 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
     expect(copy.formatExactLb(2)).toBe("2 lb");
   });
   it("HOLD_DAYS is 20", () => expect(copy.HOLD_DAYS).toBe(20));
-  it("has the nine FAQ entries", () => expect(copy.CB_FAQ).toHaveLength(9));
+  it("has the eight FAQ entries", () => expect(copy.CB_FAQ).toHaveLength(8));
   it("US$1.99 always carries the 20% fuel on the same line", () => {
     for (const line of allCopy.split("\n")) if (line.includes("US$1.99")) expect(line).toMatch(/20% fuel/);
   });
@@ -84,6 +88,85 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
   it("SWIFT code from a dirty users.ac", () => {
     expect(copy.swiftCodeFromAc("\t406 ")).toBe("SWIFT-0406");
     expect(copy.swiftCodeFromAc(12)).toBe("SWIFT-0012");
+  });
+});
+
+/**
+ * R13a (Brent, 4 Oct 2026): no WHERE (Miami, warehouse, held in…), no WHEN
+ * (20 days, Day N of 20, window, lands/arrives) and no HOW (repacking, own box)
+ * in ANY customer-facing Consolidated Billing string. Every export of
+ * consolidatedBilling.ts is swept — a new string is covered automatically, and a
+ * new function fails the "every function is sampled" check until it is added to
+ * SAMPLES below.
+ *
+ * Exceptions (none of these is customer copy that can say where/when):
+ *  - HOLD_DAYS is a number used by the window logic (consolidatedBillingCore);
+ *    it is never rendered, and the source sweep below keeps it out of the UI.
+ *  - cbWaitingSummary is sampled with neutral titles: in the app it prints the
+ *    customer's OWN package descriptions, which we don't control.
+ */
+const R13A_BANNED = /20 days|of 20|miami|warehouse|lands|repack|own box|held in/i;
+const R13A_TIMING = /\b\d+ days?\b|\bday \d|\bwindow\b|arriv|as soon as|\bsooner\b|ships? (as|automatically|separately)|\buntil\b/i;
+
+const SAMPLES: Record<string, unknown[][]> = {
+  cbEnrolledText: [[1], [3]],
+  cbWaitingSummary: [[["Shoes"]], [["Shoes", "Headphones"]], [[]]],
+  cbSendNowConfirmText: [[1], [3]],
+  cbBillReadyText: [["CB-000001"]],
+  swiftCodeFromAc: [["406"]],
+  cbWhatsAppUrl: [["SWIFT-0406"]],
+  formatExactLb: [[0.5]],
+  cbSavingLine: [[4, 17.57, 119.48, 8]],
+  cbGroupInsuranceLabel: [[90]],
+};
+
+function everyCbString(): { name: string; text: string }[] {
+  const out: { name: string; text: string }[] = [];
+  for (const [name, value] of Object.entries(copy)) {
+    if (typeof value === "string") out.push({ name, text: value });
+    else if (typeof value === "function") {
+      for (const args of SAMPLES[name] ?? []) {
+        const r = (value as (...a: unknown[]) => unknown)(...args);
+        if (typeof r === "string") out.push({ name, text: name === "cbWhatsAppUrl" ? decodeURIComponent(r) : r });
+      }
+    } else if (Array.isArray(value)) {
+      for (const item of value) for (const v of Object.values(item as object)) if (typeof v === "string") out.push({ name, text: v });
+    }
+  }
+  return out;
+}
+
+describe("R13a: Consolidated Billing copy gives no place, timing or method (4 Oct 2026)", () => {
+  it("every exported function is sampled", () => {
+    const fns = Object.entries(copy).filter(([, v]) => typeof v === "function").map(([k]) => k);
+    expect(fns.filter((k) => !(k in SAMPLES))).toEqual([]);
+  });
+  it("no exported CB string mentions 20 days / of 20 / Miami / warehouse / lands / repack / own box / held in", () => {
+    const hits = everyCbString().filter((s) => R13A_BANNED.test(s.text));
+    expect(hits).toEqual([]);
+  });
+  it("no exported CB string gives shipping or arrival timing", () => {
+    const hits = everyCbString().filter((s) => R13A_TIMING.test(s.text));
+    expect(hits).toEqual([]);
+  });
+  it("the approved sentence is the promise, and the FAQ leads with it", () => {
+    expect(copy.CB_TOGETHER_LINE).toBe(
+      "With Consolidated Billing we consolidate your packages and deliver them together: one delivery, one bill."
+    );
+    expect(copy.CB_FAQ[0].a.startsWith(copy.CB_TOGETHER_LINE)).toBe(true);
+  });
+  it("the CB screens never render HOLD_DAYS, a day count or a window date", () => {
+    const files = [
+      "../components/ConsolidatedBillingCard.tsx",
+      "../components/SendMyPackagesNow.tsx",
+      "../app/dashboard/packages/[id]/page.tsx",
+    ];
+    for (const rel of files) {
+      const src = fs.readFileSync(path.join(__dirname, rel), "utf8");
+      // Type fields (`daysLeft: number`, `windowEnd: string`) may stay; reading them into JSX may not.
+      const hit = src.match(/HOLD_DAYS|\.daysLeft\b|\.windowEnd\b|open\.day\b|cbOpenCardText|cbShipsAutomaticallyText/)?.[0] ?? null;
+      expect({ rel, hit }).toEqual({ rel, hit: null });
+    }
   });
 });
 

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CB_WAITING_LABEL, CB_NAME, CB_PREPARING_TEXT, HOLD_DAYS } from "@/lib/consolidatedBilling";
+import { CB_WAITING_LABEL, CB_NAME, CB_PREPARING_TEXT, CB_TOGETHER_LINE } from "@/lib/consolidatedBilling";
 import SendMyPackagesNow from "@/components/SendMyPackagesNow";
 import AirdropDocuments from "../AirdropDocuments";
 import CopyTracking from "@/components/CopyTracking";
@@ -267,10 +267,7 @@ export default function PackageDetailPage() {
               <p className="text-xs font-semibold uppercase tracking-widest text-violet-300">{CB_NAME}</p>
               <p className="mt-1 text-sm font-semibold text-mist">{data.cbPreparing ? CB_PREPARING_TEXT : CB_WAITING_LABEL}</p>
               {!data.cbPreparing && (
-                <p className="mt-1 text-xs text-muted-dark">
-                  Everything that reaches our Miami warehouse within {HOLD_DAYS} days of your first package comes to your door
-                  together, with one bill.
-                </p>
+                <p className="mt-1 text-xs text-muted-dark">{CB_TOGETHER_LINE}</p>
               )}
             </section>
           )}

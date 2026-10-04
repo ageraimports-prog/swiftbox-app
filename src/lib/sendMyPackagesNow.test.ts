@@ -5,20 +5,18 @@ import { packageBadge, stageMeta } from "./status";
 describe('"Send my packages now" (2026-10-01)', () => {
   it("names the group by what the packages are, never by WR/SWF", () => {
     expect(copy.cbWaitingSummary(["Shoes", "Headphones", "Household Items"])).toBe(
-      "3 packages waiting: Shoes, Headphones, Household Items"
+      "3 packages in your group: Shoes, Headphones, Household Items"
     );
-    expect(copy.cbWaitingSummary(["Shoes"])).toBe("1 package waiting: Shoes");
+    expect(copy.cbWaitingSummary(["Shoes"])).toBe("1 package in your group: Shoes");
     expect(copy.cbWaitingSummary(["Shoes", "Headphones"])).not.toMatch(/\bWR\d|\bSWF\d/);
   });
-  it("says how long until it ships automatically", () => {
-    expect(copy.cbShipsAutomaticallyText(15)).toBe("Ships automatically in 15 days");
-    expect(copy.cbShipsAutomaticallyText(2)).toBe("Ships automatically in 2 days");
-    expect(copy.cbShipsAutomaticallyText(1)).toBe("Ships automatically after today");
-    expect(copy.cbShipsAutomaticallyText(0)).toBe("Ships automatically after today");
+  it("R13a: the hint under the list gives no timing (was 'Ships automatically in N days')", () => {
+    expect(copy.CB_SEND_NOW_HINT).toBe("Got everything you ordered? Tap Send my packages now and we'll deliver them together.");
+    expect((copy as Record<string, unknown>).cbShipsAutomaticallyText).toBeUndefined();
   });
   it("confirms in Brent's words before acting", () => {
     expect(copy.cbSendNowConfirmText(3)).toBe(
-      "Send these 3 packages now? Anything that arrives after this ships separately, or starts a new group if Consolidated Billing is still on."
+      "Send these 3 packages now? We'll deliver them together, with one bill. Any other packages come separately, or start a new group if Consolidated Billing is still on."
     );
     expect(copy.cbSendNowConfirmText(1)).toMatch(/^Send this package now\?/);
     expect(copy.CB_SEND_NOW_BUTTON).toBe("Send my packages now");
@@ -28,7 +26,7 @@ describe('"Send my packages now" (2026-10-01)', () => {
       copy.CB_PREPARING_TEXT,
       copy.CB_PREPARING_LABEL,
       copy.cbSendNowConfirmText(3),
-      copy.cbShipsAutomaticallyText(5),
+      copy.CB_SEND_NOW_HINT,
       copy.cbWaitingSummary(["Shoes"]),
       ...copy.CB_FAQ.flatMap((f) => [f.q, f.a]),
     ].join("\n");
@@ -40,9 +38,10 @@ describe('"Send my packages now" (2026-10-01)', () => {
     expect(packageBadge(3, true, true).label).not.toBe(stageMeta(3).label);
     expect(packageBadge(3, true, false).label).toBe(copy.CB_WAITING_LABEL);
   });
-  it("the FAQ says 20 days is the most, and how to send sooner", () => {
-    const a = copy.CB_FAQ.find((f) => f.q === "Can I get my packages sooner?")!.a;
-    expect(a).toMatch(/20 days is the most we wait/);
+  it("the FAQ explains Send my packages now without timing (R13a)", () => {
+    const a = copy.CB_FAQ.find((f) => f.q === "What does “Send my packages now” do?")!.a;
     expect(a).toMatch(/Send my packages now/);
+    expect(a).toMatch(/deliver them together/);
+    expect(a).not.toMatch(/\b\d+ days?\b|sooner|as soon as/i);
   });
 });

@@ -62,8 +62,8 @@ is the most a group waits. `SendMyPackagesNow` (own card at the TOP of the Dashb
 and on the page of any package in the open group — `cbInOpenGroup`, Miami included)
 and `SendNowPanel` inside the Account card (`showSendNow`). Shown only when
 `getCbState().group` is set: the OPEN group with ≥1 package (Buy For Me excluded).
-Names the group by description + tracking (`cbWaitingSummary`), "Ships automatically
-in N days", and confirms IN the page (no `window.confirm` — it froze the Chrome
+Names the group by description + tracking (`cbWaitingSummary`), shows the timing-free
+`CB_SEND_NOW_HINT` (R13a — "Ships automatically in N days" was removed 2026-10-04), and confirms IN the page (no `window.confirm` — it froze the Chrome
 extension and is poor on phones). `POST /api/consolidated-billing/release` forwards
 only the session's user id + groupId to the admin, which owns every rule (closes the
 group as on day 21, refuses anyone else's group, answers "already" to a repeat). The
@@ -111,13 +111,21 @@ copy of that FAQ still has the old wording.
 - **Play Store data safety: unchanged** — a preference flag and figures already
   declared (purchase history, declared value); the PDF comes from our own admin.
 
-**Copy rules:** only these claims — free; 20 days from the first Miami arrival;
-delivered together as soon as the last package lands; one bill with a per-item
-customs breakdown; rates unchanged per package; no repacking. Never "cheapest", "no
-hidden fees", delivery dates or times, competitor names or volume numbers. Wherever
-US$1.99 appears, the 20% fuel is on the same line. The only phone number is
-(868) 609-3000.
-
+**Copy rules (R13a, Brent 2026-10-04 — supersedes the old "20 days from the first
+Miami arrival / as soon as the last package lands / no repacking" claims):** the
+message is only "With Consolidated Billing we consolidate your packages and deliver
+them together: one delivery, one bill." (`CB_TOGETHER_LINE`). Allowed besides: free;
+the switch (Account tab); the bill saving (combined weight rounded up once, insurance
+once on the combined value, each package still covered on its own up to US$500);
+duty/OPT/VAT per package; US$1.99/lb with the 20% fuel on the same line; every
+account; "Send my packages now" as a feature with timing-free text. NEVER, in a CB
+context: where packages are held or wait (no Miami, warehouse, Trinidad), when they
+ship or arrive (no 20 days, Day N of 20, window dates, "lands", "once they all
+arrive"), or how the consolidation happens (no repacking / own box). `HOLD_DAYS`
+stays for logic and is never rendered. Never "cheapest", "no hidden fees", typed
+savings in marketing lines, delivery dates or times, competitor names or volume
+numbers. The only phone number is (868) 609-3000. Locked by the "R13a" block in
+`src/lib/consolidatedBilling.test.ts`, which sweeps every export of the copy file.
 ## Install page and reminder (2026-09-29)
 
 - **`/install` is PUBLIC** ("Get the Swiftbox app"); swiftboxtt.com/app 307s to

@@ -9,7 +9,7 @@ import {
   cbShipsAutomaticallyText,
   cbWaitingSummary,
 } from "@/lib/consolidatedBilling";
-import { displayTitle, trackingNumbers } from "@/lib/packageDisplay";
+import { formatDescription, trackingNumbers } from "@/lib/packageDisplay";
 import { TrackingLine } from "@/components/PackageCard";
 
 /** The open group as /api/consolidated-billing returns it. */
@@ -40,7 +40,7 @@ function announce(state: unknown) {
 export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (state: unknown) => void }) {
   const [step, setStep] = React.useState<"idle" | "confirm" | "busy" | "done" | "already">("idle");
   const [error, setError] = React.useState<string | null>(null);
-  const titles = group.packages.map((p) => displayTitle(p.commodities) ?? "Package");
+  const titles = group.packages.map((p) => formatDescription(p.commodities) ?? "Package");
   const count = group.packages.length;
 
   async function send() {
@@ -78,7 +78,7 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <p className="text-sm font-semibold text-mist">{cbWaitingSummary(titles)}</p>
+        <p className="break-words text-sm font-semibold text-mist">{cbWaitingSummary(titles)}</p>
         <ul className="mt-2 flex flex-col gap-1.5">
           {group.packages.slice(0, 4).map((p, i) => {
             const num = trackingNumbers(p.tracking)[0];

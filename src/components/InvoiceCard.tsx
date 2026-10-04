@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { STATUS_BADGE, formatDate, formatTtd, type InvoiceStatus } from "@/lib/invoice-line";
-import { displayTitle, packagesSummary, trackingNumbers } from "@/lib/packageDisplay";
+import { formatDescription, packagesSummary, trackingNumbers } from "@/lib/packageDisplay";
 import { TrackingLine } from "@/components/PackageCard";
 
 /** An invoice as /api/invoices returns it. */
@@ -30,7 +30,7 @@ function fallbackTitle(scope: InvoiceSummary["scope"]): string {
 export default function InvoiceCard({ inv }: { inv: InvoiceSummary }) {
   const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.unpaid;
   const pkgs = inv.packages ?? [];
-  const title = packagesSummary(pkgs.map((p) => displayTitle(p.commodities) ?? "Package"));
+  const title = packagesSummary(pkgs.map((p) => formatDescription(p.commodities) ?? "Package"));
   const numbers = pkgs.flatMap((p) => trackingNumbers(p.tracking));
 
   return (

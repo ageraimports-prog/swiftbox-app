@@ -6,7 +6,7 @@ import { CB_WAITING_LABEL, CB_NAME, CB_PREPARING_TEXT, HOLD_DAYS } from "@/lib/c
 import SendMyPackagesNow from "@/components/SendMyPackagesNow";
 import AirdropDocuments from "../AirdropDocuments";
 import CopyTracking from "@/components/CopyTracking";
-import { displayTitle, shortRef, trackingNumbers } from "@/lib/packageDisplay";
+import { formatDescription, shortRef, trackingNumbers } from "@/lib/packageDisplay";
 import { useParams } from "next/navigation";
 import {
   STAGES,
@@ -238,7 +238,7 @@ export default function PackageDetailPage() {
           <div className="flex flex-col gap-2">
             <div className="flex items-start justify-between gap-3">
               <h1 className="sb-disp min-w-0 break-words text-2xl text-mist">
-                {displayTitle(data.package.commodities) ?? "Package"}
+                {formatDescription(data.package.commodities) ?? "Package"}
               </h1>
               {/* A waiting package has no stage badge here: the Consolidated Billing
                   box right below says so in full, and a sentence-long badge beside

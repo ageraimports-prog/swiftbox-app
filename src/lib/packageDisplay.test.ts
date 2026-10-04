@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   detectCarrier,
-  displayTitle,
+  formatDescription,
   formatTracking,
   packageIdentity,
   packagesSummary,
@@ -90,35 +90,41 @@ describe("formatTracking", () => {
   });
 });
 
-describe("displayTitle", () => {
-  it("title-cases ALL-CAPS and all-lower descriptions", () => {
-    expect(displayTitle("PARTY SUPPLY")).toBe("Party Supply");
-    expect(displayTitle("toy")).toBe("Toy");
-    expect(displayTitle("SHOES, WEARING APPAREL")).toBe("Shoes, Wearing Apparel");
-    expect(displayTitle("E-CIGARETTES")).toBe("E-Cigarettes");
-    expect(displayTitle("CLOTHING ")).toBe("Clothing");
-    expect(displayTitle("BAGS AND SHOES FOR THE HOME")).toBe("Bags and Shoes for the Home");
+describe("formatDescription", () => {
+  it("shows every description in capitals", () => {
+    expect(formatDescription("Phone cases")).toBe("PHONE CASES");
+    expect(formatDescription("iPhone case")).toBe("IPHONE CASE");
+    expect(formatDescription("toy")).toBe("TOY");
+    expect(formatDescription("sushi prep bowls")).toBe("SUSHI PREP BOWLS");
   });
 
-  it("keeps acronyms and model codes upper-case", () => {
-    expect(displayTitle("USB CABLE")).toBe("USB Cable");
-    expect(displayTitle("GGTEX59 EXTENSION KIT")).toBe("GGTEX59 Extension Kit");
-    expect(displayTitle("LED TV")).toBe("LED TV");
+  it("leaves an already-capital description as it is", () => {
+    expect(formatDescription("PARTY SUPPLY")).toBe("PARTY SUPPLY");
+    expect(formatDescription("SHOES, WEARING APPAREL")).toBe("SHOES, WEARING APPAREL");
+    expect(formatDescription("GGTEX59 EXTENSION KIT")).toBe("GGTEX59 EXTENSION KIT");
   });
 
-  it("leaves mixed-case text as typed", () => {
-    expect(displayTitle("iPhone case")).toBe("iPhone case");
+  it("trims and collapses whitespace, keeps punctuation", () => {
+    expect(formatDescription("  led   light ")).toBe("LED LIGHT");
+    expect(formatDescription("rice\t\tcooker\r\nand pot")).toBe("RICE COOKER AND POT");
+    expect(formatDescription("cosmetics/bags")).toBe("COSMETICS/BAGS");
+    expect(formatDescription("e-cigarettes")).toBe("E-CIGARETTES");
+  });
+
+  it("upper-cases accented letters", () => {
+    expect(formatDescription("café")).toBe("CAFÉ");
+    expect(formatDescription("crème brûlée set")).toBe("CRÈME BRÛLÉE SET");
   });
 
   it("is null for nothing", () => {
-    for (const s of ["", "   ", null, undefined, "N/A", "-", "x"]) expect(displayTitle(s)).toBeNull();
+    for (const s of ["", "   ", null, undefined, "N/A", "-", "x"]) expect(formatDescription(s)).toBeNull();
   });
 });
 
 describe("packageIdentity", () => {
   it("leads with the description and the tracking number", () => {
     expect(packageIdentity({ commodities: "PARTY SUPPLY", tracking: UPS, wr: "WR1193" })).toEqual({
-      title: "Party Supply",
+      title: "PARTY SUPPLY",
       tracking: { number: UPS, carrier: "UPS" },
       moreTracking: 0,
       ref: "WR1193",

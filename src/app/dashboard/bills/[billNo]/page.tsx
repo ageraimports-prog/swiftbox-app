@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { STATUS_BADGE, formatDate, formatTtd, type InvoiceStatus } from "@/lib/invoice-line";
 import type { CbBillDetail, CbBillWeights } from "@/lib/consolidated-billing";
 import { cbGroupInsuranceLabel, cbSavingLine, formatExactLb } from "@/lib/consolidatedBilling";
-import { displayTitle, packagesSummary, shortRef, trackingNumbers } from "@/lib/packageDisplay";
+import { formatDescription, packagesSummary, shortRef, trackingNumbers } from "@/lib/packageDisplay";
 import { RefText, TrackingLine } from "@/components/PackageCard";
 
 /**
@@ -69,7 +69,7 @@ export default function BillPage() {
           <div className="flex flex-col gap-1">
             <div className="flex items-start justify-between gap-3">
               <h1 className="sb-disp min-w-0 break-words text-2xl text-mist">
-                {packagesSummary(bill.packages.map((p) => displayTitle(p.contents) ?? "Package")) || "Your packages"}
+                {packagesSummary(bill.packages.map((p) => formatDescription(p.contents) ?? "Package")) || "Your packages"}
               </h1>
               <span className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
             </div>
@@ -90,7 +90,7 @@ export default function BillPage() {
 
           {bill.packages.map((p) => {
             const s = p.section;
-            const title = displayTitle(p.contents) ?? "Package";
+            const title = formatDescription(p.contents) ?? "Package";
             const numbers = trackingNumbers(p.tracking);
             return (
               <section key={p.invoiceNo} className="rounded-lg border border-mist/10 bg-ink-2 p-5">
@@ -117,7 +117,7 @@ export default function BillPage() {
                   {s.items.map((it, i) => (
                     <li key={i} className="border-b border-mist/10 py-2 last:border-b-0">
                       <div className="flex justify-between gap-3 text-sm">
-                        <span className="text-white">{it.description}</span>
+                        <span className="min-w-0 break-words text-white">{formatDescription(it.description) ?? it.description}</span>
                         <span className="font-bold text-white">{formatTtd(it.dutyTtd + it.optTtd + it.vatTtd + it.otherTaxTtd)}</span>
                       </div>
                       <p className="mt-0.5 text-xs text-muted-dark">

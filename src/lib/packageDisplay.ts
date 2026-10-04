@@ -15,47 +15,21 @@ export type Carrier = "UPS" | "USPS" | "FedEx" | "Amazon";
 /** Placeholders staff type when there is nothing to say. */
 const JUNK = /^(x+|n\/?a|none|null|nil|unknown|unkown|unk|test|tbd|-+|\.+|\?+|0+)$/i;
 
-/** Kept upper-case when title-casing an ALL-CAPS description. */
-const ACRONYMS = new Set([
-  "AC", "CD", "DC", "DVD", "GPS", "HDMI", "LCD", "LED", "PC", "SD", "TV", "UK", "US", "USA", "USB",
-]);
-/** Kept lower-case mid-phrase. */
-const SMALL = new Set(["a", "an", "and", "as", "at", "for", "in", "of", "on", "or", "the", "to", "with"]);
-
-function capWord(word: string, first: boolean): string {
-  // Hyphenated words cap each half: "E-CIGARETTES" → "E-Cigarettes".
-  if (word.includes("-")) {
-    return word
-      .split("-")
-      .map((w, i) => capWord(w, first && i === 0))
-      .join("-");
-  }
-  const m = /^([^A-Za-z0-9]*)([A-Za-z0-9'’]*)(.*)$/.exec(word);
-  if (!m || !m[2]) return word;
-  const [, lead, core, trail] = m;
-  const upper = core.toUpperCase();
-  let out: string;
-  if (ACRONYMS.has(upper) || /\d/.test(core)) out = upper; // model codes: "GGTEX59", "PS5"
-  else if (!first && SMALL.has(core.toLowerCase())) out = core.toLowerCase();
-  else out = core.charAt(0).toUpperCase() + core.slice(1).toLowerCase();
-  return lead + out + trail;
-}
-
 /**
- * The stored description, readable. "WEARING APPAREL" → "Wearing Apparel",
- * "toy" → "Toy". Text a person typed in mixed case ("iPhone case") is left as
- * typed. Null when there is nothing worth showing.
+ * An item description as the customer sees it: trimmed, runs of whitespace
+ * collapsed to one space, in FULL CAPITALS, so every package (Airdrop and Medley)
+ * reads exactly as it does in the admin. "Phone cases" → "PHONE CASES",
+ * "café" → "CAFÉ". Null when there is nothing worth showing (blank or a staff
+ * placeholder such as "N/A"), so the screen can fall back to "Package".
+ *
+ * Item descriptions ONLY — never tracking numbers, names, addresses or account
+ * codes. Display only: what is stored, and what a customer types into a
+ * pre-alert, is never changed by this.
  */
-export function displayTitle(raw: string | null | undefined): string | null {
+export function formatDescription(raw: string | null | undefined): string | null {
   const s = String(raw ?? "").replace(/\s+/g, " ").trim();
   if (!s || JUNK.test(s)) return null;
-  const hasUpper = /[A-Z]/.test(s);
-  const hasLower = /[a-z]/.test(s);
-  if (hasUpper && hasLower) return s;
-  return s
-    .split(" ")
-    .map((w, i) => capWord(w, i === 0))
-    .join(" ");
+  return s.toUpperCase();
 }
 
 /**
@@ -195,7 +169,7 @@ export function packageIdentity(p: {
 }): PackageIdentity {
   const all = trackingNumbers(p.tracking);
   return {
-    title: displayTitle(p.commodities) ?? (p.fallbackTitle || "Package"),
+    title: formatDescription(p.commodities) ?? (p.fallbackTitle || "Package"),
     tracking: all[0] ?? null,
     moreTracking: Math.max(0, all.length - 1),
     ref: shortRef(p.wr, p.packageCode),

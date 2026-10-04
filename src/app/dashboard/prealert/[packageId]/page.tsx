@@ -5,7 +5,7 @@ import { loadPickState, nextAfter } from "@/lib/prealert-pick-server";
 import PrealertClosed from "@/components/PrealertClosed";
 import QueryToast from "@/components/QueryToast";
 import CopyTracking from "@/components/CopyTracking";
-import { displayTitle, trackingNumbers } from "@/lib/packageDisplay";
+import { formatDescription, trackingNumbers } from "@/lib/packageDisplay";
 import PickForm from "./PickForm";
 
 /**
@@ -51,8 +51,8 @@ export default async function PickPrealertPage({ params }: { params: Promise<{ p
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">
               At our {pick.pkg.warehouse} warehouse
             </p>
-            <p className="sb-disp mt-2 text-xl text-mist">
-              {displayTitle(pick.pkg.description) ?? pick.pkg.carrier ?? "Package"}
+            <p className="sb-disp mt-2 break-words text-xl text-mist">
+              {formatDescription(pick.pkg.description) ?? pick.pkg.carrier ?? "Package"}
             </p>
             {tracking.length > 0 && (
               <div className="mt-1.5">

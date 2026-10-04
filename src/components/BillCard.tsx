@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { STATUS_BADGE, formatDate, formatTtd, type InvoiceStatus } from "@/lib/invoice-line";
-import { displayTitle, packagesSummary, trackingNumbers } from "@/lib/packageDisplay";
+import { formatDescription, packagesSummary, trackingNumbers } from "@/lib/packageDisplay";
 import { TrackingLine, RefText } from "@/components/PackageCard";
 
 /** A Consolidated Bill as /api/invoices returns it. */
@@ -23,7 +23,7 @@ export type BillSummary = {
  */
 export function billHeadline(b: Pick<BillSummary, "packages" | "packageCount">): string {
   const pkgs = Array.isArray(b.packages) ? b.packages : [];
-  const title = packagesSummary(pkgs.map((p) => displayTitle(p.commodities) ?? "Package"));
+  const title = packagesSummary(pkgs.map((p) => formatDescription(p.commodities) ?? "Package"));
   if (title) return title;
   const n = b.packageCount ?? (typeof b.packages === "number" ? b.packages : 0);
   return n === 1 ? "1 package" : n > 1 ? `${n} packages` : "Your packages";

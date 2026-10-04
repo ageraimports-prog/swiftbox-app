@@ -31,8 +31,10 @@ export async function POST(req: Request) {
   }
   if (typeof body.on !== "boolean") return NextResponse.json({ error: "on must be true or false" }, { status: 400 });
   try {
-    await setCbSetting(session.id, body.on);
-    return NextResponse.json(await getCbState(session.id));
+    const r = await setCbSetting(session.id, body.on);
+    // Turning it on also enrols packages already with us — the state read
+    // afterwards already shows their group; `enrolled` lets the card say so.
+    return NextResponse.json({ ...(await getCbState(session.id)), enrolled: r.enrolled });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Couldn't change Consolidated Billing." }, { status: 400 });
   }

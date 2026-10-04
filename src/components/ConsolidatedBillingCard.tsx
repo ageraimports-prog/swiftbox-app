@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   CB_NAME,
   CB_LONG_DESCRIPTION,
+  CB_EXISTING_INCLUDED,
+  cbEnrolledText,
   CB_OFF_CONFIRM,
   CB_CLOSED_CARD,
   CB_FAQ,
@@ -45,6 +47,7 @@ export default function ConsolidatedBillingCard({
   const [state, setState] = React.useState<State | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [note, setNote] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     fetch("/api/consolidated-billing")
@@ -63,6 +66,7 @@ export default function ConsolidatedBillingCard({
     if (!next && !window.confirm(CB_OFF_CONFIRM)) return;
     setBusy(true);
     setError(null);
+    setNote(null);
     try {
       const res = await fetch("/api/consolidated-billing", {
         method: "POST",
@@ -72,6 +76,11 @@ export default function ConsolidatedBillingCard({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't save.");
       setState(data);
+      // Turning it on pulls in the packages already with us: say so, and tell
+      // "Send my packages now" and the Dashboard's package cards to re-read.
+      const enrolled = Number(data.enrolled ?? 0);
+      if (next && enrolled > 0) setNote(cbEnrolledText(enrolled));
+      window.dispatchEvent(new CustomEvent(CB_STATE_EVENT, { detail: data }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save.");
     } finally {
@@ -90,6 +99,8 @@ export default function ConsolidatedBillingCard({
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">{CB_NAME}</p>
           <div className="mt-2 space-y-2 text-sm text-mist">
             {!on && <p>{CB_LONG_DESCRIPTION}</p>}
+            {!on && <p>{CB_EXISTING_INCLUDED}</p>}
+            {on && note && <p className="font-semibold">{note}</p>}
             {/* On the Dashboard the card at the top already says it. */}
             {showSendNow && state.preparing && <p className="font-semibold">{CB_PREPARING_TEXT}</p>}
             {on && state.open && <p>{cbOpenCardText(state.open.day, state.open.windowEnd)}</p>}

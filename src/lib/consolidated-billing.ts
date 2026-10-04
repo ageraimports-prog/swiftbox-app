@@ -171,7 +171,10 @@ export async function getCbState(userId: number): Promise<CbState> {
  * Throws with a customer-safe sentence when the admin refuses or can't be reached;
  * the switch then does not move.
  */
-export async function setCbSetting(userId: number, on: boolean): Promise<{ released: number; removed: number }> {
+export async function setCbSetting(
+  userId: number,
+  on: boolean
+): Promise<{ released: number; removed: number; enrolled: number }> {
   const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
   if (!key) throw new Error("Consolidated Billing can't be changed right now. Please WhatsApp or call us.");
   const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
@@ -185,12 +188,13 @@ export async function setCbSetting(userId: number, on: boolean): Promise<{ relea
       signal: ctl.signal,
       cache: "no-store",
     });
-    const data = (await res.json().catch(() => ({}))) as { released?: number; removed?: number; error?: string };
+    const data = (await res.json().catch(() => ({}))) as { released?: number; removed?: number; enrolled?: number; error?: string };
     if (!res.ok) {
       if (res.status === 400 && data.error) throw new Error(data.error);
       throw new Error("Couldn't change Consolidated Billing. Please try again.");
     }
-    return { released: Number(data.released ?? 0), removed: Number(data.removed ?? 0) };
+    // enrolled: turning it ON pulled in packages already in Miami / on their way (admin, 2026-10-03).
+    return { released: Number(data.released ?? 0), removed: Number(data.removed ?? 0), enrolled: Number(data.enrolled ?? 0) };
   } catch (e) {
     if (e instanceof Error && e.name !== "AbortError" && !/fetch failed/i.test(e.message)) throw e;
     throw new Error("Couldn't change Consolidated Billing. Please try again.");

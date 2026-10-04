@@ -31,6 +31,21 @@ export const CB_SHORT_LINE =
 export const CB_LONG_DESCRIPTION =
   "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — its freight charged on the combined weight, rounded up once, and its insurance once on the combined value. Free.";
 
+/**
+ * Under the OFF card (2026-10-03): turning it on also takes the packages the
+ * customer already has with us. App-only — CB_LONG_DESCRIPTION stays word for
+ * word with the website. Never says where they are (R13).
+ */
+export const CB_EXISTING_INCLUDED =
+  "Packages already at our Miami warehouse or on their way to you are included too.";
+
+/** After turning it on, when packages already with us joined the group. */
+export function cbEnrolledText(count: number): string {
+  return count === 1
+    ? "Your package already with us is in your group."
+    : `Your ${count} packages already with us are in your group.`;
+}
+
 /** Confirm before turning it OFF. */
 export const CB_OFF_CONFIRM = "Turning this off sends out what's ready now.";
 

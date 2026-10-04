@@ -10,6 +10,9 @@ const allCopy = [
   copy.CB_CLOSED_CARD,
   copy.cbOpenCardText(3, "Sat 17 Oct"),
   copy.cbBillReadyText("CB-000001"),
+  copy.CB_EXISTING_INCLUDED,
+  copy.cbEnrolledText(1),
+  copy.cbEnrolledText(3),
   ...copy.CB_FAQ.flatMap((f) => [f.q, f.a]),
 ].join("\n");
 
@@ -27,6 +30,14 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
     expect(copy.CB_LONG_DESCRIPTION).toBe(
       "Ordering from more than one store? Turn on Consolidated Billing and everything that reaches our Miami warehouse within 20 days comes to your door together, with one bill — its freight charged on the combined weight, rounded up once, and its insurance once on the combined value. Free."
     );
+  });
+  it("turning it on includes packages already with us (2026-10-03), never 'future packages only'", () => {
+    expect(copy.CB_EXISTING_INCLUDED).toBe(
+      "Packages already at our Miami warehouse or on their way to you are included too."
+    );
+    expect(copy.cbEnrolledText(1)).toBe("Your package already with us is in your group.");
+    expect(copy.cbEnrolledText(2)).toBe("Your 2 packages already with us are in your group.");
+    expect(allCopy).not.toMatch(/future packages|from now on only|only new packages/i);
   });
   it("combined-weight freight + group insurance: the FAQ says Yes, with the 0.5 lb example", () => {
     const f = copy.CB_FAQ.find((x) => x.q === "Does Consolidated Billing lower my freight and insurance?")!;

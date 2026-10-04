@@ -184,9 +184,14 @@ pre-alert and lets the customer confirm one.
 - **Headline = description, second line = carrier tracking number, WR/SWF =
   small "Ref".** Every customer-facing package display goes through
   `src/lib/packageDisplay.ts` (`packageIdentity`, `trackingNumbers`,
-  `displayTitle`, `detectCarrier`) and the shared `PackageCard` / `TrackingLine`
+  `formatDescription`, `detectCarrier`) and the shared `PackageCard` / `TrackingLine`
   / `RefText` / `InvoiceCard` / `CopyTracking` components. Don't reintroduce
   `packageCode || wr` as a title. Display only — nothing stored changes.
+- **Descriptions are shown in FULL CAPITALS** (since 2026-10-04), every package,
+  Airdrop and Medley, to match the admin: `formatDescription` trims, collapses
+  whitespace and upper-cases — nothing else. The old title-case `displayTitle`
+  is deleted; don’t bring it back. Never applied to tracking numbers, names,
+  addresses or codes, and never to a pre-alert input while the customer types.
 - **A carrier label is shown only when the check digit agrees** (UPS 1Z, FedEx
   12/15, USPS 9[1-5] 20–22/26, Amazon TBA). Never add a carrier on pattern
   alone: a wrong label is worse than none. FedEx 34-digit and USPS 420+ZIP label

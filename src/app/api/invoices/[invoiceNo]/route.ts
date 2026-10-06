@@ -123,11 +123,17 @@ export async function GET(
 
   const total = Number(h.total_ttd);
   const paid = Number(h.amount_paid);
-  // Referral credit = the negative TTD lines (the only negative lines we ever
-  // write — every charge line is positive). Already reflected in total_ttd;
+  // Referral credit = the negative TTD lines. Already reflected in total_ttd;
   // surfaced so the footer reconciles Shipping + Customs − Credit = Total.
+  // EXCEPT 'adjustment' lines ("Shipping waived — …", "5 lb free — …", written
+  // by the admin's billing adjustments): those are already inside the NET
+  // shipping_ttd, so counting them here too would print a footer that does not
+  // add up. Same rule as the admin's referralCreditFromLines.
   const referralCreditTtd = round2(
-    lineRows.reduce((a, l) => a + Math.min(0, Number(l.amount_ttd)), 0)
+    lineRows.reduce(
+      (a, l) => (l.line_type === "adjustment" ? a : a + Math.min(0, Number(l.amount_ttd))),
+      0
+    )
   );
 
   return NextResponse.json({

@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageDisplay } from "@/lib/consolidated-billing";
+import { customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -44,6 +45,10 @@ export async function GET() {
   // last arrival's stage (R7).
   const cb = await cbPackageDisplay(session.id).catch(() => new Map());
 
+  // A status the office set for the customer to see (display only). Only a
+  // current, allowed one is sent; the merge rule reads the RAW ship_status.
+  const overrides = await customerStatusOverrides(session.id, rows.map((r) => Number(r.pk_id)));
+
   const packages = rows.map((r) => ({
     id: Number(r.pk_id),
     wr: r.wr,
@@ -68,6 +73,11 @@ export async function GET() {
     cbWaiting: cb.get(Number(r.pk_id))?.waiting ?? false,
     // The customer said "send them"; still waiting for the group to go out.
     cbPreparing: cb.get(Number(r.pk_id))?.preparing ?? false,
+    customerStatus: viewFor(
+      overrides.get(Number(r.pk_id)),
+      r.ship_status == null ? null : Number(r.ship_status),
+      cb.get(Number(r.pk_id))?.grouped ?? false
+    ),
   }));
 
   return NextResponse.json({ packages });

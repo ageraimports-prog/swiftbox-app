@@ -11,8 +11,10 @@ import { useParams } from "next/navigation";
 import {
   STAGES,
   freightLabel,
-  shipStatusToStage,
+  packageBadge,
+  shownStage,
 } from "@/lib/status";
+import type { CustomerStatusView } from "@/lib/customer-status-core";
 
 type Pkg = {
   id: number;
@@ -62,9 +64,11 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function Stepper({ shipment, cbWaiting = false, cbPreparing = false }: { shipment: Shipment | null; cbWaiting?: boolean; cbPreparing?: boolean }) {
+function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerStatus = null }: { shipment: Shipment | null; cbWaiting?: boolean; cbPreparing?: boolean; customerStatus?: CustomerStatusView | null }) {
   // No shipment row = logged at Miami, not yet manifested → stage 0 active.
-  const current = shipStatusToStage(shipment?.shipStatus ?? null);
+  // A stage the office set (only ever ahead of the real one) moves the bar; a
+  // notice (Delayed / On hold) leaves it at the real stage.
+  const current = shownStage(shipment?.shipStatus ?? null, customerStatus);
 
   // Consolidated Billing: after Miami the package is simply waiting for its
   // group — one step, no later stages, no dates that would say it had landed.
@@ -177,6 +181,7 @@ export default function PackageDetailPage() {
     cbWaiting?: boolean;
     cbPreparing?: boolean;
     cbInOpenGroup?: boolean;
+    customerStatus?: CustomerStatusView | null;
   } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -205,6 +210,8 @@ export default function PackageDetailPage() {
   }, [id]);
 
   const tracking = data ? trackingNumbers(data.package.tracking) : [];
+  const cs = data?.customerStatus ?? null;
+  const badge = data ? packageBadge(data.shipment?.shipStatus ?? null, data.cbWaiting, data.cbPreparing, cs) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -243,13 +250,9 @@ export default function PackageDetailPage() {
               {/* A waiting package has no stage badge here: the Consolidated Billing
                   box right below says so in full, and a sentence-long badge beside
                   the name would squeeze it to a few letters on a phone. */}
-              {!data.cbWaiting && (
-                <span
-                  className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-                    STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].badge
-                  }`}
-                >
-                  {STAGES[shipStatusToStage(data.shipment?.shipStatus ?? null)].label}
+              {(!data.cbWaiting || cs) && badge && (
+                <span className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.badge}`}>
+                  {badge.label}
                 </span>
               )}
             </div>
@@ -261,6 +264,15 @@ export default function PackageDetailPage() {
               </p>
             )}
           </div>
+
+          {cs?.kind === "notice" ? (
+            <section className="rounded-lg border border-amber-400/50 bg-amber-400/10 p-4">
+              <p className="text-sm font-semibold text-amber-200">{cs.label}</p>
+              {cs.note && <p className="mt-1 text-sm text-mist">{cs.note}</p>}
+            </section>
+          ) : cs?.note ? (
+            <p className="text-sm text-muted-dark">{cs.note}</p>
+          ) : null}
 
           {data.cbWaiting && (
             <section className="rounded-lg border border-violet-400/40 bg-violet-500/10 p-4">
@@ -309,7 +321,7 @@ export default function PackageDetailPage() {
             <h2 className="mb-5 text-xs font-semibold uppercase tracking-widest text-muted-dark">
               Delivery status
             </h2>
-            <Stepper shipment={data.shipment} cbWaiting={!!data.cbWaiting} cbPreparing={!!data.cbPreparing} />
+            <Stepper shipment={data.shipment} cbWaiting={!!data.cbWaiting} cbPreparing={!!data.cbPreparing} customerStatus={cs} />
           </section>
         </>
       )}

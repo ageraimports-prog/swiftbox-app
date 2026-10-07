@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { freightLabel, packageBadge } from "@/lib/status";
+import type { CustomerStatusView } from "@/lib/customer-status-core";
 import {
   formatTracking,
   packageIdentity,
@@ -28,6 +29,8 @@ export type PackageSummary = {
   cbWaiting?: boolean;
   /** The customer said "send them" — "Being prepared for delivery", still no stage. */
   cbPreparing?: boolean;
+  /** A status the office set for this package (only sent while current). Wins over the rest. */
+  customerStatus?: CustomerStatusView | null;
 };
 
 /** "UPS" / "FedEx" chip before a tracking number. Only ever a certain carrier. */
@@ -91,7 +94,10 @@ function formatDate(date: string): string {
  * No tracking number → the ref takes the tracking line's place instead.
  */
 export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
-  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting, pkg.cbPreparing);
+  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting, pkg.cbPreparing, pkg.customerStatus);
+  // The Consolidated Billing sentence goes on its own line; any other badge is short.
+  const longBadge = !!pkg.cbWaiting && !pkg.customerStatus;
+  const note = pkg.customerStatus?.note ?? null;
   const id = packageIdentity(pkg);
   return (
     <Link
@@ -100,7 +106,7 @@ export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
     >
       <div className="flex items-start justify-between gap-3">
         <p className="sb-disp min-w-0 truncate text-lg text-mist">{id.title}</p>
-        {!pkg.cbWaiting && (
+        {!longBadge && (
           <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}>
             {meta.label}
           </span>
@@ -108,10 +114,14 @@ export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
       </div>
       {/* The waiting label is a sentence — on its own line it never squeezes the
           package's name down to a few letters on a phone. */}
-      {pkg.cbWaiting && (
+      {longBadge && (
         <span className={`mt-1.5 inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ${meta.badge}`}>
           {meta.label}
         </span>
+      )}
+
+      {note && (
+        <p className={`mt-1.5 text-xs font-medium ${pkg.customerStatus?.kind === "notice" ? "text-amber-200/90" : "text-muted-dark"}`}>{note}</p>
       )}
 
       {id.tracking ? (

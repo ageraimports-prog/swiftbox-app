@@ -248,6 +248,12 @@ export type CbPackageDisplay = {
   preparing: boolean;
   /** A member of the customer's OPEN group (Miami included) — where "Send my packages now" is offered. */
   inOpenGroup: boolean;
+  /**
+   * An active member of an UNRELEASED group (open or closed), wherever it is.
+   * The office's customer-facing status may only show such a package a notice
+   * (Delayed / On hold), never a stage (customer-status-core.ts, R13).
+   */
+  grouped: boolean;
   /** R7 — a released group's members show the last arrival's stage + date. */
   override: { shipStatus: number | null; awaitingDate: string | null } | null;
 };
@@ -274,7 +280,7 @@ export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPa
     } else {
       // Only once it has left Miami: a package still in Miami simply shows In Miami.
       const preparing = r.state === "closed" && r.close_reason === "customer" && Number(r.ship_status ?? 0) >= 2;
-      out.set(Number(r.pk_id), { waiting: Number(r.ship_status ?? 0) >= 2, preparing, inOpenGroup: r.state === "open", override: null });
+      out.set(Number(r.pk_id), { waiting: Number(r.ship_status ?? 0) >= 2, preparing, inOpenGroup: r.state === "open", grouped: true, override: null });
     }
   }
   for (const members of released.values()) {
@@ -284,7 +290,7 @@ export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPa
     })));
     // Once everything is delivered each package shows its own record again.
     const override = show.shipStatus != null && show.shipStatus < 5 ? show : null;
-    for (const m of members) out.set(Number(m.pk_id), { waiting: false, preparing: false, inOpenGroup: false, override });
+    for (const m of members) out.set(Number(m.pk_id), { waiting: false, preparing: false, inOpenGroup: false, grouped: false, override });
   }
   return out;
 }

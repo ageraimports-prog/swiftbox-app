@@ -211,6 +211,25 @@ pre-alert and lets the customer confirm one.
 - The Packages screen has no search box; if one is added, match tracking
   (compacted, case-insensitive, last 4+), description and WR/SWF.
 
+## Status the office sets for the customer (since 2026-10-06, admin migration 055)
+
+- The owner can set what a customer SEES as a package's status (admin
+  `swiftbox_customer_status_overrides`, written ONLY by the admin). Display
+  only: this app never writes it, and nothing else here reads it.
+- `src/lib/customer-status-core.ts` is CODE-IDENTICAL to the admin's
+  `lib/customer-status-core.ts` — change both together. Read through
+  `customerStatusOverrides` (`src/lib/customer-status.ts`: separate query, never
+  a JOIN into the package list, never throws — a missing table = normal status).
+- The routes (`/api/packages`, `/api/packages/[id]`) send `customerStatus` only
+  when it is current: a stage label while the RAW ship_status is behind it,
+  "Delayed" / "On hold — contact us" until the real stage moves on. A package in
+  an unreleased Consolidated Billing group (`cbPackageDisplay().grouped`) never
+  gets a stage label (R13).
+- ONE helper for every screen: `packageBadge(..., customerStatus)` and
+  `shownStage(shipStatus, customerStatus)` in `src/lib/status.ts` — card, detail
+  header and stepper. A notice is an amber chip with its note; the bar stays at
+  the real stage. Nothing tells the customer it was set by hand.
+
 ## Verification
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.

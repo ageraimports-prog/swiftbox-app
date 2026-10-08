@@ -94,7 +94,7 @@ function formatDate(date: string): string {
  * No tracking number → the ref takes the tracking line's place instead.
  */
 export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
-  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting, pkg.cbPreparing, pkg.customerStatus);
+  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting, pkg.cbPreparing, pkg.customerStatus, pkg.freight);
   // The Consolidated Billing sentence goes on its own line; any other badge is short.
   const longBadge = !!pkg.cbWaiting && !pkg.customerStatus;
   const note = pkg.customerStatus?.note ?? null;

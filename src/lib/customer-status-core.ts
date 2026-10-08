@@ -162,18 +162,29 @@ export type CustomerStatusView =
  * What the customer app shows in place of the normal status, or null for the
  * normal status. `grouped` = an active member of an unreleased Consolidated
  * Billing group; a stage label is never shown for one, whenever it was set.
+ *
+ * `autoTransit` = the 5 pm drop rule (auto-transit-core.ts) says this package
+ * has gone to the airport. Order: a current override the office set wins (a
+ * notice such as "Delayed" holds the package back from the automatic In
+ * Transit; a stage label is by definition ahead of the real stage). Otherwise
+ * In Transit shows while the real stage is still In Miami — never for a
+ * grouped package (R13). Once the real stage reaches In Transit the normal
+ * status takes over, so it never goes backwards.
  */
 export function customerStatusView(
   o: StoredOverride | null | undefined,
   realStage: CustomerStage,
-  grouped: boolean
+  grouped: boolean,
+  autoTransit = false
 ): CustomerStatusView | null {
-  if (!o || !isOverrideActive(o, realStage)) return null;
-  const def = defOf(o.key)!;
-  const note = cleanNote(o.note);
-  if (def.stage != null) {
-    if (grouped) return null;
-    return { kind: "stage", stage: def.stage, label: def.label, note };
+  if (o && isOverrideActive(o, realStage)) {
+    const def = defOf(o.key)!;
+    const note = cleanNote(o.note);
+    if (def.stage == null) return { kind: "notice", key: def.key, label: def.label, note };
+    if (!grouped) return { kind: "stage", stage: def.stage, label: def.label, note };
   }
-  return { kind: "notice", key: def.key, label: def.label, note };
+  if (autoTransit && !grouped && realStage < 1) {
+    return { kind: "stage", stage: 1, label: CUSTOMER_STAGE_LABELS[1], note: null };
+  }
+  return null;
 }

@@ -10,6 +10,7 @@ type Row = {
   wr: string;
   external_code: string | null;
   external_mode: string | null;
+  external_received_at: string | null;
   tracking: string;
   pk_type: number;
   weight: number;
@@ -76,7 +77,8 @@ export async function GET() {
     customerStatus: viewFor(
       overrides.get(Number(r.pk_id)),
       r.ship_status == null ? null : Number(r.ship_status),
-      cb.get(Number(r.pk_id))?.grouped ?? false
+      cb.get(Number(r.pk_id))?.grouped ?? false,
+      { receivedAt: r.external_received_at, mode: r.external_mode }
     ),
   }));
 

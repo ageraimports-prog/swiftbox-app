@@ -1,5 +1,6 @@
 import "server-only";
 import { query } from "@/lib/db";
+import { isAutoTransitDue } from "@/lib/auto-transit-core";
 import {
   CUSTOMER_STATUS_TABLE,
   customerStageOf,
@@ -44,11 +45,16 @@ export async function customerStatusOverrides(userId: number, pkIds: number[]): 
  * What to show instead of the normal status, from the package's RAW
  * ship_status (its own shipment row, before any Consolidated Billing masking)
  * and whether it is in an unreleased group. Null = the normal status.
+ * `airdrop` = the Airdrop receive time + mode for the 5 pm In Transit rule
+ * (auto-transit-core.ts); absent for packages Airdrop never received.
  */
 export function viewFor(
   o: StoredOverride | undefined,
   rawShipStatus: number | null,
-  grouped: boolean
+  grouped: boolean,
+  airdrop?: { receivedAt: string | null; mode: string | null },
+  nowMs: number = Date.now()
 ): CustomerStatusView | null {
-  return customerStatusView(o, customerStageOf(rawShipStatus), grouped);
+  const auto = airdrop ? isAutoTransitDue(airdrop.receivedAt, airdrop.mode, nowMs) : false;
+  return customerStatusView(o, customerStageOf(rawShipStatus), grouped, auto);
 }

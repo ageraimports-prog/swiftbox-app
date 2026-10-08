@@ -13,6 +13,8 @@ import {
   freightLabel,
   packageBadge,
   shownStage,
+  stageLabel,
+  type Stage,
 } from "@/lib/status";
 import type { CustomerStatusView } from "@/lib/customer-status-core";
 
@@ -64,7 +66,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerStatus = null }: { shipment: Shipment | null; cbWaiting?: boolean; cbPreparing?: boolean; customerStatus?: CustomerStatusView | null }) {
+function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerStatus = null, freight = null }: { shipment: Shipment | null; cbWaiting?: boolean; cbPreparing?: boolean; customerStatus?: CustomerStatusView | null; freight?: number | null }) {
   // No shipment row = logged at Miami, not yet manifested → stage 0 active.
   // A stage the office set (only ever ahead of the real one) moves the bar; a
   // notice (Delayed / On hold) leaves it at the real stage.
@@ -107,8 +109,9 @@ function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerSta
         const done = i < current;
         const active = i === current;
         const date = formatDate(dates[stage.dateField]);
+        const label = stageLabel(i as Stage, freight);
         return (
-          <li key={stage.label} className="relative flex gap-4 pb-7 last:pb-0">
+          <li key={stage.dateField} className="relative flex gap-4 pb-7 last:pb-0">
             {/* connector */}
             {i < STAGES.length - 1 && (
               <span
@@ -150,7 +153,7 @@ function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerSta
                   active ? "text-green" : done ? "text-mist" : "text-muted-dark"
                 }`}
               >
-                {stage.label}
+                {label}
               </p>
               {date && (done || active) && (
                 <p className="mt-0.5 text-xs text-muted-dark">{date}</p>
@@ -211,7 +214,7 @@ export default function PackageDetailPage() {
 
   const tracking = data ? trackingNumbers(data.package.tracking) : [];
   const cs = data?.customerStatus ?? null;
-  const badge = data ? packageBadge(data.shipment?.shipStatus ?? null, data.cbWaiting, data.cbPreparing, cs) : null;
+  const badge = data ? packageBadge(data.shipment?.shipStatus ?? null, data.cbWaiting, data.cbPreparing, cs, data.package.freight) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -321,7 +324,7 @@ export default function PackageDetailPage() {
             <h2 className="mb-5 text-xs font-semibold uppercase tracking-widest text-muted-dark">
               Delivery status
             </h2>
-            <Stepper shipment={data.shipment} cbWaiting={!!data.cbWaiting} cbPreparing={!!data.cbPreparing} customerStatus={cs} />
+            <Stepper shipment={data.shipment} cbWaiting={!!data.cbWaiting} cbPreparing={!!data.cbPreparing} customerStatus={cs} freight={data.package.freight} />
           </section>
         </>
       )}

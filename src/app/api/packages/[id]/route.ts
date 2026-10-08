@@ -10,6 +10,7 @@ type Row = {
   wr: string;
   external_code: string | null;
   external_mode: string | null;
+  external_received_at: string | null;
   tracking: string;
   pk_type: number;
   weight: number;
@@ -76,7 +77,8 @@ export async function GET(
   const customerStatus = viewFor(
     (await customerStatusOverrides(session.id, [Number(r.pk_id)])).get(Number(r.pk_id)),
     r.ship_status == null ? null : Number(r.ship_status),
-    cb?.grouped ?? false
+    cb?.grouped ?? false,
+    { receivedAt: r.external_received_at, mode: r.external_mode }
   );
 
   return NextResponse.json({

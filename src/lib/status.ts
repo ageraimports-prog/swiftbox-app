@@ -2,7 +2,7 @@
  * Customer-visible shipment progress: 5 stepper stages (0–4).
  *
  *   stage 0  In Miami            mod_shipment.miami_date
- *   stage 1  In Transit          mod_shipment.transit_date
+ *   stage 1  In Transit          mod_shipment.transit_date  ("to Piarco" for air)
  *   stage 2  Awaiting Clearance  mod_shipment.awaiting_date
  *   stage 3  Out for Delivery    mod_shipment.ofd_date
  *   stage 4  Delivered           mod_shipment.delivered_date
@@ -19,6 +19,7 @@
 
 import { CB_PREPARING_LABEL, CB_WAITING_LABEL } from "./consolidatedBilling";
 import type { CustomerStatusView } from "./customer-status-core";
+import { inTransitLabel } from "./auto-transit-core";
 
 export type Stage = 0 | 1 | 2 | 3 | 4;
 
@@ -67,8 +68,21 @@ export function shipStatusToStage(
   return (s - 1) as Stage;
 }
 
-export function stageMeta(shipStatus: number | null | undefined): StageMeta {
-  return STAGES[shipStatusToStage(shipStatus)];
+/**
+ * A stage's customer-facing wording. In Transit names where it is going: air
+ * (and express) "In Transit to Piarco", sea plain "In Transit" — `freight` is
+ * mod_packages.pk_type (1 AIR, 2 SEA); unknown reads as air.
+ */
+export function stageLabel(stage: Stage, freight?: number | null): string {
+  return stage === 1 ? inTransitLabel(freight ?? 1) : STAGES[stage].label;
+}
+
+function withLabel(stage: Stage, freight?: number | null): StageMeta {
+  return { ...STAGES[stage], label: stageLabel(stage, freight) };
+}
+
+export function stageMeta(shipStatus: number | null | undefined, freight?: number | null): StageMeta {
+  return withLabel(shipStatusToStage(shipStatus), freight);
 }
 
 /** mod_packages.pk_type — 1 = AIR, 2 = SEA. */
@@ -119,10 +133,11 @@ export function packageBadge(
   shipStatus: number | null | undefined,
   cbWaiting?: boolean,
   cbPreparing?: boolean,
-  customerStatus?: CustomerStatusView | null
+  customerStatus?: CustomerStatusView | null,
+  freight?: number | null
 ): { label: string; badge: string } {
   if (customerStatus?.kind === "notice") return { label: customerStatus.label, badge: NOTICE_BADGE };
-  if (customerStatus?.kind === "stage") return STAGES[customerStatus.stage];
+  if (customerStatus?.kind === "stage") return withLabel(customerStatus.stage, freight);
   if (cbPreparing) return CB_PREPARING_BADGE;
-  return cbWaiting ? CB_WAITING_BADGE : stageMeta(shipStatus);
+  return cbWaiting ? CB_WAITING_BADGE : stageMeta(shipStatus, freight);
 }

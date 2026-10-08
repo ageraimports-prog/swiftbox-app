@@ -230,6 +230,18 @@ pre-alert and lets the customer confirm one.
   header and stepper. A notice is an amber chip with its note; the bar stays at
   the real stage. Nothing tells the customer it was set by hand.
 
+## 5 pm "In Transit to Piarco" rule (since 2026-10-08) — display only
+
+- The admin owns the rule (its CLAUDE.md, "5 pm In Transit to Piarco rule").
+  `src/lib/auto-transit-core.ts` is CODE-IDENTICAL to the admin's and the
+  website's; `auto-transit.test.ts` compares them when the checkouts sit side by side.
+- `airdropPackageColumns()` adds `external_received_at`; both package routes pass
+  `{ receivedAt, mode }` to `viewFor`, which feeds `customerStatusView`'s
+  `autoTransit` argument. Same badge/stepper path as an office-set stage.
+- Wording: `stageLabel(stage, freight)` in `src/lib/status.ts` — "In Transit to
+  Piarco" for air, "In Transit" for sea; `packageBadge(..., freight)` and the
+  stepper both use it. `STAGES[1].label` stays the plain base.
+
 ## Verification
 
 `npx tsc --noEmit`, `npx vitest run`, `npx next build` — all clean before a deploy.

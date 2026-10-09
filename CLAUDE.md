@@ -186,6 +186,42 @@ pre-alert and lets the customer confirm one.
 - `GET /api/prealerts/uploads` switches the field on only when the table
   (`swiftbox_prealert_files`, SwiftboxAdmin migration 041) exists and a token is set.
 - The pick submit returns `prealertId` on "saved" so the file can attach to it.
+- Since 2026-10-08 the same route REPLACES an attached file when the form sends
+  `replace=1` (the edit form): the row is updated in place (same file_id, so the
+  admin's link keeps working), then the old blob is deleted. Attach and replace
+  are both refused (409) once the pre-alert is locked (next section).
+
+## Customers edit / cancel their own pre-alerts (since 2026-10-08)
+
+- **Routes:** `GET` / `PATCH` / `DELETE /api/prealerts/[id]` (beside the existing
+  `[id]/file`). Ownership is in EVERY query (`prealert_id = :id AND user_id =
+  :userId`): another customer's id answers exactly like a missing one (404).
+  401 signed out · 409 stale form (`expected` no longer matches) or locked ·
+  422 bad values, per field. Server: `src/lib/prealert-edit-server.ts`; UI:
+  Edit / Cancel on `src/app/dashboard/prealerts/page.tsx` (in-page confirm, no
+  browser dialogs), `src/app/dashboard/prealerts/[id]/edit/page.tsx`, and the
+  shared new/edit form `src/components/PrealertForm.tsx`.
+- **Lock rule:** no edit, cancel or invoice attach/replace once the matched
+  package is cleared or invoiced → 409 "This package has already cleared customs
+  — message us on WhatsApp to change it." Unmatched is never locked. The lock is
+  re-checked INSIDE the UPDATE/DELETE. SQL: `src/lib/prealert-lock-sql.ts` (the
+  admin's cleared/invoiced test, as SQL).
+- **Customer fields:** store, description, item count, value, freight. Tracking
+  ONLY while no package matches it (a picked pre-alert always matches, so its
+  tracking is read-only); the server refuses a change with a 422 on `tracking`.
+  Never status or notes. Descriptions are stored and shown in capitals.
+- **TWIN MODULES — byte-identical to SwiftboxAdmin, change both together:**
+  `src/lib/prealert-edit-core.ts` ↔ admin `lib/prealert-edit-core.ts`,
+  `src/lib/prealert-edit-core.cases.ts` ↔ admin `lib/prealert-edit-core.cases.ts`
+  (run here by `prealert-edit-core.test.ts`, there by `scripts/test-prealert-edit.ts`),
+  `src/lib/package-description.ts` ↔ admin `lib/package-description.ts`.
+- **Audit:** every edit and cancel writes `swiftbox_audit_log` rows in the
+  owner's format (entity `prealert`, id `v2:<id>`, one row per field, from → to),
+  action `customer_prealert_edit` / `customer_prealert_cancel`, actor
+  `customer:<users.id>`. The admin shows "Edited by customer" from them — never
+  write a pre-alert from this app without them.
+- A cancel DELETEs the row and its invoice file. The Play demo (#0364) is a dry
+  run: validated, answered ok, nothing written.
 
 ## How a package is named (since 2026-09-30)
 

@@ -14,7 +14,25 @@ type PreAlert = {
   invoiceValueUsd: number;
   status: "pending" | "received" | "processed";
   createdAt: string;
+  description: string;
+  itemCount: number;
+  /** Its package has cleared customs or been invoiced — no Edit / Cancel. */
+  locked: boolean;
+  lockMessage: string | null;
+  canEditTracking: boolean;
 };
+
+/** What the list showed, sent with a cancel so a change made meanwhile refuses it (409). */
+function expectedOf(pa: PreAlert) {
+  return {
+    tracking: pa.trackingNumber.trim(),
+    store: pa.storeName.trim(),
+    description: pa.description.trim(),
+    itemCount: String(pa.itemCount),
+    value: Number(pa.invoiceValueUsd).toFixed(2),
+    freight: pa.freightType,
+  };
+}
 
 const STATUS_BADGE: Record<PreAlert["status"], { label: string; cls: string }> = {
   pending: {
@@ -156,6 +174,37 @@ export default function PreAlertsPage() {
 
   const hasItems = prealerts != null && prealerts.length > 0;
 
+  // Cancel is two taps, both in the page: "Cancel" asks, "Yes, cancel it" does.
+  const [confirmId, setConfirmId] = React.useState<number | null>(null);
+  const [cancelling, setCancelling] = React.useState(false);
+  const [rowError, setRowError] = React.useState<{ id: number; message: string } | null>(null);
+
+  async function cancelPrealert(pa: PreAlert) {
+    setCancelling(true);
+    setRowError(null);
+    try {
+      const res = await fetch(`/api/prealerts/${pa.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expected: expectedOf(pa) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setRowError({ id: pa.id, message: data?.error ?? "We couldn't cancel this pre-alert. Please try again." });
+        return;
+      }
+      setPrealerts((list) => (list ?? []).filter((x) => x.id !== pa.id));
+      setConfirmId(null);
+      const url = new URL(window.location.href);
+      url.searchParams.set("toast", "cancelled");
+      window.location.replace(url.pathname + url.search);
+    } catch {
+      setRowError({ id: pa.id, message: "We couldn't cancel this pre-alert. Please try again." });
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <QueryToast />
@@ -204,8 +253,8 @@ export default function PreAlertsPage() {
             className="rounded-lg border border-mist/10 bg-ink-2 p-4"
           >
             <div className="flex items-start justify-between gap-3">
-              <p className="sb-disp text-lg leading-tight text-mist">
-                {pa.storeName}
+              <p className="sb-disp text-lg uppercase leading-tight text-mist">
+                {pa.description || pa.storeName}
               </p>
               <span
                 className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.cls}`}
@@ -222,11 +271,57 @@ export default function PreAlertsPage() {
               <span className="rounded-sm bg-mist/10 px-1.5 py-0.5 font-semibold text-mist">
                 {pa.freightType}
               </span>
+              <span>{pa.storeName}</span>
               <span className="font-semibold text-white">
                 {formatUsd(pa.invoiceValueUsd)}
               </span>
               <span className="ml-auto">{formatDate(pa.createdAt)}</span>
             </div>
+
+            {pa.locked ? (
+              <p className="mt-3 border-t border-mist/10 pt-3 text-xs text-muted-dark">{pa.lockMessage}</p>
+            ) : confirmId === pa.id ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-mist/10 pt-3">
+                <span className="mr-auto text-xs font-semibold text-mist">Cancel this pre-alert?</span>
+                <button
+                  type="button"
+                  disabled={cancelling}
+                  onClick={() => void cancelPrealert(pa)}
+                  className="rounded-lg bg-red-500/90 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-red-500 disabled:opacity-60"
+                >
+                  {cancelling ? "Cancelling…" : "Yes, cancel it"}
+                </button>
+                <button
+                  type="button"
+                  disabled={cancelling}
+                  onClick={() => setConfirmId(null)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-dark hover:text-mist"
+                >
+                  Keep it
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-4 border-t border-mist/10 pt-3 text-xs font-semibold">
+                <Link href={`/dashboard/prealerts/${pa.id}/edit`} className="text-green hover:underline">
+                  Edit
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRowError(null);
+                    setConfirmId(pa.id);
+                  }}
+                  className="text-muted-dark hover:text-mist"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            {rowError?.id === pa.id && (
+              <p role="alert" className="mt-2 text-xs text-red-300">
+                {rowError.message}
+              </p>
+            )}
           </article>
         );
       })}

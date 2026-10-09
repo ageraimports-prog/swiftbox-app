@@ -18,7 +18,7 @@ export default function QueryToast() {
     const msg = toastMessage(url.searchParams.get("toast"), url.searchParams.get("left"));
     if (!msg) return;
     setMessage(msg);
-    setWarn(["filefail", "alreadyfile"].includes(url.searchParams.get("toast") ?? ""));
+    setWarn(["filefail", "alreadyfile", "editfilefail"].includes(url.searchParams.get("toast") ?? ""));
     url.searchParams.delete("toast");
     url.searchParams.delete("left");
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { query, execute } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { prealertLockedSql, prealertMatchedSql } from "@/lib/prealert-lock-sql";
+import { LOCKED_MESSAGE } from "@/lib/prealert-edit-core";
 
 /**
  * Customer pre-alerts, backed by swiftbox_prealerts. user_id + account_no come
@@ -17,6 +19,10 @@ type Row = {
   invoice_value_usd: string;
   status: "pending" | "received" | "processed";
   created_at: string;
+  description: string | null;
+  item_count: number | string;
+  locked: number | string;
+  matched: number | string;
 };
 
 /** GET — the logged-in customer's pre-alerts, newest first. */
@@ -27,11 +33,12 @@ export async function GET() {
   }
 
   const rows = await query<Row>(
-    `SELECT prealert_id, store_name, tracking_number, freight_type,
-            invoice_value_usd, status, created_at
-       FROM swiftbox_prealerts
-      WHERE user_id = :userId
-      ORDER BY created_at DESC`,
+    `SELECT sp.prealert_id, sp.store_name, sp.tracking_number, sp.freight_type,
+            sp.invoice_value_usd, sp.status, sp.created_at, sp.description, sp.item_count,
+            ${prealertLockedSql("sp")} AS locked, ${prealertMatchedSql("sp")} AS matched
+       FROM swiftbox_prealerts sp
+      WHERE sp.user_id = :userId
+      ORDER BY sp.created_at DESC`,
     { userId: session.id }
   );
 
@@ -43,6 +50,12 @@ export async function GET() {
     invoiceValueUsd: Number(r.invoice_value_usd),
     status: r.status,
     createdAt: r.created_at,
+    description: (r.description ?? "").trim(),
+    itemCount: Number(r.item_count),
+    // Edit / Cancel: shown unless locked (prealert-edit-core.ts, the admin's rules).
+    locked: Number(r.locked) === 1,
+    lockMessage: Number(r.locked) === 1 ? LOCKED_MESSAGE : null,
+    canEditTracking: Number(r.matched) !== 1,
   }));
 
   return NextResponse.json({ prealerts });

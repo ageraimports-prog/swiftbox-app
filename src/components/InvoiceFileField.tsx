@@ -30,12 +30,13 @@ async function shrinkIfNeeded(file: File): Promise<File> {
 }
 
 /** Attach the chosen file to a saved pre-alert. true = stored. Never throws; gives up after 45 s. */
-export async function uploadPrealertFile(prealertId: number, file: File): Promise<boolean> {
+export async function uploadPrealertFile(prealertId: number, file: File, replace = false): Promise<boolean> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 45_000);
   try {
     const form = new FormData();
     form.append("file", file, file.name);
+    if (replace) form.append("replace", "1");
     const res = await fetch(`/api/prealerts/${prealertId}/file`, { method: "POST", body: form, signal: abort.signal });
     return res.ok;
   } catch {
@@ -70,12 +71,15 @@ export default function InvoiceFileField({
   onChange,
   disabled,
   onBusy,
+  replacing = false,
 }: {
   file: File | null;
   onChange: (file: File | null) => void;
   disabled?: boolean;
   /** true while a photo is being shrunk — the form holds its submit so the file isn't dropped. */
   onBusy?: (busy: boolean) => void;
+  /** Edit form, an invoice is already attached: the chosen file replaces it. */
+  replacing?: boolean;
 }) {
   const ref = React.useRef<HTMLInputElement>(null);
   const [note, setNote] = React.useState<string | null>(null);
@@ -102,7 +106,7 @@ export default function InvoiceFileField({
 
   return (
     <div className="mb-6">
-      <span className={labelCls}>Invoice or receipt (optional)</span>
+      <span className={labelCls}>{replacing ? "Replace your invoice (optional)" : "Invoice or receipt (optional)"}</span>
       <input
         ref={ref}
         type="file"
@@ -132,11 +136,14 @@ export default function InvoiceFileField({
           onClick={() => ref.current?.click()}
           className="w-full rounded-md border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-muted transition-colors hover:border-green hover:text-ink disabled:opacity-60"
         >
-          {busy ? "Preparing…" : "Add a photo or PDF of your invoice"}
+          {busy ? "Preparing…" : replacing ? "Choose a new photo or PDF" : "Add a photo or PDF of your invoice"}
         </button>
       )}
       <span className="mt-1.5 block text-xs text-muted">
-        {note ?? "A photo or screenshot of your invoice or receipt, or a PDF."}
+        {note ??
+          (replacing
+            ? "Your current invoice stays unless you choose a new one."
+            : "A photo or screenshot of your invoice or receipt, or a PDF.")}
       </span>
     </div>
   );

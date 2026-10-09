@@ -126,6 +126,9 @@ export function toastMessage(toast: string | null, left: string | null): string 
     return Number.isFinite(n) && n > 0 ? `Pre-alert saved — ${n} to go` : "All caught up";
   }
   if (toast === "done") return "All caught up";
+  if (toast === "edited") return "Pre-alert updated";
+  if (toast === "cancelled") return "Pre-alert cancelled";
+  if (toast === "editfilefail") return "Pre-alert updated, but the new invoice didn't upload — WhatsApp it to us on (868) 609-3000.";
   if (toast === "already") return "Already pre-alerted";
   if (toast === "filefail") return "Pre-alert saved, but the invoice didn't upload — WhatsApp it to us on (868) 609-3000.";
   if (toast === "alreadyfile") return "Already pre-alerted — the invoice wasn't attached. WhatsApp it to us on (868) 609-3000.";

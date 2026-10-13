@@ -24,7 +24,9 @@
  * Airdrop received (their exact receive time is in the synced snapshot), only
  * to AIR and EXPRESS (sea does not go to Piarco), only while the real stage is
  * still In Miami, never to a package in an unreleased Consolidated Billing
- * group (R13), and a "Delayed" / "On hold" the office set wins over it. The
+ * group (R13), never to a package the office took off a shipment and has not
+ * put on another (`airdropReceivedAtSql`), and a "Delayed" / "On hold" the
+ * office set wins over it. The
  * merge lives in customer-status-core.ts (`customerStatusView`).
  */
 
@@ -111,10 +113,24 @@ export function ttDropLabel(ms: number): string {
 }
 
 /**
+ * The admin's audit action written when a package is taken OFF a shipment it
+ * never travelled on (SwiftboxAdmin lib/shipment-remove-core.ts, 2026-10-12).
+ */
+export const REMOVED_FROM_SHIPMENT_ACTION = "removed_from_shipment";
+
+/**
  * SQL expression for the Airdrop receive time of the `swiftbox_airdrop_packages`
  * row aliased `a` (MySQL 5.6 has no JSON functions; the snapshot is the synced
- * Airdrop record and carries "received_at" exactly once).
+ * Airdrop record and carries "received_at" exactly once) — the rule's ONLY
+ * input, so NULL here means "the rule is off for this package".
+ *
+ * TAKEN OFF A SHIPMENT (Brent, 2026-10-12). A package the office took off a
+ * shipment because it stayed in the warehouse did NOT go on that drop, so it
+ * answers NULL — the customer sees In Miami — while it has a
+ * `removed_from_shipment` row in swiftbox_audit_log AND no mod_shipment line.
+ * Putting it on any shipment again ends that by itself. entity_id is compared
+ * as a number on purpose: no charset conversion between the two tables.
  */
 export function airdropReceivedAtSql(a = "a"): string {
-  return `SUBSTRING_INDEX(SUBSTRING_INDEX(${a}.snapshot, '"received_at":"', -1), '"', 1)`;
+  return `CASE WHEN EXISTS (SELECT 1 FROM swiftbox_audit_log rfs WHERE rfs.entity_type = 'package' AND rfs.action = '${REMOVED_FROM_SHIPMENT_ACTION}' AND rfs.entity_id = ${a}.pk_id) AND NOT EXISTS (SELECT 1 FROM mod_shipment rfs_s WHERE rfs_s.package_id = ${a}.pk_id) THEN NULL ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(${a}.snapshot, '"received_at":"', -1), '"', 1) END`;
 }

@@ -102,11 +102,18 @@ copy of that FAQ still has the old wording.
   (`GET /api/consolidated-billing/bill-pdf`), both with header `x-consolidation-key` =
   `CONSOLIDATION_HOOK_KEY` (`ADMIN_URL` default https://admin.swiftboxtt.com). If the
   admin refuses or can't be reached the switch does not move.
-- **R13 in code:** a member of an unreleased group shows `CB_WAITING_LABEL` from the
-  moment it leaves Miami (switching only at landing would itself reveal it), and the
-  package APIs send such a package as `shipStatus: 1` with every later date nulled —
-  its real stage never reaches the browser. Its invoice is hidden (list and detail
-  404) until the group releases.
+- **R13 in code (2026-10-13):** status comes ONLY from the shared
+  `src/lib/customer-facing-status-core.ts` (code-identical with the admin's
+  `lib/` and the website's `src/lib/` — change all three together; rules in
+  the admin CLAUDE.md, "Customer-facing status — ONE shared rule"). The package
+  APIs send its answer as `status`; `packageBadge(status)` / `stepLabels` render
+  it. A member reads In Miami, then "Consolidating — will be delivered together
+  with your other packages" from leaving Miami (shipment line or 5 pm drop) until
+  its bill is issued and it is cleared, then Ready for delivery → Out for Delivery
+  → Delivered. A member's `shipNo`, `shipStatus`, transit and clearance dates
+  are never sent. Held invoices and children of a bill not yet issued 404.
+  (The old per-package "Being prepared for delivery" and R7 last-arrival stage are
+  gone.)
 - **Invoices:** a bill's invoices are listed AS the bill (`/dashboard/bills/[billNo]`,
   live totals, PDF via the admin). A child invoice stays viewable and links its bill.
 - **Rendering goes through the shared cards only** (see "How a package is named"):

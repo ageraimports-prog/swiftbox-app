@@ -1,4 +1,9 @@
 import type { NextConfig } from "next";
+import { assertSafeBridgeUrl } from "./src/lib/db-guard";
+
+// LOCAL = DEV DATABASE ONLY: `next dev` (or any local run) pointed at the
+// production bridge refuses to start. src/lib/db.ts repeats the check per call.
+assertSafeBridgeUrl(process.env.BRIDGE_URL);
 
 const nextConfig: NextConfig = {
   async rewrites() {

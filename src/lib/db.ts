@@ -1,4 +1,5 @@
 import "server-only";
+import { assertSafeBridgeUrl, databaseProblem, isProductionRuntime } from "./db-guard";
 
 /**
  * Bridge-backed query interface.
@@ -80,6 +81,41 @@ type BridgeResponse = {
 };
 
 async function callBridge(
+  sql: string,
+  params?: Record<string, unknown> | unknown[]
+): Promise<BridgeResponse> {
+  // LOCAL = DEV DATABASE ONLY (src/lib/db-guard.ts, code-identical with the
+  // admin): outside the production runtime the URL must be the dev bridge, and
+  // the database it reaches is checked once per process.
+  assertSafeBridgeUrl(process.env.BRIDGE_URL);
+  if (!isProductionRuntime() && !isFakeBridge(process.env.BRIDGE_URL)) {
+    databaseChecked ??= rawCallBridge("SELECT DATABASE() AS d").then((r) => {
+      const p = databaseProblem(String((r.rows?.[0] as { d?: unknown } | undefined)?.d ?? ""));
+      if (p) throw new Error(p);
+    });
+    try {
+      await databaseChecked;
+    } catch (e) {
+      databaseChecked = null;
+      throw e;
+    }
+  }
+  return rawCallBridge(sql, params);
+}
+
+/** Set once per process when the dev database name has been checked. */
+let databaseChecked: Promise<void> | null = null;
+
+/** RFC 2606 hosts that tests stub fetch with — no database behind them. */
+function isFakeBridge(url: string | undefined): boolean {
+  try {
+    return new URL(String(url)).hostname.endsWith(".invalid");
+  } catch {
+    return false;
+  }
+}
+
+async function rawCallBridge(
   sql: string,
   params?: Record<string, unknown> | unknown[]
 ): Promise<BridgeResponse> {

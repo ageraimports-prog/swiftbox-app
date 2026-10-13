@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import ShippingAddress from "./ShippingAddress";
+import ContactDetailsCard from "./ContactDetailsCard";
 import ConsolidatedBillingCard from "@/components/ConsolidatedBillingCard";
 
 export default async function AccountPage() {
@@ -19,6 +20,9 @@ export default async function AccountPage() {
         <p className="mt-1 text-sm text-green">Account #{session.ac}</p>
         <p className="mt-0.5 text-xs text-muted-dark">{session.email}</p>
       </section>
+
+      {/* Delivery details: both addresses (Home/Work/Other) and both phones */}
+      <ContactDetailsCard />
 
       {/* Shipping address (AIR / SEA, copy-to-clipboard) */}
       <ShippingAddress accountNo={session.ac} customerName={session.name} />

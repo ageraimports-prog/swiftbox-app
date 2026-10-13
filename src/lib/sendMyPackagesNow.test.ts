@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as copy from "./consolidatedBilling";
 import { packageBadge, stageMeta } from "./status";
+import { customerFacingView } from "./customer-facing-status-core";
 
 describe('"Send my packages now" (2026-10-01)', () => {
   it("names the group by what the packages are, never by WR/SWF", () => {
@@ -24,7 +25,6 @@ describe('"Send my packages now" (2026-10-01)', () => {
   it("R13: nothing here says where a package is", () => {
     const all = [
       copy.CB_PREPARING_TEXT,
-      copy.CB_PREPARING_LABEL,
       copy.cbSendNowConfirmText(3),
       copy.CB_SEND_NOW_HINT,
       copy.cbWaitingSummary(["Shoes"]),
@@ -33,10 +33,11 @@ describe('"Send my packages now" (2026-10-01)', () => {
     expect(all).not.toMatch(/trinidad|\bheld\b|holding|landed in|arrived in/i);
     expect(copy.CB_PREPARING_TEXT).toBe("Your packages are being prepared for delivery.");
   });
-  it("after the tap the card shows 'being prepared', still never the stage", () => {
-    expect(packageBadge(3, true, true).label).toBe("Being prepared for delivery");
-    expect(packageBadge(3, true, true).label).not.toBe(stageMeta(3).label);
-    expect(packageBadge(3, true, false).label).toBe(copy.CB_WAITING_LABEL);
+  it("after the tap the packages still read Consolidating, never the stage (2026-10-13)", () => {
+    const closedByCustomer = { state: "closed", billId: null, billLifecycle: null, offBillReason: null };
+    const v = customerFacingView({ shipStatus: 3, cb: closedByCustomer });
+    expect(packageBadge(v).label).toBe(copy.CB_WAITING_LABEL);
+    expect(packageBadge(v).label).not.toBe(stageMeta(3).label);
   });
   it("the FAQ explains Send my packages now without timing (R13a)", () => {
     const a = copy.CB_FAQ.find((f) => f.q === "What does “Send my packages now” do?")!.a;

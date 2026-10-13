@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
-import { cbPackageDisplay } from "@/lib/consolidated-billing";
-import { customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { cbPackageFacts } from "@/lib/consolidated-billing";
+import { CLEARED_SQL, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -27,6 +27,7 @@ type Row = {
   awaiting_date: string | null;
   ofd_date: string | null;
   delivered_date: string | null;
+  cleared: number | null;
 };
 
 export async function GET(
@@ -51,7 +52,7 @@ export async function GET(
             p.volumetric_weight, p.pcs, p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
             s.ship_id, s.ship_no, s.ship_status,
             s.miami_date, s.transit_date, s.awaiting_date,
-            s.ofd_date, s.delivered_date
+            s.ofd_date, s.delivered_date, ${CLEARED_SQL} AS cleared
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
       WHERE p.pk_id = :pkId AND p.user_id = :userId
@@ -64,27 +65,25 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Consolidated Billing. WAITING: only "left Miami" is sent — no later stage,
-  // no later date — because the customer must not learn when it lands (R13).
-  // RELEASED: the group's last arrival's stage and date (R7).
-  const cb = (await cbPackageDisplay(session.id).catch(() => new Map())).get(Number(r.pk_id));
-  const waiting = cb?.waiting ?? false;
-  const shownStatus = waiting ? 1 : cb?.override ? cb.override.shipStatus : Number(r.ship_status);
-  const shownAwaiting = waiting ? null : cb?.override ? cb.override.awaitingDate : r.awaiting_date;
-
-  // A status the office set for the customer to see (display only). Only a
-  // current, allowed one is sent; the merge rule reads the RAW ship_status.
-  const customerStatus = viewFor(
-    (await customerStatusOverrides(session.id, [Number(r.pk_id)])).get(Number(r.pk_id)),
-    r.ship_status == null ? null : Number(r.ship_status),
-    cb?.grouped ?? false,
-    { receivedAt: r.external_received_at, mode: r.external_mode }
-  );
+  // THE shared rule (customer-facing-status-core.ts): the office's status,
+  // Consolidated Billing, the 5 pm drop, the real stage.
+  const cb = (await cbPackageFacts(session.id).catch(() => new Map())).get(Number(r.pk_id));
+  const raw = r.ship_status == null ? null : Number(r.ship_status);
+  const status = viewFor({
+    override: (await customerStatusOverrides(session.id, [Number(r.pk_id)])).get(Number(r.pk_id)),
+    rawShipStatus: raw,
+    cleared: Number(r.cleared) > 0,
+    pkType: Number(r.pk_type),
+    cb: cb?.membership ?? null,
+    airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
+  });
+  // A Consolidated Billing member never sends its shipment number, its real
+  // stage, or a transit / clearance date: where it is and when it moves is
+  // internal (R13). Out for Delivery / Delivered dates show once it gets there.
+  const m = status.cb;
 
   return NextResponse.json({
-    customerStatus,
-    cbWaiting: waiting,
-    cbPreparing: cb?.preparing ?? false,
+    status,
     cbInOpenGroup: cb?.inOpenGroup ?? false,
     package: {
       id: Number(r.pk_id),
@@ -105,13 +104,13 @@ export async function GET(
       r.ship_id == null
         ? null
         : {
-            shipNo: r.ship_no,
-            shipStatus: shownStatus,
-            miamiDate: r.miami_date,
-            transitDate: waiting ? null : r.transit_date,
-            awaitingDate: shownAwaiting,
-            ofdDate: waiting ? null : r.ofd_date,
-            deliveredDate: waiting ? null : r.delivered_date,
+            shipNo: m ? null : r.ship_no,
+            shipStatus: m ? null : raw,
+            miamiDate: m ? r.date : r.miami_date,
+            transitDate: m ? null : r.transit_date,
+            awaitingDate: m ? null : r.awaiting_date,
+            ofdDate: m && status.stage < 3 ? null : r.ofd_date,
+            deliveredDate: m && status.stage < 4 ? null : r.delivered_date,
           },
   });
 }

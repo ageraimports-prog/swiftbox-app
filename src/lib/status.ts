@@ -17,9 +17,8 @@
  * Swiftbox's admin owns these stages; provider warehouse states are separate.
  */
 
-import { CB_PREPARING_LABEL, CB_WAITING_LABEL } from "./consolidatedBilling";
-import type { CustomerStatusView } from "./customer-status-core";
 import { inTransitLabel } from "./auto-transit-core";
+import { CB_STEP_LABELS, type CustomerFacingView } from "./customer-facing-status-core";
 
 export type Stage = 0 | 1 | 2 | 3 | 4;
 
@@ -94,50 +93,39 @@ export function freightLabel(pkType: number | null | undefined, mode?: string | 
 }
 
 /**
- * Consolidated Billing: a package that has left Miami and is waiting for the
- * rest of its group. Shown in place of the stage — never where it is (R13).
+ * What the package APIs send as `status`: THE shared rule's answer
+ * (customer-facing-status-core.ts, code-identical with the admin and the
+ * website). Screens only render it — they never work a status out themselves.
  */
-export const CB_WAITING_BADGE = {
-  label: CB_WAITING_LABEL,
-  badge: "bg-violet-400/10 text-violet-300 border border-violet-400/25",
-};
+export type ShownStatus = CustomerFacingView;
 
-/** The customer said "send them": still no stage shown (R13), just this. */
-export const CB_PREPARING_BADGE = {
-  label: CB_PREPARING_LABEL,
-  badge: "bg-green/10 text-green border border-green/25",
-};
+/** Consolidated Billing's "Consolidating" (R13): never a stage or a place. */
+export const CB_CONSOLIDATING_BADGE = "bg-violet-400/10 text-violet-300 border border-violet-400/25";
 
 /** A notice the office set ("Delayed", "On hold — contact us"): highlighted, never a stage. */
 export const NOTICE_BADGE = "bg-amber-400/15 text-amber-200 border border-amber-400/50";
 
-/**
- * The stage the stepper and badges show: the office's stage label when one is
- * current (the API only sends one while the real stage is behind it, so this
- * never goes backwards), otherwise the real stage. A notice keeps the real stage.
- */
-export function shownStage(
-  shipStatus: number | null | undefined,
-  customerStatus?: CustomerStatusView | null
-): Stage {
-  if (customerStatus?.kind === "stage") return customerStatus.stage;
-  return shipStatusToStage(shipStatus);
-}
+/** A Consolidated Billing member's step 2, Ready for delivery. */
+const CB_READY_BADGE = "bg-green/10 text-green border border-green/25";
 
 /**
- * THE status badge, for every screen (package card, detail header). Order: a
- * status the office set (the API only sends one that is current and allowed),
- * then Consolidated Billing, then the stage.
+ * THE status badge, for every screen (package card, detail header): the shared
+ * rule's label in its colour. `status` absent (an old response) → the stage.
  */
 export function packageBadge(
-  shipStatus: number | null | undefined,
-  cbWaiting?: boolean,
-  cbPreparing?: boolean,
-  customerStatus?: CustomerStatusView | null,
+  status: ShownStatus | null | undefined,
+  shipStatus?: number | null,
   freight?: number | null
 ): { label: string; badge: string } {
-  if (customerStatus?.kind === "notice") return { label: customerStatus.label, badge: NOTICE_BADGE };
-  if (customerStatus?.kind === "stage") return withLabel(customerStatus.stage, freight);
-  if (cbPreparing) return CB_PREPARING_BADGE;
-  return cbWaiting ? CB_WAITING_BADGE : stageMeta(shipStatus, freight);
+  if (!status) return stageMeta(shipStatus, freight);
+  if (status.notice) return { label: status.label, badge: NOTICE_BADGE };
+  if (status.consolidating) return { label: status.label, badge: CB_CONSOLIDATING_BADGE };
+  if (status.cb && status.stage === 2) return { label: status.label, badge: CB_READY_BADGE };
+  return { label: status.label, badge: STAGES[status.stage].badge };
+}
+
+/** The stepper's labels: a Consolidated Billing member has its own steps (no transit, no clearance). */
+export function stepLabels(status: ShownStatus | null | undefined, freight?: number | null): string[] {
+  if (status?.cb) return [...CB_STEP_LABELS];
+  return STAGES.map((_, i) => stageLabel(i as Stage, freight));
 }

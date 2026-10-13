@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { billingModeOf } from "@/lib/invoice-line";
-import { cbHiddenInvoiceIds, cbBillNoForInvoice } from "@/lib/consolidated-billing";
+import { cbHiddenInvoiceIds, cbBillForInvoice } from "@/lib/consolidated-billing";
 
 type HeaderRow = {
   invoice_id: number;
@@ -87,11 +87,17 @@ export async function GET(
   if (!h) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  // Consolidated Billing: an invoice whose packages are still waiting for their
-  // group is not the customer's to see yet (R13) — it 404s like a draft. A
-  // bill's own invoice stays viewable and says which bill it is on.
-  const billNo = await cbBillNoForInvoice(Number(h.invoice_id)).catch(() => null);
-  if (!billNo && (await cbHiddenInvoiceIds(session.id).catch(() => new Set<number>())).has(Number(h.invoice_id))) {
+  // Consolidated Billing: an invoice whose packages are still held for their
+  // group is not the customer's to see yet (R13) — it 404s like a draft. So does
+  // an invoice on a bill that has not been issued yet: nothing per package shows
+  // before the combined bill. A child of an ISSUED bill stays viewable and says
+  // which bill it is on.
+  const bill = await cbBillForInvoice(Number(h.invoice_id)).catch(() => null);
+  const billNo = bill?.billNo ?? null;
+  if (bill && !bill.issued) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (!bill && (await cbHiddenInvoiceIds(session.id).catch(() => new Set<number>())).has(Number(h.invoice_id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

@@ -9,6 +9,7 @@ import {
   ttDropLabel,
 } from "./auto-transit-core";
 import { customerStatusView } from "./customer-status-core";
+import { customerFacingView } from "./customer-facing-status-core";
 import { packageBadge, stageLabel, stageMeta } from "./status";
 
 /** Trinidad wall time → ISO with the -04:00 offset. 2026-10-12 is a Monday. */
@@ -88,9 +89,10 @@ describe("In Transit wording", () => {
   });
   it("the badge uses it for the real stage and for the automatic one", () => {
     expect(stageMeta(2, 1).label).toBe("In Transit to Piarco");
-    const auto = customerStatusView(null, 0, false, true);
-    expect(packageBadge(null, false, false, auto, 1).label).toBe("In Transit to Piarco");
-    expect(packageBadge(null, false, false, null, 1).label).toBe("In Miami");
+    const ad = { receivedAt: tt("12", "10:00"), mode: "air" };
+    const auto = customerFacingView({ shipStatus: null, pkType: 1, airdrop: ad, nowMs: at("13", "17:00") });
+    expect(packageBadge(auto, null, 1).label).toBe("In Transit to Piarco");
+    expect(packageBadge(null, null, 1).label).toBe("In Miami");
   });
 });
 

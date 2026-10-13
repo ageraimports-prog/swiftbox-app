@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
-import { cbPackageDisplay } from "@/lib/consolidated-billing";
-import { customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { cbPackageFacts } from "@/lib/consolidated-billing";
+import { CLEARED_SQL, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -20,6 +20,7 @@ type Row = {
   date: string;
   ship_no: string | null;
   ship_status: number | null;
+  cleared: number | null;
 };
 
 export async function GET() {
@@ -28,12 +29,12 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // ship_status stays raw (null = no shipment row); the client maps it to a
-  // stepper stage via shipStatusToStage().
+  // ship_status is read raw (null = no shipment row); what the customer sees is
+  // decided below by the shared rule and sent as `status`.
   const rows = await query<Row>(
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight, p.pcs,
             p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
-            s.ship_no, s.ship_status
+            s.ship_no, s.ship_status, ${CLEARED_SQL} AS cleared
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
       WHERE p.user_id = :userId
@@ -41,46 +42,44 @@ export async function GET() {
     { userId: session.id }
   );
 
-  // Consolidated Billing: which of these are waiting for their group (shown as
-  // such, never as a stage — R13), and which released group members show the
-  // last arrival's stage (R7).
-  const cb = await cbPackageDisplay(session.id).catch(() => new Map());
-
-  // A status the office set for the customer to see (display only). Only a
-  // current, allowed one is sent; the merge rule reads the RAW ship_status.
+  // Consolidated Billing membership and the office's status (display only),
+  // each read on its own and never fatal.
+  const cb = await cbPackageFacts(session.id).catch(() => new Map());
   const overrides = await customerStatusOverrides(session.id, rows.map((r) => Number(r.pk_id)));
+  const now = Date.now();
 
-  const packages = rows.map((r) => ({
-    id: Number(r.pk_id),
-    wr: r.wr,
-    packageCode: r.external_code || r.wr,
-    transportMode: r.external_mode,
-    billableWeight: Number(r.weight),
-    tracking: r.tracking,
-    freight: Number(r.pk_type),
-    weight: Number(r.weight),
-    pcs: Number(r.pcs),
-    shipper: r.shipper,
-    commodities: r.commodities,
-    date: r.date,
-    shipNo: r.ship_no,
-    // A waiting package reports only that it has left Miami — its real stage
-    // (and with it, whether it has landed) is not sent to the browser at all.
-    shipStatus: cb.get(Number(r.pk_id))?.waiting
-      ? 1
-      : cb.get(Number(r.pk_id))?.override
-        ? cb.get(Number(r.pk_id))!.override!.shipStatus
-        : r.ship_status == null ? null : Number(r.ship_status),
-    cbWaiting: cb.get(Number(r.pk_id))?.waiting ?? false,
-    // The customer said "send them"; still waiting for the group to go out.
-    cbPreparing: cb.get(Number(r.pk_id))?.preparing ?? false,
-    customerStatus: viewFor(
-      overrides.get(Number(r.pk_id)),
-      r.ship_status == null ? null : Number(r.ship_status),
-      cb.get(Number(r.pk_id))?.grouped ?? false,
-      { receivedAt: r.external_received_at, mode: r.external_mode }
-    ),
-  }));
+  const packages = rows.map((r) => {
+    const raw = r.ship_status == null ? null : Number(r.ship_status);
+    // THE shared rule (customer-facing-status-core.ts). A Consolidated Billing
+    // member never sends its real stage or its shipment number to the browser:
+    // "Consolidating" must not be undone by reading the response.
+    const status = viewFor({
+      override: overrides.get(Number(r.pk_id)),
+      rawShipStatus: raw,
+      cleared: Number(r.cleared) > 0,
+      pkType: Number(r.pk_type),
+      cb: cb.get(Number(r.pk_id))?.membership ?? null,
+      airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
+      nowMs: now,
+    });
+    return {
+      id: Number(r.pk_id),
+      wr: r.wr,
+      packageCode: r.external_code || r.wr,
+      transportMode: r.external_mode,
+      billableWeight: Number(r.weight),
+      tracking: r.tracking,
+      freight: Number(r.pk_type),
+      weight: Number(r.weight),
+      pcs: Number(r.pcs),
+      shipper: r.shipper,
+      commodities: r.commodities,
+      date: r.date,
+      shipNo: status.cb ? null : r.ship_no,
+      shipStatus: status.cb ? null : raw,
+      status,
+    };
+  });
 
   return NextResponse.json({ packages });
 }

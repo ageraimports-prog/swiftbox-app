@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { freightLabel, packageBadge } from "@/lib/status";
-import type { CustomerStatusView } from "@/lib/customer-status-core";
+import { freightLabel, packageBadge, type ShownStatus } from "@/lib/status";
 import {
   formatTracking,
   packageIdentity,
@@ -20,17 +19,14 @@ export type PackageSummary = {
   pcs: number;
   commodities: string;
   date: string;
+  /** Raw ship_status; null for a Consolidated Billing member (its stage never reaches the browser). */
   shipStatus: number | null;
   /**
-   * Consolidated Billing: waiting for its group (R13). The API already sends a
-   * waiting package's stage as In Miami with later dates nulled; the card shows
-   * the waiting badge in place of any stage.
+   * What the customer sees — THE shared rule (customer-facing-status-core.ts):
+   * the office's status, Consolidated Billing's "Consolidating" (R13), the 5 pm
+   * drop, the real stage. The card only renders it.
    */
-  cbWaiting?: boolean;
-  /** The customer said "send them" — "Being prepared for delivery", still no stage. */
-  cbPreparing?: boolean;
-  /** A status the office set for this package (only sent while current). Wins over the rest. */
-  customerStatus?: CustomerStatusView | null;
+  status?: ShownStatus | null;
 };
 
 /** "UPS" / "FedEx" chip before a tracking number. Only ever a certain carrier. */
@@ -94,10 +90,10 @@ function formatDate(date: string): string {
  * No tracking number → the ref takes the tracking line's place instead.
  */
 export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
-  const meta = packageBadge(pkg.shipStatus, pkg.cbWaiting, pkg.cbPreparing, pkg.customerStatus, pkg.freight);
+  const meta = packageBadge(pkg.status, pkg.shipStatus, pkg.freight);
   // The Consolidated Billing sentence goes on its own line; any other badge is short.
-  const longBadge = !!pkg.cbWaiting && !pkg.customerStatus;
-  const note = pkg.customerStatus?.note ?? null;
+  const longBadge = !!pkg.status?.consolidating && !pkg.status.notice;
+  const note = pkg.status?.note ?? null;
   const id = packageIdentity(pkg);
   return (
     <Link
@@ -121,7 +117,7 @@ export default function PackageCard({ pkg }: { pkg: PackageSummary }) {
       )}
 
       {note && (
-        <p className={`mt-1.5 text-xs font-medium ${pkg.customerStatus?.kind === "notice" ? "text-amber-200/90" : "text-muted-dark"}`}>{note}</p>
+        <p className={`mt-1.5 text-xs font-medium ${pkg.status?.notice ? "text-amber-200/90" : "text-muted-dark"}`}>{note}</p>
       )}
 
       {id.tracking ? (

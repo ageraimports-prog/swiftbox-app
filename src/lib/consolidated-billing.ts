@@ -6,12 +6,12 @@ import {
   windowDay,
   ttDateLabel,
   ttDayNumber,
-  groupDisplay,
   packageSection,
   billTotals,
   type PackageSection,
   type BillTotals,
 } from "@/lib/consolidatedBillingCore";
+import { CB_MEMBERSHIP_SELECT, cbMembershipFromRow, isCbHeld, type CbMembership } from "@/lib/customer-facing-status-core";
 
 /**
  * Consolidated Billing v2 — the customer's side. SwiftboxAdmin owns every rule
@@ -29,9 +29,11 @@ import {
  * Until the admin's migration 038 runs, the tables are missing: every read here
  * then answers "nothing", so the rest of the app is unaffected.
  *
- * R13: a member of an unreleased group reads "waiting for your group" from the
- * moment it leaves Miami — switching at landing would itself tell the customer
- * it had arrived in Trinidad. Its invoice is not shown until the group releases.
+ * R13 (Brent, 2026-10-13): what a member SHOWS is customer-facing-status-core.ts
+ * (code-identical with the admin and the website) — "Consolidating" from the
+ * moment it leaves Miami until its group's bill is issued, then Ready for
+ * delivery. This module only reads the membership facts it needs. A held
+ * member's invoice, and every child of a bill not yet issued, is not shown.
  */
 
 const G = "swiftbox_cb_groups";
@@ -238,67 +240,44 @@ export async function releaseCbGroup(userId: number, groupId: number): Promise<{
   }
 }
 
-export type CbPackageDisplay = {
-  /** Show CB_WAITING_LABEL instead of the stage (unreleased group, left Miami). */
-  waiting: boolean;
+export type CbPackageFacts = {
   /**
-   * The customer said "send them" and the group is closed, not yet released:
-   * "Being prepared for delivery" in place of the stage (still never where).
+   * The package's ACTIVE membership (removed members and Buy For Me are never
+   * here). customer-facing-status-core.ts turns it into what the customer sees:
+   * "Consolidating" from the moment it leaves Miami until its group's bill is
+   * issued, then Ready for delivery → Out for Delivery → Delivered.
    */
-  preparing: boolean;
+  membership: CbMembership;
   /** A member of the customer's OPEN group (Miami included) — where "Send my packages now" is offered. */
   inOpenGroup: boolean;
-  /**
-   * An active member of an UNRELEASED group (open or closed), wherever it is.
-   * The office's customer-facing status may only show such a package a notice
-   * (Delayed / On hold), never a stage (customer-status-core.ts, R13).
-   */
-  grouped: boolean;
-  /** R7 — a released group's members show the last arrival's stage + date. */
-  override: { shipStatus: number | null; awaitingDate: string | null } | null;
 };
 
-/** pk_id → how the package list / detail should show it. Only packages in a group appear. */
-export async function cbPackageDisplay(userId: number): Promise<Map<number, CbPackageDisplay>> {
+/** pk_id → its Consolidated Billing membership, for this customer's packages in any group. */
+export async function cbPackageFacts(userId: number): Promise<Map<number, CbPackageFacts>> {
   const rows = await safe(
-    () => excludingBfm("m.pk_id", (notBfm) => query<{ pk_id: number; group_id: number; state: string; close_reason: string | null; ship_status: number | null; awaiting_date: string | null }>(
-      `SELECT m.pk_id, g.group_id, g.state, g.close_reason, s.ship_status, s.awaiting_date
+    () => excludingBfm("m.pk_id", (notBfm) => query<{ pk_id: number; cb_state: string | null; cb_bill_id: number | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null }>(
+      `SELECT m.pk_id, ${CB_MEMBERSHIP_SELECT}
          FROM ${M} m
          JOIN ${G} g ON g.group_id = m.group_id
-         LEFT JOIN mod_shipment s ON s.package_id = m.pk_id
+         LEFT JOIN ${B} b ON b.bill_id = g.bill_id
         WHERE m.user_id = :userId AND m.removed_at IS NULL${notBfm}`,
       { userId }
     )),
     []
   );
-  const out = new Map<number, CbPackageDisplay>();
-  const released = new Map<number, typeof rows>();
+  const out = new Map<number, CbPackageFacts>();
   for (const r of rows) {
-    if (r.state === "released") {
-      if (!released.has(r.group_id)) released.set(r.group_id, []);
-      released.get(r.group_id)!.push(r);
-    } else {
-      // Only once it has left Miami: a package still in Miami simply shows In Miami.
-      const preparing = r.state === "closed" && r.close_reason === "customer" && Number(r.ship_status ?? 0) >= 2;
-      out.set(Number(r.pk_id), { waiting: Number(r.ship_status ?? 0) >= 2, preparing, inOpenGroup: r.state === "open", grouped: true, override: null });
-    }
-  }
-  for (const members of released.values()) {
-    const show = groupDisplay(members.map((m) => ({
-      shipStatus: m.ship_status == null ? null : Number(m.ship_status),
-      awaitingDate: m.awaiting_date,
-    })));
-    // Once everything is delivered each package shows its own record again.
-    const override = show.shipStatus != null && show.shipStatus < 5 ? show : null;
-    for (const m of members) out.set(Number(m.pk_id), { waiting: false, preparing: false, inOpenGroup: false, grouped: false, override });
+    const membership = cbMembershipFromRow(r);
+    if (membership) out.set(Number(r.pk_id), { membership, inOpenGroup: membership.state === "open" });
   }
   return out;
 }
 
 /**
- * Invoice ids the Invoices screen must not list on their own: every child of a
- * Consolidated Bill (the bill is shown instead) and every invoice whose packages
- * are all still waiting for their group (not the customer's to see yet).
+ * Invoice ids the Invoices LIST must not show on their own: every child of a
+ * Consolidated Bill (the bill is shown instead) and every invoice whose
+ * packages are all still held for their group (isCbHeld — not the customer's
+ * to see until the group's bill is issued).
  */
 export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
   const onBill = await safe(
@@ -308,20 +287,25 @@ export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
     ),
     []
   );
-  const held = await safe(
-    () => excludingBfm("m.pk_id", (notBfm) => query<{ invoice_id: number }>(
-      `SELECT ip.invoice_id
+  const rows = await safe(
+    () => excludingBfm("m.pk_id", (notBfm) => query<{ invoice_id: number; cb_state: string | null; cb_bill_id: number | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null }>(
+      `SELECT ip.invoice_id, ${CB_MEMBERSHIP_SELECT}
          FROM swiftbox_invoice_packages ip
          JOIN swiftbox_invoices i ON i.invoice_id = ip.invoice_id AND i.user_id = :userId
          LEFT JOIN ${M} m ON m.pk_id = ip.pk_id AND m.removed_at IS NULL${notBfm}
-         LEFT JOIN ${G} g ON g.group_id = m.group_id AND g.state IN ('open','closed')
-        GROUP BY ip.invoice_id
-       HAVING COUNT(*) = SUM(g.group_id IS NOT NULL)`,
+         LEFT JOIN ${G} g ON g.group_id = m.group_id
+         LEFT JOIN ${B} b ON b.bill_id = g.bill_id`,
       { userId }
     )),
     []
   );
-  return new Set([...onBill, ...held].map((r) => Number(r.invoice_id)));
+  const allHeld = new Map<number, boolean>();
+  for (const r of rows) {
+    const id = Number(r.invoice_id);
+    allHeld.set(id, (allHeld.get(id) ?? true) && isCbHeld(cbMembershipFromRow(r)));
+  }
+  const held = [...allHeld].filter(([, h]) => h).map(([id]) => id);
+  return new Set([...onBill.map((r) => Number(r.invoice_id)), ...held]);
 }
 
 type ChildRow = { invoice_id: number; invoice_no: string; total_ttd: string; amount_paid: string; ship_no: string | null; billing_mode: string | null };
@@ -528,14 +512,17 @@ export async function fetchCbBillWeights(userId: number, billNo: string): Promis
   }
 }
 
-/** The Consolidated Bill an invoice is on, or null. */
-export async function cbBillNoForInvoice(invoiceId: number): Promise<string | null> {
+/**
+ * The Consolidated Bill an invoice is on, or null. `issued` = the bill has gone
+ * to the customer; until then its children are not the customer's to see.
+ */
+export async function cbBillForInvoice(invoiceId: number): Promise<{ billNo: string; issued: boolean } | null> {
   const r = await safe(
-    () => query<{ bill_no: string }>(
-      `SELECT b.bill_no FROM ${BI} bi JOIN ${B} b ON b.bill_id = bi.bill_id WHERE bi.invoice_id = :id LIMIT 1`,
+    () => query<{ bill_no: string; lifecycle: string | null }>(
+      `SELECT b.bill_no, b.lifecycle FROM ${BI} bi JOIN ${B} b ON b.bill_id = bi.bill_id WHERE bi.invoice_id = :id LIMIT 1`,
       { id: invoiceId }
     ),
     []
   );
-  return r[0]?.bill_no ?? null;
+  return r[0] ? { billNo: r[0].bill_no, issued: r[0].lifecycle === "issued" } : null;
 }

@@ -1,13 +1,7 @@
 import "server-only";
 import { query } from "@/lib/db";
-import { isAutoTransitDue } from "@/lib/auto-transit-core";
-import {
-  CUSTOMER_STATUS_TABLE,
-  customerStageOf,
-  customerStatusView,
-  type CustomerStatusView,
-  type StoredOverride,
-} from "@/lib/customer-status-core";
+import { CUSTOMER_STATUS_TABLE, type StoredOverride } from "@/lib/customer-status-core";
+import { customerFacingView, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
 
 /**
  * Customer-facing status set by the office (admin migration 055,
@@ -42,19 +36,33 @@ export async function customerStatusOverrides(userId: number, pkIds: number[]): 
 }
 
 /**
- * What to show instead of the normal status, from the package's RAW
- * ship_status (its own shipment row, before any Consolidated Billing masking)
- * and whether it is in an unreleased group. Null = the normal status.
- * `airdrop` = the Airdrop receive time + mode for the 5 pm In Transit rule
- * (auto-transit-core.ts); absent for packages Airdrop never received.
+ * What the customer sees for one package — through THE shared rule,
+ * customer-facing-status-core.ts (code-identical with the admin and the
+ * website): the office's status, Consolidated Billing ("Consolidating" from
+ * the moment a member leaves Miami until its group's bill is issued), the 5 pm
+ * drop, then the real stage. `rawShipStatus` is the package's own shipment row
+ * (null = none), `cleared` its shipment's clearance, `airdrop` the Airdrop
+ * receive time + mode (absent for packages Airdrop never received).
  */
-export function viewFor(
-  o: StoredOverride | undefined,
-  rawShipStatus: number | null,
-  grouped: boolean,
-  airdrop?: { receivedAt: string | null; mode: string | null },
-  nowMs: number = Date.now()
-): CustomerStatusView | null {
-  const auto = airdrop ? isAutoTransitDue(airdrop.receivedAt, airdrop.mode, nowMs) : false;
-  return customerStatusView(o, customerStageOf(rawShipStatus), grouped, auto);
+export function viewFor(input: {
+  override?: StoredOverride;
+  rawShipStatus: number | null;
+  cleared: boolean;
+  pkType: number | null;
+  cb?: CbMembership | null;
+  airdrop?: { receivedAt: string | null; mode: string | null };
+  nowMs?: number;
+}): CustomerFacingView {
+  return customerFacingView({
+    shipStatus: input.rawShipStatus,
+    cleared: input.cleared,
+    pkType: input.pkType,
+    override: input.override ?? null,
+    cb: input.cb ?? null,
+    airdrop: input.airdrop ?? null,
+    nowMs: input.nowMs,
+  });
 }
+
+/** SQL: 1 when the shipment row aliased `s` has been marked cleared (admin migration 017). */
+export const CLEARED_SQL = "(SELECT COUNT(*) FROM swiftbox_shipment_clearance sc WHERE sc.ship_no = s.ship_no) > 0";

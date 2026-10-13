@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { customerStageOf, customerStatusView, isOverrideActive } from "./customer-status-core";
 import { CB_WAITING_LABEL } from "./consolidatedBilling";
-import { NOTICE_BADGE, STAGES, packageBadge, shipStatusToStage, shownStage } from "./status";
+import { customerFacingView } from "./customer-facing-status-core";
+import { NOTICE_BADGE, STAGES, packageBadge, shipStatusToStage } from "./status";
 
 describe("customer-status-core (code-identical to the admin's copy)", () => {
   it("is byte-identical to SwiftboxAdmin lib/customer-status-core.ts when that checkout is beside this one", () => {
@@ -43,24 +44,24 @@ describe("customer-status-core (code-identical to the admin's copy)", () => {
   });
 });
 
-describe("packageBadge / shownStage with an office-set status", () => {
-  const stage = customerStatusView({ key: "out_for_delivery", note: null, baseStage: 0 }, 0, false);
-  const notice = customerStatusView({ key: "on_hold", note: "Call us", baseStage: 0 }, 0, true);
+describe("packageBadge with an office-set status", () => {
+  const CLOSED = { state: "closed", billId: null, billLifecycle: null, offBillReason: null };
+  const stage = customerFacingView({ shipStatus: null, override: { key: "out_for_delivery", note: null, baseStage: 0 } });
+  const notice = customerFacingView({ shipStatus: 3, cb: CLOSED, override: { key: "on_hold", note: "Call us", baseStage: 2 } });
 
   it("a stage label takes that stage's badge and moves the bar", () => {
-    expect(packageBadge(null, false, false, stage)).toEqual(STAGES[3]);
-    expect(shownStage(null, stage)).toBe(3);
+    expect(packageBadge(stage)).toEqual({ label: STAGES[3].label, badge: STAGES[3].badge });
+    expect(stage.stage).toBe(3);
   });
 
-  it("a notice is highlighted, wins over Consolidated Billing, and leaves the bar at the real stage", () => {
-    expect(packageBadge(3, true, false, notice)).toEqual({ label: "On hold — contact us", badge: NOTICE_BADGE });
-    expect(shownStage(3, notice)).toBe(2);
+  it("a notice is highlighted, wins over Consolidated Billing, and leaves the bar where it is", () => {
+    expect(packageBadge(notice)).toEqual({ label: "On hold — contact us", badge: NOTICE_BADGE });
+    expect(notice.stage).toBe(1);
   });
 
-  it("no override → exactly as before", () => {
-    expect(packageBadge(3, true, false, null).label).toBe(CB_WAITING_LABEL);
-    expect(packageBadge(4, false, false)).toEqual(STAGES[3]);
-    expect(shownStage(4, null)).toBe(3);
+  it("no override → Consolidated Billing, or the real stage", () => {
+    expect(packageBadge(customerFacingView({ shipStatus: 3, cb: CLOSED })).label).toBe(CB_WAITING_LABEL);
+    expect(packageBadge(customerFacingView({ shipStatus: 4 }))).toEqual({ label: STAGES[3].label, badge: STAGES[3].badge });
   });
 
   it("nothing in the label says it was set by hand", () => {

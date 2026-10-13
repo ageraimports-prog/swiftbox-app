@@ -25,6 +25,7 @@
  * consolidation happens (no repacking / own-box talk). HOLD_DAYS stays for the
  * logic but is never rendered. Locked by consolidatedBilling.test.ts ("R13a").
  */
+import { CB_CONSOLIDATING_LABEL } from "./customer-facing-status-core";
 
 /**
  * R3 — the window, in days. The admin's HOLD_DAYS is the rule; keep them equal.
@@ -61,8 +62,12 @@ export function cbEnrolledText(count: number): string {
 /** Confirm before turning it OFF. */
 export const CB_OFF_CONFIRM = "Turning this off sends out what's ready now.";
 
-/** A held package, in place of its status. Never says where it is (R13). */
-export const CB_WAITING_LABEL = "Consolidated Billing: waiting for your group";
+/**
+ * A member's status from the moment it leaves Miami until its group's bill is
+ * issued (Brent, 2026-10-13). Never where or when (R13). The wording lives in the
+ * shared status rule, customer-facing-status-core.ts.
+ */
+export const CB_WAITING_LABEL = CB_CONSOLIDATING_LABEL;
 
 /**
  * The card while the setting is ON (with or without a group yet). R13a: no day
@@ -92,10 +97,11 @@ export function cbSendNowConfirmText(count: number): string {
   return `Send ${these} now? We'll deliver them together, with one bill. Any other packages come separately, or start a new group if Consolidated Billing is still on.`;
 }
 
-/** After the tap — and on every waiting package until the group goes out. Never says where (R13). */
+/**
+ * After the tap, on the Consolidated Billing card. Never says where (R13). The
+ * packages themselves read "Consolidating" until the group goes out.
+ */
 export const CB_PREPARING_TEXT = "Your packages are being prepared for delivery.";
-/** The short badge on a package card once the customer has said "send them". */
-export const CB_PREPARING_LABEL = "Being prepared for delivery";
 
 /** The card once the group has stopped taking packages, before release. No timing (R13a). */
 export const CB_CLOSED_CARD = "Your group is complete. We'll deliver your packages together, with one bill.";

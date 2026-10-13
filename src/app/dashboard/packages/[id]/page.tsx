@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CB_WAITING_LABEL, CB_NAME, CB_PREPARING_TEXT, CB_TOGETHER_LINE } from "@/lib/consolidatedBilling";
+import { CB_NAME, CB_TOGETHER_LINE } from "@/lib/consolidatedBilling";
 import SendMyPackagesNow from "@/components/SendMyPackagesNow";
 import AirdropDocuments from "../AirdropDocuments";
 import CopyTracking from "@/components/CopyTracking";
@@ -12,11 +12,9 @@ import {
   STAGES,
   freightLabel,
   packageBadge,
-  shownStage,
-  stageLabel,
-  type Stage,
+  stepLabels,
+  type ShownStatus,
 } from "@/lib/status";
-import type { CustomerStatusView } from "@/lib/customer-status-core";
 
 type Pkg = {
   id: number;
@@ -35,8 +33,9 @@ type Pkg = {
 };
 
 type Shipment = {
+  /** Null for a Consolidated Billing member (never sent). */
   shipNo: string | null;
-  shipStatus: number;
+  shipStatus: number | null;
   miamiDate: string | null;
   transitDate: string | null;
   awaitingDate: string | null;
@@ -66,35 +65,14 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerStatus = null, freight = null }: { shipment: Shipment | null; cbWaiting?: boolean; cbPreparing?: boolean; customerStatus?: CustomerStatusView | null; freight?: number | null }) {
-  // No shipment row = logged at Miami, not yet manifested → stage 0 active.
-  // A stage the office set (only ever ahead of the real one) moves the bar; a
-  // notice (Delayed / On hold) leaves it at the real stage.
-  const current = shownStage(shipment?.shipStatus ?? null, customerStatus);
-
-  // Consolidated Billing: after Miami the package is simply waiting for its
-  // group — one step, no later stages, no dates that would say it had landed.
-  if (cbWaiting) {
-    return (
-      <ol className="flex flex-col">
-        <li className="relative flex gap-4 pb-7">
-          <span aria-hidden className="absolute left-[9px] top-5 h-full w-0.5 bg-green" />
-          <span className="relative z-10 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green" />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-mist">{STAGES[0].label}</p>
-            {formatDate(shipment?.miamiDate ?? null) && <p className="mt-0.5 text-xs text-muted-dark">{formatDate(shipment?.miamiDate ?? null)}</p>}
-          </div>
-        </li>
-        <li className="relative flex gap-4">
-          <span className="relative z-10 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-            <span className="relative h-3.5 w-3.5 rounded-full bg-violet-300" />
-          </span>
-          <p className="text-sm font-semibold text-violet-300">{cbPreparing ? CB_PREPARING_TEXT : CB_WAITING_LABEL}</p>
-        </li>
-      </ol>
-    );
-  }
-
+function Stepper({ shipment, status = null, freight = null }: { shipment: Shipment | null; status?: ShownStatus | null; freight?: number | null }) {
+  // THE shared rule decides the position (status.stage): a stage the office set
+  // moves the bar, a notice (Delayed / On hold) leaves it where it is. A
+  // Consolidated Billing member has its own steps — In Miami, Consolidating,
+  // Ready for delivery, Out for Delivery, Delivered — and no transit or
+  // clearance step, so nothing says where it is or when it moved (R13).
+  const current = status ? status.stage : 0;
+  const labels = stepLabels(status, freight);
   const dates: Record<string, string | null> = {
     miamiDate: shipment?.miamiDate ?? null,
     transitDate: shipment?.transitDate ?? null,
@@ -109,7 +87,7 @@ function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerSta
         const done = i < current;
         const active = i === current;
         const date = formatDate(dates[stage.dateField]);
-        const label = stageLabel(i as Stage, freight);
+        const label = labels[i];
         return (
           <li key={stage.dateField} className="relative flex gap-4 pb-7 last:pb-0">
             {/* connector */}
@@ -155,7 +133,7 @@ function Stepper({ shipment, cbWaiting = false, cbPreparing = false, customerSta
               >
                 {label}
               </p>
-              {date && (done || active) && (
+              {date && (done || active) && !(status?.consolidating && i > 0) && (
                 <p className="mt-0.5 text-xs text-muted-dark">{date}</p>
               )}
             </div>
@@ -181,10 +159,8 @@ export default function PackageDetailPage() {
   const [data, setData] = React.useState<{
     package: Pkg;
     shipment: Shipment | null;
-    cbWaiting?: boolean;
-    cbPreparing?: boolean;
+    status?: ShownStatus | null;
     cbInOpenGroup?: boolean;
-    customerStatus?: CustomerStatusView | null;
   } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -213,8 +189,8 @@ export default function PackageDetailPage() {
   }, [id]);
 
   const tracking = data ? trackingNumbers(data.package.tracking) : [];
-  const cs = data?.customerStatus ?? null;
-  const badge = data ? packageBadge(data.shipment?.shipStatus ?? null, data.cbWaiting, data.cbPreparing, cs, data.package.freight) : null;
+  const st = data?.status ?? null;
+  const badge = data ? packageBadge(st, data.shipment?.shipStatus ?? null, data.package.freight) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -253,7 +229,7 @@ export default function PackageDetailPage() {
               {/* A waiting package has no stage badge here: the Consolidated Billing
                   box right below says so in full, and a sentence-long badge beside
                   the name would squeeze it to a few letters on a phone. */}
-              {(!data.cbWaiting || cs) && badge && (
+              {(!st?.consolidating || st.notice) && badge && (
                 <span className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.badge}`}>
                   {badge.label}
                 </span>
@@ -268,22 +244,20 @@ export default function PackageDetailPage() {
             )}
           </div>
 
-          {cs?.kind === "notice" ? (
+          {st?.notice ? (
             <section className="rounded-lg border border-amber-400/50 bg-amber-400/10 p-4">
-              <p className="text-sm font-semibold text-amber-200">{cs.label}</p>
-              {cs.note && <p className="mt-1 text-sm text-mist">{cs.note}</p>}
+              <p className="text-sm font-semibold text-amber-200">{st.label}</p>
+              {st.note && <p className="mt-1 text-sm text-mist">{st.note}</p>}
             </section>
-          ) : cs?.note ? (
-            <p className="text-sm text-muted-dark">{cs.note}</p>
+          ) : st?.note ? (
+            <p className="text-sm text-muted-dark">{st.note}</p>
           ) : null}
 
-          {data.cbWaiting && (
+          {st?.consolidating && !st.notice && (
             <section className="rounded-lg border border-violet-400/40 bg-violet-500/10 p-4">
               <p className="text-xs font-semibold uppercase tracking-widest text-violet-300">{CB_NAME}</p>
-              <p className="mt-1 text-sm font-semibold text-mist">{data.cbPreparing ? CB_PREPARING_TEXT : CB_WAITING_LABEL}</p>
-              {!data.cbPreparing && (
-                <p className="mt-1 text-xs text-muted-dark">{CB_TOGETHER_LINE}</p>
-              )}
+              <p className="mt-1 text-sm font-semibold text-mist">{st.label}</p>
+              <p className="mt-1 text-xs text-muted-dark">{CB_TOGETHER_LINE}</p>
             </section>
           )}
 
@@ -324,7 +298,7 @@ export default function PackageDetailPage() {
             <h2 className="mb-5 text-xs font-semibold uppercase tracking-widest text-muted-dark">
               Delivery status
             </h2>
-            <Stepper shipment={data.shipment} cbWaiting={!!data.cbWaiting} cbPreparing={!!data.cbPreparing} customerStatus={cs} freight={data.package.freight} />
+            <Stepper shipment={data.shipment} status={st} freight={data.package.freight} />
           </section>
         </>
       )}

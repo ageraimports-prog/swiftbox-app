@@ -1,10 +1,31 @@
 # Swiftbox customer app — standing brief
 
 Next.js 15 (App Router) + Tailwind 4 customer PWA for Swiftbox (Miami → Trinidad
-courier). It shares ONE live MySQL 5.6 database with SwiftboxAdmin
+courier). In production it shares ONE live MySQL 5.6 database with SwiftboxAdmin
 (`C:\Dev\SwiftboxAdmin`) and the legacy PHP system. The admin repo's CLAUDE.md is
 the authority on the shared tables; this file records what THIS app must not break.
 Brent is non-technical — explain in plain language.
+
+## LOCAL = DEV DATABASE ONLY (Brent, 2026-10-13) — read this first
+
+- **Every local run — `next dev`, a script, a test, a click in a browser pane — uses the
+  DEVELOPMENT database `swiftbox_dev` through
+  `https://livetracker.swiftboxtt.com/api-bridge-dev/bridge.php`, with the DEV secret.
+  Never production.** `.env.local` holds only dev credentials; production credentials
+  exist ONLY in Vercel's env vars. Never pull, copy or paste a production key, secret or
+  password into a local file, a script, a command line or the chat.
+- **`src/lib/db-guard.ts` enforces it** (code-identical with SwiftboxAdmin `lib/db-guard.ts`
+  and the other repo's copy — change all three together): `next.config` refuses to start,
+  and the bridge module refuses every call, unless the run is Vercel production
+  (`NODE_ENV=production` AND `VERCEL=1`) or the bridge is the dev one AND
+  `SELECT DATABASE()` is a dev/test database. No override flag — don't add one, and don't
+  call a bridge with a raw `fetch` outside the bridge module.
+- **Any write to PRODUCTION data needs Brent's explicit approval in chat first**, for that
+  specific write, and is made through a deployed app, never from a local machine.
+- Dev sign-in for the customer app: any customer account in `swiftbox_dev` with the dev
+  customer password (SwiftboxAdmin `_local/dev-bridge/dev-secrets.env`); the Play demo
+  account (`demo@swiftboxtt.com`, #0364) is kept. Setup and data: SwiftboxAdmin
+  `db/dev/README.md`.
 
 ## Hard invariants
 

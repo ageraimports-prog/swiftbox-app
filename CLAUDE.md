@@ -84,7 +84,7 @@ and on the page of any package in the open group — `cbInOpenGroup`, Miami incl
 and `SendNowPanel` inside the Account card (`showSendNow`). Shown only when
 `getCbState().group` is set: the OPEN group with ≥1 package (Buy For Me excluded).
 Names the group by description + tracking (`cbWaitingSummary`), shows the timing-free
-`CB_SEND_NOW_HINT` (R13a — "Ships automatically in N days" was removed 2026-10-04), and confirms IN the page (no `window.confirm` — it froze the Chrome
+`CB_SEND_NOW_HINT` (R13a — "Ships automatically in N days" was removed 2026-10-04), and confirms IN the page — Brent's wording since 2026-10-13, `cbSendNowConfirmText(n)`: "This closes your current group. These N packages will be billed and delivered together, and any new packages you receive will start a new group. Continue?" with `CB_SEND_NOW_YES` "Yes, send these now" / `CB_SEND_NOW_NO` "Keep waiting"; `/api/consolidated-billing/release` refuses anything without `confirmed: true` (`src/lib/send-now-request.ts`, tested in `sendMyPackagesNow.test.ts`). Every screen uses `SendNowPanel`; never call the route from anywhere else (no `window.confirm` — it froze the Chrome
 extension and is poor on phones). `POST /api/consolidated-billing/release` forwards
 only the session's user id + groupId to the admin, which owns every rule (closes the
 group as on day 21, refuses anyone else's group, answers "already" to a repeat). The

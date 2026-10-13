@@ -91,11 +91,19 @@ export function cbWaitingSummary(titles: string[]): string {
   return n === 0 ? head : `${head}: ${titles.join(", ")}`;
 }
 
-/** The confirmation, before anything happens. */
+/**
+ * The confirmation, before anything happens — Brent's words (2026-10-13), with
+ * the real package count. Customers were tapping the button without knowing it
+ * CLOSES the group. Nothing is sent until the customer taps CB_SEND_NOW_YES.
+ */
 export function cbSendNowConfirmText(count: number): string {
-  const these = count === 1 ? "this package" : `these ${count} packages`;
-  return `Send ${these} now? We'll deliver them together, with one bill. Any other packages come separately, or start a new group if Consolidated Billing is still on.`;
+  const these = count === 1 ? "This 1 package" : `These ${count} packages`;
+  return `This closes your current group. ${these} will be billed and delivered together, and any new packages you receive will start a new group. Continue?`;
 }
+
+/** The confirmation's two buttons. */
+export const CB_SEND_NOW_YES = "Yes, send these now";
+export const CB_SEND_NOW_NO = "Keep waiting";
 
 /**
  * After the tap, on the Consolidated Billing card. Never says where (R13). The

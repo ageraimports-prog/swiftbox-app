@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { parseSendNowRequest, SEND_NOW_UNCONFIRMED } from "./send-now-request";
 import * as copy from "./consolidatedBilling";
 import { packageBadge, stageMeta } from "./status";
 import { customerFacingView } from "./customer-facing-status-core";
@@ -15,12 +18,35 @@ describe('"Send my packages now" (2026-10-01)', () => {
     expect(copy.CB_SEND_NOW_HINT).toBe("Got everything you ordered? Tap Send my packages now and we'll deliver them together.");
     expect((copy as Record<string, unknown>).cbShipsAutomaticallyText).toBeUndefined();
   });
-  it("confirms in Brent's words before acting", () => {
+  it("confirms in Brent's words, with the real count, before acting (2026-10-13)", () => {
     expect(copy.cbSendNowConfirmText(3)).toBe(
-      "Send these 3 packages now? We'll deliver them together, with one bill. Any other packages come separately, or start a new group if Consolidated Billing is still on."
+      "This closes your current group. These 3 packages will be billed and delivered together, and any new packages you receive will start a new group. Continue?"
     );
-    expect(copy.cbSendNowConfirmText(1)).toMatch(/^Send this package now\?/);
+    expect(copy.cbSendNowConfirmText(11)).toMatch(/These 11 packages/);
+    expect(copy.cbSendNowConfirmText(1)).toMatch(/This 1 package will be billed/);
+    expect(copy.CB_SEND_NOW_YES).toBe("Yes, send these now");
+    expect(copy.CB_SEND_NOW_NO).toBe("Keep waiting");
     expect(copy.CB_SEND_NOW_BUTTON).toBe("Send my packages now");
+  });
+  it("the server refuses a send that did not come through the confirmation", () => {
+    expect(parseSendNowRequest({ groupId: 7, confirmed: true })).toEqual({ ok: true, groupId: 7 });
+    for (const body of [{ groupId: 7 }, { groupId: 7, confirmed: "true" }, { groupId: 7, confirmed: 1 }, { groupId: 7, confirmed: false }]) {
+      expect(parseSendNowRequest(body)).toEqual({ ok: false, error: SEND_NOW_UNCONFIRMED });
+    }
+    expect(parseSendNowRequest({ confirmed: true }).ok).toBe(false);
+    expect(parseSendNowRequest(null).ok).toBe(false);
+  });
+  it("the button only opens the confirmation; only its Yes sends, and the route checks it", () => {
+    const panel = readFileSync(join(__dirname, "..", "components", "SendMyPackagesNow.tsx"), "utf8");
+    expect(panel).toMatch(/onClick=\{\(\) => setStep\("confirm"\)\}/);
+    expect(panel.match(/onClick=\{send\}/g)?.length).toBe(1);
+    expect(panel).toMatch(/confirmed: true/);
+    const route = readFileSync(join(__dirname, "..", "app", "api", "consolidated-billing", "release", "route.ts"), "utf8");
+    expect(route).toMatch(/parseSendNowRequest\(body\)/);
+    // Every other screen that offers the button uses this one panel.
+    const card = readFileSync(join(__dirname, "..", "components", "ConsolidatedBillingCard.tsx"), "utf8");
+    expect(card).toMatch(/<SendNowPanel/);
+    expect(card).not.toMatch(/consolidated-billing\/release/);
   });
   it("R13: nothing here says where a package is", () => {
     const all = [

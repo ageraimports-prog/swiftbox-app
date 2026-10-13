@@ -6,6 +6,8 @@ import {
   CB_PREPARING_TEXT,
   CB_SEND_NOW_BUTTON,
   CB_SEND_NOW_HINT,
+  CB_SEND_NOW_NO,
+  CB_SEND_NOW_YES,
   cbSendNowConfirmText,
   cbWaitingSummary,
 } from "@/lib/consolidatedBilling";
@@ -51,7 +53,8 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
       const res = await fetch("/api/consolidated-billing/release", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ groupId: group.groupId }),
+        // confirmed: only ever sent from the confirmation's "Yes, send these now".
+        body: JSON.stringify({ groupId: group.groupId, confirmed: true }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Couldn't send your packages. Please try again.");
@@ -114,7 +117,7 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
               disabled={step === "busy"}
               className="rounded-lg border border-mist/20 px-3 py-2.5 text-sm font-semibold text-mist disabled:opacity-50"
             >
-              Not yet
+              {CB_SEND_NOW_NO}
             </button>
             <button
               type="button"
@@ -122,7 +125,7 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
               disabled={step === "busy"}
               className="rounded-lg bg-green px-3 py-2.5 text-sm font-bold text-ink disabled:opacity-60"
             >
-              {step === "busy" ? "Sending…" : "Yes, send them"}
+              {step === "busy" ? "Sending…" : CB_SEND_NOW_YES}
             </button>
           </div>
         </div>

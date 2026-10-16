@@ -99,6 +99,7 @@ export default function BillPage() {
                 ) : (
                   <p className="sb-disp min-w-0 truncate text-lg text-green">{title}</p>
                 )}
+                {p.houseAccount && <p className="mt-1 text-xs font-bold text-green">No charge — covered by Swiftbox</p>}
                 {numbers[0] && <TrackingLine tracking={numbers[0]} more={numbers.length - 1} className="mt-1" />}
                 <p className="mt-1 text-[11px] text-muted-dark/70">
                   Ref {shortRef(p.wr)} · {p.invoiceNo}
@@ -160,10 +161,11 @@ export default function BillPage() {
             <Total label={`Total for ${bill.packages.length} ${bill.packages.length === 1 ? "package" : "packages"}`} value={t.chargesTtd} />
             {t.creditsTtd < 0 && <Total label="Credits applied" value={t.creditsTtd} />}
             <Total label="Grand total" value={t.totalTtd} strong />
+            {!!t.houseValueTtd && t.status !== "house" && <Total label="No charge — covered by Swiftbox" value={t.houseValueTtd} />}
             <Total label="Amount paid" value={t.paidTtd} />
-            <Total label="Amount due" value={t.dueTtd} strong accent />
+            <Total label={t.status === "house" ? "No charge — covered by Swiftbox" : "Amount due"} value={t.dueTtd} strong accent />
             <p className="mt-3 text-xs text-muted-dark">
-              You pay the whole bill at once when your packages are delivered, including in TT$ cash to the driver at your door.
+              {t.status === "house" ? "No payment required." : "You pay the whole bill at once when your packages are delivered, including in TT$ cash to the driver at your door."}
             </p>
           </section>
         </>

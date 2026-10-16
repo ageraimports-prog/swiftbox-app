@@ -19,6 +19,8 @@
  *   - STATUS is derived from total and paid, like the stored enum, but nothing
  *     owed (a total of 0 or less) is Paid even with no payment — an invoice
  *     discounted to 0 must never read as owing.
+ *   - HOUSE snapshots retain every charge and return status house and zero debt;
+ *     no payment or discount is invented to balance the invoice.
  */
 
 export const DISCOUNT_LINE_TYPE = "other";
@@ -38,10 +40,11 @@ export function discountReasonFromDescription(description: string): string {
 
 const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
-export type InvoiceStatusValue = "unpaid" | "partial" | "paid";
+export type InvoiceStatusValue = "unpaid" | "partial" | "paid" | "house";
 
 /** The payment status from the two money columns (DECIMAL(12,2), exact to the cent). */
-export function invoicePaymentStatus(totalTtd: number, amountPaid: number): InvoiceStatusValue {
+export function invoicePaymentStatus(totalTtd: number, amountPaid: number, house = false): InvoiceStatusValue {
+  if (house) return "house";
   const t = r2(totalTtd);
   const p = r2(amountPaid);
   if (t <= 0 && p >= t) return "paid";
@@ -59,12 +62,12 @@ export type InvoiceMoney<L extends MoneyLine> = {
   referralCreditTtd: number;
   /** What was charged before the discount: totalTtd + discount. */
   chargesTotalTtd: number;
-  /** total − paid; negative when overpaid. */
+  /** Zero for house invoices; otherwise total − paid, negative when overpaid. */
   balance: number;
   status: InvoiceStatusValue;
 };
 
-export function invoiceMoney<L extends MoneyLine>(lines: L[], totalTtd: number, amountPaid: number): InvoiceMoney<L> {
+export function invoiceMoney<L extends MoneyLine>(lines: L[], totalTtd: number, amountPaid: number, house = false): InvoiceMoney<L> {
   const discountLines = lines.filter((l) => isDiscountLine(l));
   const chargeLines = lines.filter((l) => !isDiscountLine(l));
   const discountTtd = r2(-discountLines.reduce((a, l) => a + Number(l.amountTtd), 0));
@@ -76,7 +79,7 @@ export function invoiceMoney<L extends MoneyLine>(lines: L[], totalTtd: number, 
     discount: discountTtd > 0 ? { amountTtd: discountTtd, reason: discountReasonFromDescription(discountLines[0].description) } : null,
     referralCreditTtd,
     chargesTotalTtd: r2(Number(totalTtd) + discountTtd),
-    balance: r2(Number(totalTtd) - Number(amountPaid)),
-    status: invoicePaymentStatus(totalTtd, amountPaid),
+    balance: house ? 0 : r2(Number(totalTtd) - Number(amountPaid)),
+    status: invoicePaymentStatus(totalTtd, amountPaid, house),
   };
 }

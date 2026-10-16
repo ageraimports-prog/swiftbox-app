@@ -5,6 +5,7 @@ import { TrackingLine } from "@/components/PackageCard";
 
 /** An invoice as /api/invoices returns it. */
 export type InvoiceSummary = {
+  houseAccount?: boolean;
   invoiceNo: string;
   scope: "package" | "shipment";
   totalTtd: number;
@@ -65,6 +66,7 @@ export default function InvoiceCard({ inv }: { inv: InvoiceSummary }) {
         </svg>
       </div>
 
+      {inv.houseAccount && <p className="mt-2 text-xs text-sky-200">No charge — covered by Swiftbox</p>}
       {inv.status === "partial" && (
         <p className="mt-2 text-xs text-amber-300">
           {formatTtd(inv.amountPaid)} of {formatTtd(inv.totalTtd)} paid

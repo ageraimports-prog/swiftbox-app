@@ -1,3 +1,4 @@
+import { invoiceHouseColumn } from "@/lib/house-accounts";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
@@ -5,12 +6,13 @@ import { cbHiddenInvoiceIds, listCbBills } from "@/lib/consolidated-billing";
 import { invoicePaymentStatus } from "@/lib/invoice-money-core";
 
 type Row = {
+  house_account: number;
   invoice_id: number;
   invoice_no: string;
   scope: "package" | "shipment";
   total_ttd: string;
   amount_paid: string;
-  status: "unpaid" | "partial" | "paid";
+  status: "unpaid" | "partial" | "paid" | "house";
   created_at: string;
 };
 
@@ -38,7 +40,7 @@ export async function GET() {
   // this line everywhere already (email refuses a non-issued invoice; the customer
   // delete-block counts issued-unpaid only); this reader never got it.
   const rows = await query<Row>(
-    `SELECT invoice_id, invoice_no, scope, total_ttd, amount_paid, status, created_at
+    `SELECT ${await invoiceHouseColumn()}, invoice_id, invoice_no, scope, total_ttd, amount_paid, status, created_at
        FROM swiftbox_invoices
       WHERE user_id = :userId
         AND lifecycle = 'issued'
@@ -85,9 +87,9 @@ export async function GET() {
     scope: r.scope,
     totalTtd: Number(r.total_ttd),
     amountPaid: Number(r.amount_paid),
-    // Derived like the detail route and the admin (invoice-money-core): an
-    // invoice discounted to 0 is Paid even with no payment recorded.
-    status: invoicePaymentStatus(Number(r.total_ttd), Number(r.amount_paid)),
+    houseAccount: Number(r.house_account) === 1,
+    balance: Number(r.house_account) === 1 ? 0 : Math.round((Number(r.total_ttd) - Number(r.amount_paid)) * 100) / 100,
+    status: invoicePaymentStatus(Number(r.total_ttd), Number(r.amount_paid), Number(r.house_account) === 1),
     createdAt: r.created_at,
     packages: byInvoice.get(r.invoice_no) ?? [],
   }));
@@ -101,6 +103,8 @@ export async function GET() {
       packages: b.packages,
       totalTtd: b.totals.totalTtd,
       dueTtd: b.totals.dueTtd,
+      paidTtd: b.totals.paidTtd,
+      houseValueTtd: b.totals.houseValueTtd ?? 0,
       status: b.totals.status,
     })),
   });

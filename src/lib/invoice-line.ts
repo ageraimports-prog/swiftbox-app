@@ -166,9 +166,10 @@ export function invoiceBillingBadge(
  * Shared invoice presentation — the list and the detail screen agree.
  * ------------------------------------------------------------------ */
 
-export type InvoiceStatus = "unpaid" | "partial" | "paid";
+export type InvoiceStatus = "unpaid" | "partial" | "paid" | "house";
 
 export const STATUS_BADGE: Record<InvoiceStatus, { label: string; cls: string }> = {
+  house: { label: "No charge", cls: "bg-sky-400/10 text-sky-200 border border-sky-400/25" },
   paid: {
     label: "Paid",
     cls: "bg-green/10 text-green border border-green/25",

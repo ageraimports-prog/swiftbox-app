@@ -1,3 +1,4 @@
+import { invoiceHouseColumn } from "@/lib/house-accounts";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
@@ -6,11 +7,12 @@ import { cbHiddenInvoiceIds, cbBillForInvoice } from "@/lib/consolidated-billing
 import { invoiceMoney } from "@/lib/invoice-money-core";
 
 type HeaderRow = {
+  house_account: number;
   invoice_id: number;
   invoice_no: string;
   scope: "package" | "shipment";
   ship_no: string | null;
-  status: "unpaid" | "partial" | "paid";
+  status: "unpaid" | "partial" | "paid" | "house";
   billing_mode: string | null;
   roe: string;
   shipping_ttd: string;
@@ -75,7 +77,7 @@ export async function GET(
   // packages; neither is a real debt, both can change before a cent is owed, and
   // neither may be shown to the customer. A draft's invoice number 404s here.
   const headers = await query<HeaderRow>(
-    `SELECT invoice_id, invoice_no, scope, ship_no, status, billing_mode, roe,
+    `SELECT ${await invoiceHouseColumn()}, invoice_id, invoice_no, scope, ship_no, status, billing_mode, roe,
             shipping_ttd, customs_total_ttd, total_ttd, amount_paid, created_at
        FROM swiftbox_invoices
       WHERE invoice_no = :invoiceNo AND user_id = :userId AND lifecycle = 'issued'
@@ -138,7 +140,8 @@ export async function GET(
   const money = invoiceMoney(
     lineRows.map((l) => ({ ...l, lineType: l.line_type, amountTtd: Number(l.amount_ttd) })),
     total,
-    paid
+    paid,
+    Number(h.house_account) === 1
   );
 
   return NextResponse.json({
@@ -146,8 +149,7 @@ export async function GET(
       invoiceNo: h.invoice_no,
       scope: h.scope,
       shipNo: h.ship_no,
-      // DERIVED from the two money columns, like the admin: an invoice
-      // discounted to 0 is Paid, never owing.
+      houseAccount: Number(h.house_account) === 1,
       status: money.status,
       billingMode: billingModeOf(h.billing_mode),
       consolidatedBillNo: billNo,

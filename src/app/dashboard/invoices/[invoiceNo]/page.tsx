@@ -46,6 +46,7 @@ type Pkg = {
 };
 
 type Invoice = {
+  houseAccount?: boolean;
   invoiceNo: string;
   scope: "package" | "shipment";
   shipNo: string | null;
@@ -221,7 +222,7 @@ export default function InvoiceDetailPage() {
           {/* Balance — the thing they opened this screen for. */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">
-              Balance due
+              {invoice.houseAccount ? "No charge — covered by Swiftbox" : "Balance due"}
             </p>
             <p
               className={`sb-disp mt-1.5 text-3xl ${
@@ -242,7 +243,7 @@ export default function InvoiceDetailPage() {
               href={`/dashboard/bills/${invoice.consolidatedBillNo}`}
               className="rounded-lg border border-green/30 bg-green/10 px-4 py-3 text-sm text-mist"
             >
-              Part of Consolidated Bill <span className="font-bold text-green">{invoice.consolidatedBillNo}</span> — pay the whole bill at once.
+              Part of Consolidated Bill <span className="font-bold text-green">{invoice.consolidatedBillNo}</span> {invoice.houseAccount ? "— No charge — covered by Swiftbox" : "— pay the whole bill at once."}
             </Link>
           )}
 
@@ -380,7 +381,7 @@ export default function InvoiceDetailPage() {
                 />
               )}
               <TotalRow
-                label="Total due"
+                label={invoice.houseAccount ? "Invoice value" : "Total due"}
                 value={formatTtd(invoice.chargesTotalTtd ?? invoice.totalTtd)}
                 emphasis
                 divider
@@ -395,7 +396,7 @@ export default function InvoiceDetailPage() {
                 />
               )}
               <TotalRow
-                label="Balance due"
+                label={invoice.houseAccount ? "No charge — covered by Swiftbox" : "Balance due"}
                 value={formatTtd(invoice.balance)}
                 emphasis
               />
@@ -409,7 +410,7 @@ export default function InvoiceDetailPage() {
             </h2>
 
             {invoice.payments.length === 0 ? (
-              <p className="text-xs text-muted-dark">No payments recorded yet.</p>
+              <p className="text-xs text-muted-dark">{invoice.houseAccount ? "No payment required." : "No payments recorded yet."}</p>
             ) : (
               <ul className="flex flex-col">
                 {invoice.payments.map((p) => (

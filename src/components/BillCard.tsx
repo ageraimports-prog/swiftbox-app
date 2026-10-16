@@ -12,6 +12,8 @@ export type BillSummary = {
   packages?: { wr: string; tracking: string; commodities: string }[] | number;
   totalTtd: number;
   dueTtd: number;
+  paidTtd?: number;
+  houseValueTtd?: number;
   status: InvoiceStatus;
 };
 
@@ -75,9 +77,10 @@ export default function BillCard({ bill }: { bill: BillSummary }) {
         </svg>
       </div>
 
+      {bill.status === "house" && <p className="mt-2 text-xs text-sky-200">No charge — covered by Swiftbox</p>}
       {bill.status === "partial" && (
         <p className="mt-2 text-xs text-amber-300">
-          {formatTtd(bill.totalTtd - bill.dueTtd)} of {formatTtd(bill.totalTtd)} paid
+          {formatTtd(bill.paidTtd ?? bill.totalTtd - (bill.houseValueTtd ?? 0) - bill.dueTtd)} paid · {formatTtd(bill.dueTtd)} due
         </p>
       )}
 

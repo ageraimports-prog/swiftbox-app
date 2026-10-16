@@ -118,9 +118,10 @@ export function packageSection(lines: ChildLine[], items: { description: string;
   };
 }
 
-export type BillStatus = "unpaid" | "partial" | "paid";
+export type BillStatus = "unpaid" | "partial" | "paid" | "house";
 
 export type BillTotals = {
+  houseValueTtd?: number;
   chargesTtd: number;
   creditsTtd: number;
   totalTtd: number;
@@ -130,22 +131,24 @@ export type BillTotals = {
 };
 
 /** R10: Σ children to the cent. The total is Σ total_ttd itself, never a re-addition. */
-export function billTotals(children: { totalTtd: number; amountPaid: number; lines: ChildLine[] }[]): BillTotals {
-  let total = 0, paid = 0, due = 0, credits = 0;
+export function billTotals(children: { houseAccount?: boolean; totalTtd: number; amountPaid: number; lines: ChildLine[] }[]): BillTotals {
+  let total = 0, paid = 0, due = 0, credits = 0, houseValue = 0;
   for (const c of children) {
     const t = cents(c.totalTtd);
     const p = cents(c.amountPaid);
     total += t;
     paid += p;
-    if (t - p > 0) due += t - p;
+    if (c.houseAccount) houseValue += t;
+    else if (t - p > 0) due += t - p;
     for (const l of c.lines) { const a = cents(l.amountTtd); if (a < 0) credits += a; }
   }
   return {
+    houseValueTtd: fromCents(houseValue),
     chargesTtd: fromCents(total - credits),
     creditsTtd: fromCents(credits),
     totalTtd: fromCents(total),
     paidTtd: fromCents(paid),
     dueTtd: fromCents(due),
-    status: due === 0 ? "paid" : paid > 0 ? "partial" : "unpaid",
+    status: children.length > 0 && children.every((c) => c.houseAccount) ? "house" : due === 0 ? "paid" : paid > 0 ? "partial" : "unpaid",
   };
 }

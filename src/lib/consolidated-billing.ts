@@ -1,3 +1,4 @@
+import { invoiceHouseColumn } from "./house-accounts";
 import "server-only";
 import { query } from "@/lib/db";
 import { swiftCodeFromAc } from "@/lib/consolidatedBilling";
@@ -308,11 +309,11 @@ export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
   return new Set([...onBill.map((r) => Number(r.invoice_id)), ...held]);
 }
 
-type ChildRow = { invoice_id: number; invoice_no: string; total_ttd: string; amount_paid: string; ship_no: string | null; billing_mode: string | null };
+type ChildRow = { house_account: number; invoice_id: number; invoice_no: string; total_ttd: string; amount_paid: string; ship_no: string | null; billing_mode: string | null };
 
 async function children(billId: number): Promise<ChildRow[]> {
   return query<ChildRow>(
-    `SELECT i.invoice_id, i.invoice_no, i.total_ttd, i.amount_paid, i.ship_no, i.billing_mode
+    `SELECT ${await invoiceHouseColumn("i")}, i.invoice_id, i.invoice_no, i.total_ttd, i.amount_paid, i.ship_no, i.billing_mode
        FROM ${BI} bi JOIN swiftbox_invoices i ON i.invoice_id = bi.invoice_id
       WHERE bi.bill_id = :b ORDER BY i.invoice_id`,
     { b: billId }
@@ -379,7 +380,7 @@ export async function listCbBills(userId: number): Promise<CbBillSummary[]> {
       date: String(b.issued_at ?? b.created_at ?? ""),
       packages: pkgs.get(Number(b.bill_id)) ?? [],
       totals: billTotals(kids.map((k) => ({
-        totalTtd: Number(k.total_ttd), amountPaid: Number(k.amount_paid), lines: lines.get(Number(k.invoice_id)) ?? [],
+        houseAccount: Number(k.house_account) === 1, totalTtd: Number(k.total_ttd), amountPaid: Number(k.amount_paid), lines: lines.get(Number(k.invoice_id)) ?? [],
       }))),
     });
   }
@@ -387,6 +388,7 @@ export async function listCbBills(userId: number): Promise<CbBillSummary[]> {
 }
 
 export type CbBillPackage = {
+  houseAccount?: boolean;
   invoiceNo: string;
   pkId: number | null;
   wr: string;
@@ -441,6 +443,7 @@ export async function getCbBill(userId: number, billNo: string): Promise<CbBillD
   const packages: CbBillPackage[] = kids.map((k) => {
     const mine = pkgs.filter((p) => Number(p.invoice_id) === Number(k.invoice_id));
     return {
+      houseAccount: Number(k.house_account) === 1,
       invoiceNo: k.invoice_no,
       pkId: mine[0] ? Number(mine[0].pk_id) : null,
       wr: mine.map((p) => p.wr).join(", "),
@@ -460,7 +463,7 @@ export async function getCbBill(userId: number, billNo: string): Promise<CbBillD
     date: String(b.issued_at ?? ""),
     packages,
     totals: billTotals(kids.map((k) => ({
-      totalTtd: Number(k.total_ttd), amountPaid: Number(k.amount_paid), lines: lines.get(Number(k.invoice_id)) ?? [],
+      houseAccount: Number(k.house_account) === 1, totalTtd: Number(k.total_ttd), amountPaid: Number(k.amount_paid), lines: lines.get(Number(k.invoice_id)) ?? [],
     }))),
   };
 }

@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { billingModeOf } from "@/lib/invoice-line";
 import { cbHiddenInvoiceIds, cbBillForInvoice } from "@/lib/consolidated-billing";
+import { invoiceMoney } from "@/lib/invoice-money-core";
 
 type HeaderRow = {
   invoice_id: number;
@@ -49,7 +50,6 @@ type PackageRow = {
   pcs: number;
 };
 
-const round2 = (n: number) => Number(`${Math.round(Number(`${n}e2`))}e-2`);
 
 export async function GET(
   _req: Request,
@@ -129,17 +129,16 @@ export async function GET(
 
   const total = Number(h.total_ttd);
   const paid = Number(h.amount_paid);
-  // Referral credit = the negative TTD lines. Already reflected in total_ttd;
-  // surfaced so the footer reconciles Shipping + Customs − Credit = Total.
-  // EXCEPT 'adjustment' lines ("Shipping waived — …", "5 lb free — …", written
-  // by the admin's billing adjustments): those are already inside the NET
-  // shipping_ttd, so counting them here too would print a footer that does not
-  // add up. Same rule as the admin's referralCreditFromLines.
-  const referralCreditTtd = round2(
-    lineRows.reduce(
-      (a, l) => (l.line_type === "adjustment" ? a : a + Math.min(0, Number(l.amount_ttd))),
-      0
-    )
+  // The money split — charges, referral credit, the owner's discount, balance,
+  // status — is invoiceMoney (src/lib/invoice-money-core.ts), CODE-IDENTICAL to
+  // the admin's lib/invoice-money-core.ts, which its getInvoiceDetail uses, so
+  // the customer and the office can never read the same invoice differently.
+  // Referral credit = the negative lines EXCEPT 'adjustment' lines (already in
+  // the net shipping_ttd) and the discount (its own "Discount" row).
+  const money = invoiceMoney(
+    lineRows.map((l) => ({ ...l, lineType: l.line_type, amountTtd: Number(l.amount_ttd) })),
+    total,
+    paid
   );
 
   return NextResponse.json({
@@ -147,18 +146,24 @@ export async function GET(
       invoiceNo: h.invoice_no,
       scope: h.scope,
       shipNo: h.ship_no,
-      status: h.status,
+      // DERIVED from the two money columns, like the admin: an invoice
+      // discounted to 0 is Paid, never owing.
+      status: money.status,
       billingMode: billingModeOf(h.billing_mode),
       consolidatedBillNo: billNo,
       roe: Number(h.roe),
       shippingTtd: Number(h.shipping_ttd),
       customsTotalTtd: Number(h.customs_total_ttd),
-      referralCreditTtd,
+      referralCreditTtd: money.referralCreditTtd,
+      // The owner's discount ("Discount (reason)"), already inside totalTtd.
+      discount: money.discount,
+      // What was charged before the discount — the footer's "Total due".
+      chargesTotalTtd: money.chargesTotalTtd,
       totalTtd: total,
       amountPaid: paid,
-      balance: round2(total - paid),
+      balance: money.balance,
       createdAt: h.created_at,
-      lines: lineRows.map((l) => ({
+      lines: money.chargeLines.map((l) => ({
         lineType: l.line_type,
         description: l.description,
         currency: l.currency,

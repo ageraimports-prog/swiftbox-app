@@ -57,6 +57,11 @@ type Invoice = {
   shippingTtd: number;
   customsTotalTtd: number;
   referralCreditTtd: number;
+  /** Swiftbox's discount on this invoice (already inside totalTtd). Optional:
+   *  a cached PWA shell can meet a response that predates the field. */
+  discount?: { amountTtd: number; reason: string } | null;
+  /** What was charged before the discount. */
+  chargesTotalTtd?: number;
   totalTtd: number;
   amountPaid: number;
   balance: number;
@@ -226,8 +231,9 @@ export default function InvoiceDetailPage() {
               {formatTtd(invoice.balance)}
             </p>
             <p className="mt-2 text-xs text-muted-dark">
-              Total {formatTtd(invoice.totalTtd)} · Paid{" "}
-              {formatTtd(invoice.amountPaid)}
+              Total {formatTtd(invoice.chargesTotalTtd ?? invoice.totalTtd)}
+              {invoice.discount && <> · Discount -{formatTtd(invoice.discount.amountTtd)}</>}
+              {" "}· Paid {formatTtd(invoice.amountPaid)}
             </p>
           </section>
 
@@ -375,11 +381,19 @@ export default function InvoiceDetailPage() {
               )}
               <TotalRow
                 label="Total due"
-                value={formatTtd(invoice.totalTtd)}
+                value={formatTtd(invoice.chargesTotalTtd ?? invoice.totalTtd)}
                 emphasis
                 divider
               />
               <TotalRow label="Amount paid" value={formatTtd(invoice.amountPaid)} />
+              {/* Swiftbox's discount — not a referral credit and not a payment.
+                  Same row the admin's screen, PDF and email print. */}
+              {invoice.discount && (
+                <TotalRow
+                  label={`Discount (${invoice.discount.reason})`}
+                  value={`-${formatTtd(invoice.discount.amountTtd)}`}
+                />
+              )}
               <TotalRow
                 label="Balance due"
                 value={formatTtd(invoice.balance)}

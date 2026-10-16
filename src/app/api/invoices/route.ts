@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { cbHiddenInvoiceIds, listCbBills } from "@/lib/consolidated-billing";
+import { invoicePaymentStatus } from "@/lib/invoice-money-core";
 
 type Row = {
   invoice_id: number;
@@ -84,7 +85,9 @@ export async function GET() {
     scope: r.scope,
     totalTtd: Number(r.total_ttd),
     amountPaid: Number(r.amount_paid),
-    status: r.status,
+    // Derived like the detail route and the admin (invoice-money-core): an
+    // invoice discounted to 0 is Paid even with no payment recorded.
+    status: invoicePaymentStatus(Number(r.total_ttd), Number(r.amount_paid)),
     createdAt: r.created_at,
     packages: byInvoice.get(r.invoice_no) ?? [],
   }));

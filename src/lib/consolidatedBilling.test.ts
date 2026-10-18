@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 import * as copy from "./consolidatedBilling";
-import { packageSection, billTotals, groupDisplay, windowDay, ttDateLabel } from "./consolidatedBillingCore";
+import { packageSection, billTotals, groupDisplay, windowDay, ttDateLabel, reconcileChildLines, type ChildLine } from "./consolidatedBillingCore";
 
 const allCopy = [
   copy.CB_SHORT_LINE,
@@ -225,5 +225,47 @@ describe("Consolidated Bill arithmetic (mirrors the admin core)", () => {
     expect(windowDay(first, new Date(Date.UTC(2026, 9, 12, 14)))).toBe(12);
     expect(windowDay(first, new Date(Date.UTC(2026, 10, 30, 14)))).toBe(20);
     expect(ttDateLabel(new Date(Date.UTC(2026, 9, 21, 3, 59, 59)))).toMatch(/20 Oct/);
+  });
+});
+
+
+// Brent, 2026-10-18 — Stacey's merged CB-000002 read 108.25 + 21.62 + 13.58 +
+// 312.85 = 456.30 against a correct total of 456.33. The pricing stores each
+// shipping line converted on its own and the header converted once; the bill's
+// display settles the gap on each invoice's own shipping lines. Same cases as
+// the admin's scripts/test-cb-bill-lines.ts.
+describe("Consolidated Bill lines add up to the total (display only)", () => {
+  const ROE = 6.8;
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const c = (n: number) => Math.round(n * 100);
+  function stored(f: number, u: number, i: number, gov: number) {
+    const lines: ChildLine[] = [
+      { lineType: "freight", description: "Freight", amountTtd: r2(f * ROE), exactTtd: f * ROE },
+      { lineType: "fuel", description: "Fuel", amountTtd: r2(u * ROE), exactTtd: u * ROE },
+      { lineType: "insurance", description: "Insurance", amountTtd: r2(i * ROE), exactTtd: i * ROE },
+      { lineType: "duty", description: "Duty", amountTtd: gov },
+    ];
+    return { totalTtd: r2(r2((f + u + i) * ROE) + gov), amountPaid: 0, lines };
+  }
+  const shown = (kids: ReturnType<typeof stored>[]) =>
+    kids.reduce((n, k) => { const s = packageSection(reconcileChildLines(k.lines, k.totalTtd), []); return n + c(s.subtotalTtd) + c(s.creditsTtd); }, 0);
+
+  it("Stacey's six invoices: lines were 456.30, now add up to 456.33 = the total", () => {
+    const fr = [1.42, 2.15, 1.93, 1.6, 1.88, 6.94], fu = [0.29, 0.43, 0.39, 0.32, 0.37, 1.38], ins = [0.34, 0.34, 0.33, 0.33, 0.33, 0.33];
+    const gov = [49.96, 49.96, 49.96, 49.96, 49.98, 63.03];
+    const kids = fr.map((f, i) => stored(f, fu[i], ins[i], gov[i]));
+    expect(kids.reduce((n, k) => n + k.lines.reduce((m, l) => m + c(l.amountTtd), 0), 0)).toBe(45630);
+    expect(c(billTotals(kids).totalTtd)).toBe(45633);
+    expect(shown(kids)).toBe(45633);
+    const ins$ = kids.reduce((n, k) => n + c(packageSection(reconcileChildLines(k.lines, k.totalTtd), []).insuranceTtd), 0);
+    expect(ins$).toBe(1360); // US$2.00 once × 6.8
+  });
+  it("single-package bill with a rounding gap adds up", () => {
+    const kids = [stored(1.79, 0.36, 0.34, 1)];
+    expect(shown(kids)).toBe(c(billTotals(kids).totalTtd));
+  });
+  it("leaves a gap rounding cannot explain (3 cents) alone", () => {
+    const k = stored(7.96, 1.59, 2, 20);
+    expect(reconcileChildLines(k.lines, r2(k.totalTtd + 0.03))).toBe(k.lines);
   });
 });

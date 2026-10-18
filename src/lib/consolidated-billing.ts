@@ -9,6 +9,8 @@ import {
   ttDayNumber,
   packageSection,
   billTotals,
+  reconcileChildLines,
+  type ChildLine,
   type PackageSection,
   type BillTotals,
 } from "@/lib/consolidatedBillingCore";
@@ -309,30 +311,47 @@ export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
   return new Set([...onBill.map((r) => Number(r.invoice_id)), ...held]);
 }
 
-type ChildRow = { house_account: number; invoice_id: number; invoice_no: string; total_ttd: string; amount_paid: string; ship_no: string | null; billing_mode: string | null };
+type ChildRow = { house_account: number; invoice_id: number; invoice_no: string; total_ttd: string; amount_paid: string; ship_no: string | null; billing_mode: string | null; roe: string | null };
 
 async function children(billId: number): Promise<ChildRow[]> {
   return query<ChildRow>(
-    `SELECT ${await invoiceHouseColumn("i")}, i.invoice_id, i.invoice_no, i.total_ttd, i.amount_paid, i.ship_no, i.billing_mode
+    `SELECT ${await invoiceHouseColumn("i")}, i.invoice_id, i.invoice_no, i.total_ttd, i.amount_paid, i.ship_no, i.billing_mode, i.roe
        FROM ${BI} bi JOIN swiftbox_invoices i ON i.invoice_id = bi.invoice_id
       WHERE bi.bill_id = :b ORDER BY i.invoice_id`,
     { b: billId }
   );
 }
 
+type BillLine = { lineType: string; description: string; amountTtd: number; basis: string | null; currency: string; amount: number };
+
 async function linesFor(invoiceIds: number[]) {
-  if (invoiceIds.length === 0) return new Map<number, { lineType: string; description: string; amountTtd: number; basis: string | null }[]>();
-  const rows = await query<{ invoice_id: number; line_type: string; description: string; amount_ttd: string; basis: string | null }>(
-    `SELECT invoice_id, line_type, description, amount_ttd, basis FROM swiftbox_invoice_lines
+  if (invoiceIds.length === 0) return new Map<number, BillLine[]>();
+  const rows = await query<{ invoice_id: number; line_type: string; description: string; currency: string | null; amount: string | null; amount_ttd: string; basis: string | null }>(
+    `SELECT invoice_id, line_type, description, currency, amount, amount_ttd, basis FROM swiftbox_invoice_lines
       WHERE invoice_id IN (${invoiceIds.map((n) => Number(n)).join(",")}) ORDER BY invoice_id, sort_order`
   );
-  const out = new Map<number, { lineType: string; description: string; amountTtd: number; basis: string | null }[]>();
+  const out = new Map<number, BillLine[]>();
   for (const r of rows) {
     const k = Number(r.invoice_id);
     if (!out.has(k)) out.set(k, []);
-    out.get(k)!.push({ lineType: r.line_type, description: r.description, amountTtd: Number(r.amount_ttd), basis: r.basis });
+    out.get(k)!.push({ lineType: r.line_type, description: r.description, amountTtd: Number(r.amount_ttd), basis: r.basis, currency: String(r.currency ?? ""), amount: Number(r.amount ?? 0) });
   }
   return out;
+}
+
+/**
+ * One invoice's lines as the bill DISPLAYS them (admin getBillDetail does the
+ * same): the cent or two of shipping-conversion rounding settled onto its own
+ * total by reconcileChildLines, so the bill's lines add up to Σ invoice totals.
+ * Display only — nothing stored moves.
+ */
+function displayLines(k: ChildRow, lines: BillLine[]): ChildLine[] {
+  const roe = Number(k.roe ?? 0);
+  return reconcileChildLines(
+    lines.map((l) => ({ lineType: l.lineType, description: l.description, amountTtd: l.amountTtd, basis: l.basis,
+      exactTtd: l.currency === "USD" && roe > 0 ? l.amount * roe : undefined })),
+    Number(k.total_ttd)
+  );
 }
 
 /** One package on a bill, for the list card's headline ("Shoes + 4 more") and tracking line. */
@@ -450,7 +469,7 @@ export async function getCbBill(userId: number, billNo: string): Promise<CbBillD
       tracking: mine.map((p) => (p.tracking ?? "").trim()).filter(Boolean).join(", "),
       contents: mine.map((p) => (p.commodities ?? "").trim()).filter(Boolean).join(", "),
       section: packageSection(
-        lines.get(Number(k.invoice_id)) ?? [],
+        displayLines(k, lines.get(Number(k.invoice_id)) ?? []),
         mine.map((p) => ({
           description: (p.goods_desc_override ?? "").trim() || (p.commodities ?? "").trim() || (p.asycuda_description ?? "").trim() || "Goods",
           declaredValueUsd: Math.round(Number(p.ship_value ?? 0) * 100) / 100,

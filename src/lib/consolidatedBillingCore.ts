@@ -53,7 +53,11 @@ export function groupDisplay(members: { shipStatus: number | null; awaitingDate:
   return { shipStatus: min, awaitingDate: latest };
 }
 
-export type ChildLine = { lineType: string; description: string; amountTtd: number; basis?: string | null };
+export type ChildLine = {
+  lineType: string; description: string; amountTtd: number; basis?: string | null;
+  /** Display only: the line's unrounded TT$ (US$ amount × the invoice's roe) — see reconcileChildLines. */
+  exactTtd?: number;
+};
 
 export type CustomsItem = {
   description: string;
@@ -76,6 +80,53 @@ export type PackageSection = {
 
 const cents = (n: number) => Math.round((Number(n) || 0) * 100);
 const fromCents = (c: number) => c / 100;
+
+// Ported from SwiftboxAdmin lib/consolidated-billing-core.ts (2026-10-18) — keep identical.
+const SHIPPING_LINE_TYPES = ["freight", "fuel", "insurance"];
+
+/**
+ * DISPLAY ONLY — make one child invoice's lines add up to its own stored total.
+ *
+ * Why it is needed: the Consolidated Billing pricing (cb-group-pricing
+ * rewriteShipping) stores the header shipping_ttd as ONE conversion of
+ * (freight + fuel + insurance) US$ to TT$, but each line's amount_ttd as its OWN
+ * conversion. Each rounding is honest, but the three rounded lines can differ
+ * from the rounded sum by a cent or two — so a bill that adds up its children's
+ * lines (108.25 + 21.62 + 13.58 + 312.85 = 456.30) disagreed with the sum of the
+ * children's totals (456.33), which is what the customer pays.
+ *
+ * The rule: the invoice's total is right and is never touched. The difference
+ * (total − Σ lines, in cents) is the shipping rounding, so it is settled on the
+ * invoice's positive shipping lines, one cent at a time: to the line whose own
+ * rounding lost the most (`exactTtd`, the US$ × roe it was converted from), so
+ * each line ends as close as possible to its true conversion; without exact
+ * figures, largest line first. No line moves by more than a cent. Only a
+ * difference rounding can explain is settled: at most ⌊(n+1)/2⌋ cents for n
+ * shipping lines (each conversion is off by < ½ cent, the header by < ½ cent).
+ * Anything larger — or an invoice with no shipping line — is returned as it is,
+ * so a real disagreement still shows (billTotals.reconciles = false).
+ * Nothing is written: stored amounts and totals stay exactly as they are.
+ */
+export function reconcileChildLines<L extends ChildLine>(lines: L[], totalTtd: number): L[] {
+  const residual = cents(totalTtd) - lines.reduce((n, l) => n + cents(l.amountTtd), 0);
+  if (residual === 0) return lines;
+  const candidates = lines
+    .map((l, i) => ({ i, c: cents(l.amountTtd), exact: l.exactTtd }))
+    .filter((x) => SHIPPING_LINE_TYPES.includes(lines[x.i].lineType) && x.c > 0);
+  const withExact = candidates.every((x) => x.exact != null && Number.isFinite(x.exact));
+  // Positive residual: the most under-rounded line first; negative: the most over-rounded.
+  const lost = (x: { c: number; exact?: number }) => (residual > 0 ? 1 : -1) * ((x.exact as number) * 100 - x.c);
+  const shipping = candidates.sort((a, b) =>
+    (withExact ? lost(b) - lost(a) : 0) || b.c - a.c || a.i - b.i);
+  if (shipping.length === 0 || Math.abs(residual) > Math.floor((shipping.length + 1) / 2)) return lines;
+  const out = lines.slice();
+  const step = residual > 0 ? 1 : -1;
+  for (let k = 0; k < Math.abs(residual); k++) {
+    const x = shipping[k % shipping.length];
+    out[x.i] = { ...out[x.i], amountTtd: fromCents(cents(out[x.i].amountTtd) + step) };
+  }
+  return out;
+}
 
 function isCustomsOther(l: ChildLine): boolean {
   return l.basis === "as assessed by customs" || l.description.trim().toLowerCase() === "other taxes";

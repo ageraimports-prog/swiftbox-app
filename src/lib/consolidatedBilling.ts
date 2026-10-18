@@ -92,13 +92,22 @@ export function cbWaitingSummary(titles: string[]): string {
 }
 
 /**
- * The confirmation, before anything happens — Brent's words (2026-10-13), with
- * the real package count. Customers were tapping the button without knowing it
- * CLOSES the group. Nothing is sent until the customer taps CB_SEND_NOW_YES.
+ * The confirmation, before anything happens. Customers were tapping the button
+ * without knowing it CLOSES the group (2026-10-13). Since 2026-10-18 (Brent)
+ * nothing stays held after the tap: packages that have already arrived are
+ * billed together on one bill, the rest leave the group and are billed and
+ * delivered on their own. No place or timing (R13). Nothing is sent until the
+ * customer taps CB_SEND_NOW_YES. CB_SEND_NOW_SPLIT_LINE is Brent's own
+ * sentence (2026-10-18) and the ONE place CB copy may say "arrived" — the
+ * R13a test allows exactly it. `count` is kept for the callers; the wording
+ * no longer promises all of them go together.
  */
-export function cbSendNowConfirmText(count: number): string {
-  const these = count === 1 ? "This 1 package" : `These ${count} packages`;
-  return `This closes your current group. ${these} will be billed and delivered together, and any new packages you receive will start a new group. Continue?`;
+export const CB_SEND_NOW_SPLIT_LINE =
+  "Packages that have already arrived will be billed together now. Any still on the way will be billed and delivered on their own when they arrive.";
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers pass the count; the wording no longer uses it
+export function cbSendNowConfirmText(_count: number): string {
+  return `This closes your current group. ${CB_SEND_NOW_SPLIT_LINE} New packages you receive will start a new group. Continue?`;
 }
 
 /** The confirmation's two buttons. */
@@ -156,7 +165,7 @@ export const CB_FAQ: { q: string; a: string }[] = [
   { q: "Does Consolidated Billing cost extra?", a: "No. Consolidated Billing is free." },
   {
     q: "What does “Send my packages now” do?",
-    a: "Got everything you ordered? Tap “Send my packages now” in the app and we'll deliver them together, with one bill. You can also turn Consolidated Billing off in the Account tab.",
+    a: `Got everything you ordered? Tap “Send my packages now” in the app and we'll deliver them together, with one bill. ${CB_SEND_NOW_SPLIT_LINE} You can also turn Consolidated Billing off in the Account tab.`,
   },
   {
     q: "Does Consolidated Billing lower my freight and insurance?",

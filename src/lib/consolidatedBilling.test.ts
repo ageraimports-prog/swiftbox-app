@@ -102,6 +102,10 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
  * Exceptions (none of these is customer copy that can say where/when):
  *  - HOLD_DAYS is a number used by the window logic (consolidatedBillingCore);
  *    it is never rendered, and the source sweep below keeps it out of the UI.
+ *  - CB_SEND_NOW_SPLIT_LINE is Brent's own sentence (2026-10-18, "Send my
+ *    packages now" no longer holds anything): it says which packages are billed
+ *    together, with no place or date. It is removed before the TIMING check
+ *    and nothing else may say "arrive".
  *  - cbWaitingSummary is sampled with neutral titles: in the app it prints the
  *    customer's OWN package descriptions, which we don't control.
  */
@@ -146,7 +150,7 @@ describe("R13a: Consolidated Billing copy gives no place, timing or method (4 Oc
     expect(hits).toEqual([]);
   });
   it("no exported CB string gives shipping or arrival timing", () => {
-    const hits = everyCbString().filter((s) => R13A_TIMING.test(s.text));
+    const hits = everyCbString().filter((s) => R13A_TIMING.test(s.text.split(copy.CB_SEND_NOW_SPLIT_LINE).join(" ")));
     expect(hits).toEqual([]);
   });
   it("the approved sentence is the promise, and the FAQ leads with it", () => {

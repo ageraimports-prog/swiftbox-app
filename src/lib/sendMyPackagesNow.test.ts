@@ -18,12 +18,12 @@ describe('"Send my packages now" (2026-10-01)', () => {
     expect(copy.CB_SEND_NOW_HINT).toBe("Got everything you ordered? Tap Send my packages now and we'll deliver them together.");
     expect((copy as Record<string, unknown>).cbShipsAutomaticallyText).toBeUndefined();
   });
-  it("confirms in Brent's words, with the real count, before acting (2026-10-13)", () => {
+  it("confirms what really happens before acting (2026-10-18: arrived ones together, the rest on their own)", () => {
     expect(copy.cbSendNowConfirmText(3)).toBe(
-      "This closes your current group. These 3 packages will be billed and delivered together, and any new packages you receive will start a new group. Continue?"
+      "This closes your current group. Packages that have already arrived will be billed together now. Any still on the way will be billed and delivered on their own when they arrive. New packages you receive will start a new group. Continue?"
     );
-    expect(copy.cbSendNowConfirmText(11)).toMatch(/These 11 packages/);
-    expect(copy.cbSendNowConfirmText(1)).toMatch(/This 1 package will be billed/);
+    // It never promises that every package goes together any more.
+    for (const n of [1, 3, 11]) expect(copy.cbSendNowConfirmText(n)).not.toMatch(/These \d+ packages|This 1 package/);
     expect(copy.CB_SEND_NOW_YES).toBe("Yes, send these now");
     expect(copy.CB_SEND_NOW_NO).toBe("Keep waiting");
     expect(copy.CB_SEND_NOW_BUTTON).toBe("Send my packages now");

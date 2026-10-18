@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DISCOUNT_BASIS, invoiceMoney, invoicePaymentStatus } from "./invoice-money-core";
+import { DISCOUNT_BASIS, OWNER_LINE_BASIS, discountRowLabel, invoiceMoney, invoicePaymentStatus } from "./invoice-money-core";
 
 // invoice-money-core.ts is CODE-IDENTICAL to the admin's lib/invoice-money-core.ts
 // (tested there by scripts/test-invoice-discount.ts). These cases are the same.
@@ -41,5 +41,23 @@ describe("invoiceMoney", () => {
     expect(invoicePaymentStatus(100, 100)).toBe("paid");
     expect(invoicePaymentStatus(100, 200)).toBe("paid");
     expect(invoicePaymentStatus(0, 0)).toBe("paid");
+  });
+
+  it("an owner-added credit shows under its own words, never as Referral credit", () => {
+    const owner = [
+      ...lines.slice(0, 3),
+      { lineType: "other", description: "Storage fee", amountTtd: 25, basis: OWNER_LINE_BASIS },
+      { lineType: "other", description: "Goodwill credit", amountTtd: -10, basis: OWNER_LINE_BASIS },
+    ];
+    const m = invoiceMoney(owner, 77.62, 0);
+    expect(m.referralCreditTtd).toBe(-50);
+    expect(m.ownerCredits).toEqual([{ description: "Goodwill credit", amountTtd: -10 }]);
+    expect(m.chargeLines).toHaveLength(5);
+  });
+
+  it("the discount row shows its label once", () => {
+    expect(discountRowLabel("Discount")).toBe("Discount");
+    expect(discountRowLabel("")).toBe("Discount");
+    expect(discountRowLabel("Delivery delay")).toBe("Discount (Delivery delay)");
   });
 });

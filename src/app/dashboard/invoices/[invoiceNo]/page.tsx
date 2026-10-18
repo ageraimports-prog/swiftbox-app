@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { paymentLabel } from "@/lib/payment-label";
+import { discountRowLabel } from "@/lib/invoice-money-core";
 import {
   STATUS_BADGE,
   formatDate,
@@ -58,6 +59,9 @@ type Invoice = {
   shippingTtd: number;
   customsTotalTtd: number;
   referralCreditTtd: number;
+  /** Credit lines Swiftbox added to this invoice, each under its own description
+   *  (never "Referral credit"). Optional: an older response has none. */
+  ownerCredits?: { description: string; amountTtd: number }[];
   /** Swiftbox's discount on this invoice (already inside totalTtd). Optional:
    *  a cached PWA shell can meet a response that predates the field. */
   discount?: { amountTtd: number; reason: string } | null;
@@ -374,6 +378,9 @@ export default function InvoiceDetailPage() {
             <div className="mt-4 border-t border-mist/10 pt-3">
               <TotalRow label="Shipping" value={formatTtd(invoice.shippingTtd)} />
               <TotalRow label="Customs" value={formatTtd(invoice.customsTotalTtd)} />
+              {(invoice.ownerCredits ?? []).map((c, i) => (
+                <TotalRow key={`oc${i}`} label={c.description} value={formatTtd(c.amountTtd)} />
+              ))}
               {invoice.referralCreditTtd < 0 && (
                 <TotalRow
                   label="Referral credit"
@@ -391,7 +398,7 @@ export default function InvoiceDetailPage() {
                   Same row the admin's screen, PDF and email print. */}
               {invoice.discount && (
                 <TotalRow
-                  label={`Discount (${invoice.discount.reason})`}
+                  label={discountRowLabel(invoice.discount.reason)}
                   value={`-${formatTtd(invoice.discount.amountTtd)}`}
                 />
               )}

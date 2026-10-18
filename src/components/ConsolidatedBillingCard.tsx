@@ -25,7 +25,7 @@ type State = {
   swiftCode: string;
   open: { day: number; windowEnd: string } | null;
   closedWaiting: boolean;
-  group: SendGroup | null;
+  sendGroups: SendGroup[];
   preparing: boolean;
   billReady: { billNo: string; dueTtd: number } | null;
 };
@@ -123,11 +123,11 @@ export default function ConsolidatedBillingCard({
         </button>
       </div>
 
-      {showSendNow && state.group && (
-        <div className="mt-4 border-t border-mist/10 pt-4">
-          <SendNowPanel key={state.group.groupId} group={state.group} onDone={(d) => setState(d as State)} />
+      {showSendNow && (state.sendGroups ?? []).map((g) => (
+        <div key={g.groupId} className="mt-4 border-t border-mist/10 pt-4">
+          <SendNowPanel group={g} onDone={(d) => setState(d as State)} />
         </div>
-      )}
+      ))}
 
       {state.billReady && (
         <Link

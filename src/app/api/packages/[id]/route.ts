@@ -84,7 +84,7 @@ export async function GET(
 
   return NextResponse.json({
     status,
-    cbInOpenGroup: cb?.inOpenGroup ?? false,
+    cbSendNowOffered: cb?.sendNowOffered ?? false,
     package: {
       id: Number(r.pk_id),
       wr: r.wr,

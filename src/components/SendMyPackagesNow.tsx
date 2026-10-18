@@ -14,7 +14,7 @@ import {
 import { formatDescription, trackingNumbers } from "@/lib/packageDisplay";
 import { TrackingLine } from "@/components/PackageCard";
 
-/** The open group as /api/consolidated-billing returns it. */
+/** A group that offers Send now (the open group, or one waiting under Keep together), as /api/consolidated-billing returns it. */
 export type SendGroup = {
   groupId: number;
   packages: { commodities: string; tracking: string; wr: string }[];
@@ -22,7 +22,7 @@ export type SendGroup = {
 };
 
 /** The slice of the Consolidated Billing state these pieces read. */
-export type SendState = { group: SendGroup | null; preparing: boolean };
+export type SendState = { sendGroups: SendGroup[]; preparing: boolean };
 
 /**
  * Every "Send my packages now" on screen listens for this, so a tap on the
@@ -138,8 +138,9 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
 
 /**
  * A card of its own — the top of the Dashboard and a waiting package's detail
- * page. Shows only when the customer has an OPEN group with at least one
- * package, or (after the tap) the "being prepared" line.
+ * page. Shows only when the customer has a group that offers Send now (the OPEN
+ * group, or one waiting under Keep together — 2026-10-18) with at least one
+ * package, or the "being prepared" line.
  */
 export default function SendMyPackagesNow({ className = "" }: { className?: string }) {
   const [state, setState] = React.useState<SendState | null>(null);
@@ -158,13 +159,16 @@ export default function SendMyPackagesNow({ className = "" }: { className?: stri
     };
   }, []);
 
-  if (!state || (!state.group && !state.preparing)) return null;
+  const groups = state?.sendGroups ?? [];
+  if (!state || (groups.length === 0 && !state.preparing)) return null;
   return (
     <section className={`rounded-lg border border-green/30 bg-ink-2 p-4 ${className}`}>
       <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">{CB_NAME}</p>
       <div className="mt-2">
-        {state.group ? (
-          <SendNowPanel key={state.group.groupId} group={state.group} />
+        {groups.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            {groups.map((g) => <SendNowPanel key={g.groupId} group={g} />)}
+          </div>
         ) : (
           <p role="status" className="text-sm font-semibold text-mist">{CB_PREPARING_TEXT}</p>
         )}

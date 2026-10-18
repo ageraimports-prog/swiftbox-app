@@ -5,6 +5,7 @@ import { parseSendNowRequest, SEND_NOW_UNCONFIRMED } from "./send-now-request";
 import * as copy from "./consolidatedBilling";
 import { packageBadge, stageMeta } from "./status";
 import { customerFacingView } from "./customer-facing-status-core";
+import { offersSendNow, isPreparingGroup, isClosedWaitingGroup, type CbGroupFacts } from "./consolidatedBillingCore";
 
 describe('"Send my packages now" (2026-10-01)', () => {
   it("names the group by what the packages are, never by WR/SWF", () => {
@@ -70,5 +71,59 @@ describe('"Send my packages now" (2026-10-01)', () => {
     expect(a).toMatch(/Send my packages now/);
     expect(a).toMatch(/deliver them together/);
     expect(a).not.toMatch(/\b\d+ days?\b|sooner|as soon as/i);
+  });
+});
+
+describe('"Send my packages now" beats "Keep together" (Brent, 2026-10-18)', () => {
+  const open: CbGroupFacts = { state: "open", closeReason: null, keptTogether: false };
+  const kept: CbGroupFacts = { state: "closed", closeReason: "window_ended", keptTogether: true };
+  const keptAfterSendNow: CbGroupFacts = { state: "closed", closeReason: "customer", keptTogether: true };
+  const ordinaryClosed: CbGroupFacts = { state: "closed", closeReason: "window_ended", keptTogether: false };
+  const preparing: CbGroupFacts = { state: "closed", closeReason: "customer", keptTogether: false };
+  const released: CbGroupFacts = { state: "released", closeReason: "customer", keptTogether: false };
+
+  it("an OPEN group shows the button", () => {
+    expect(offersSendNow(open)).toBe(true);
+  });
+  it("a Keep-together group shows the button (whatever closed it first)", () => {
+    expect(offersSendNow(kept)).toBe(true);
+    expect(offersSendNow(keptAfterSendNow)).toBe(true);
+  });
+  it("an ordinary closed group (window ended, waiting) does NOT", () => {
+    expect(offersSendNow(ordinaryClosed)).toBe(false);
+  });
+  it("a group the customer already sent (\"preparing\") does NOT, nor a released one", () => {
+    expect(offersSendNow(preparing)).toBe(false);
+    expect(offersSendNow(released)).toBe(false);
+  });
+  it("a Keep group keeps the waiting card, never the 'being prepared' line", () => {
+    for (const g of [kept, keptAfterSendNow]) {
+      expect(isClosedWaitingGroup(g)).toBe(true);
+      expect(isPreparingGroup(g)).toBe(false);
+    }
+    expect(isPreparingGroup(preparing)).toBe(true);
+    expect(isClosedWaitingGroup(preparing)).toBe(false);
+    expect(isClosedWaitingGroup(ordinaryClosed)).toBe(true);
+    expect(isClosedWaitingGroup(open)).toBe(false);
+  });
+  it("the same confirmation as an open group: arrived ones together, the rest on their own", () => {
+    expect(copy.cbSendNowConfirmText(2)).toMatch(/already arrived will be billed together now/);
+    expect(copy.cbSendNowConfirmText(2)).toMatch(/billed and delivered on their own/);
+  });
+  it("both readers and both screens use the one rule; no day count reaches a Keep group", () => {
+    const lib = readFileSync(join(__dirname, "consolidated-billing.ts"), "utf8");
+    expect(lib.match(/keptTogetherSql\("g"\)/g)?.length).toBe(2); // getCbState + cbPackageFacts
+    expect(lib).toMatch(/if \(!offersSendNow\(g\.facts\)\) continue;/);
+    expect(lib).toMatch(/sendNowOffered: offersSendNow\(facts\)/);
+    expect(lib).toMatch(/daysLeft: isOpen && ends \?/);
+    expect(lib).not.toMatch(/inOpenGroup/);
+    const page = readFileSync(join(__dirname, "..", "app", "dashboard", "packages", "[id]", "page.tsx"), "utf8");
+    expect(page).toMatch(/data\.cbSendNowOffered && <SendMyPackagesNow \/>/);
+    for (const file of ["SendMyPackagesNow.tsx", "ConsolidatedBillingCard.tsx"]) {
+      const src = readFileSync(join(__dirname, "..", "components", file), "utf8");
+      expect(src).toMatch(/sendGroups/);
+      expect(src).not.toMatch(/state\.group\b/);
+      expect(src).not.toMatch(/daysLeft\}/); // never rendered (R13a)
+    }
   });
 });

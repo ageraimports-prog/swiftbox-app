@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 import * as copy from "./consolidatedBilling";
-import { packageSection, billTotals, groupDisplay, windowDay, ttDateLabel } from "./consolidatedBillingCore";
+import { packageSection, billTotals, groupDisplay, windowDay, ttDateLabel, keptTogetherSql, offersSendNow } from "./consolidatedBillingCore";
 
 const allCopy = [
   copy.CB_SHORT_LINE,
@@ -225,5 +225,27 @@ describe("Consolidated Bill arithmetic (mirrors the admin core)", () => {
     expect(windowDay(first, new Date(Date.UTC(2026, 9, 12, 14)))).toBe(12);
     expect(windowDay(first, new Date(Date.UTC(2026, 10, 30, 14)))).toBe(20);
     expect(ttDateLabel(new Date(Date.UTC(2026, 9, 21, 3, 59, 59)))).toMatch(/20 Oct/);
+  });
+});
+
+describe("Keep-together group — the admin's ONE condition (2026-10-18)", () => {
+  it("is exactly SwiftboxAdmin's rule: closed, bill_id NULL, still owning a bill row", () => {
+    expect(keptTogetherSql("g")).toBe(
+      "(g.state = 'closed' AND g.bill_id IS NULL AND EXISTS (SELECT 1 FROM swiftbox_cb_bills kb WHERE kb.group_id = g.group_id))"
+    );
+  });
+  it("matches the admin's CLAUDE.md wording when the admin checkout sits beside this one", () => {
+    const admin = path.join(__dirname, "..", "..", "..", "SwiftboxAdmin", "CLAUDE.md");
+    const alt = path.join(__dirname, "..", "..", "..", "swiftbox-admin", "CLAUDE.md");
+    const file = [admin, alt].find((p) => fs.existsSync(p));
+    if (!file) return;
+    const text = fs.readFileSync(file, "utf8").replace(/\s+/g, " ");
+    expect(text).toMatch(/g\.state = 'closed' AND g\.bill_id IS NULL AND EXISTS \(SELECT 1 FROM swiftbox_cb_bills b WHERE b\.group_id = g\.group_id\)/);
+  });
+  it("open shows the button; Keep shows it; ordinary closed and customer-closed don't", () => {
+    expect(offersSendNow({ state: "open", closeReason: null, keptTogether: false })).toBe(true);
+    expect(offersSendNow({ state: "closed", closeReason: "window_ended", keptTogether: true })).toBe(true);
+    expect(offersSendNow({ state: "closed", closeReason: "window_ended", keptTogether: false })).toBe(false);
+    expect(offersSendNow({ state: "closed", closeReason: "customer", keptTogether: false })).toBe(false);
   });
 });

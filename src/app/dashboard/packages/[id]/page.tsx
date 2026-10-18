@@ -160,7 +160,7 @@ export default function PackageDetailPage() {
     package: Pkg;
     shipment: Shipment | null;
     status?: ShownStatus | null;
-    cbInOpenGroup?: boolean;
+    cbSendNowOffered?: boolean;
   } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -262,7 +262,7 @@ export default function PackageDetailPage() {
           )}
 
           {/* "Send my packages now" — any package in the customer's open group. */}
-          {data.cbInOpenGroup && <SendMyPackagesNow />}
+          {data.cbSendNowOffered && <SendMyPackagesNow />}
 
           {/* Package details */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 px-4 py-1">

@@ -9,6 +9,11 @@ import {
   ttDayNumber,
   packageSection,
   billTotals,
+  keptTogetherSql,
+  offersSendNow,
+  isPreparingGroup,
+  isClosedWaitingGroup,
+  type CbGroupFacts,
   type PackageSection,
   type BillTotals,
 } from "@/lib/consolidatedBillingCore";
@@ -86,30 +91,32 @@ export type CbState = {
   /** A group whose window has closed and is waiting for its last package. */
   closedWaiting: boolean;
   /**
-   * "Send my packages now" — the OPEN group with at least one package, for the
-   * button. Null when there is nothing to send.
+   * "Send my packages now" — every group that offers it (`offersSendNow`) and has
+   * at least one package: the OPEN group, and a group waiting under "Keep
+   * together" (Send now beats Keep together — Brent, 2026-10-18). Open first.
+   * Empty when there is nothing to send.
    */
-  group: CbSendGroup | null;
+  sendGroups: CbSendGroup[];
   /** The customer already said "send them": "being prepared for delivery". */
   preparing: boolean;
   /** The newest issued bill with money still due — the in-app notice. */
   billReady: { billNo: string; dueTtd: number } | null;
 };
 
-/** One package in the open group, for "3 packages waiting: Shoes, …". */
+/** One package in a group, for "3 packages waiting: Shoes, …". */
 export type CbSendPackage = { commodities: string; tracking: string; wr: string };
 
 export type CbSendGroup = {
   groupId: number;
   packages: CbSendPackage[];
-  /** Whole days left in the window, today included (0 once it is over). */
+  /** Whole days left in the window, today included (0 once it is over, and for a Keep group). Never shown (R13a). */
   daysLeft: number;
 };
 
 const BFM_EXCLUDE = "AND m.pk_id NOT IN (SELECT pk_id FROM swiftbox_bfm_packages)";
 
-/** The open group's active members (Buy For Me never counts). */
-async function openGroupPackages(groupId: number): Promise<CbSendPackage[]> {
+/** A group's active members (Buy For Me never counts). */
+async function groupPackages(groupId: number): Promise<CbSendPackage[]> {
   const run = (bfm: string) =>
     query<{ commodities: string | null; tracking: string | null; wr: string | null }>(
       `SELECT p.commodities, p.tracking, p.wr
@@ -136,14 +143,20 @@ export async function getCbState(userId: number): Promise<CbState> {
     eligible: !!u,
     swiftCode: swiftCodeFromAc(u?.ac),
   };
-  const groups = await safe(
-    () => query<{ group_id: number; state: string; first_miami_entry_at: string | null; window_ends_at: string | null; close_reason: string | null }>(
-      `SELECT group_id, state, first_miami_entry_at, window_ends_at, close_reason FROM ${G}
-        WHERE user_id = :userId AND state IN ('open','closed') ORDER BY group_id`,
+  const rows = await safe(
+    () => query<{ group_id: number; state: string; first_miami_entry_at: string | null; window_ends_at: string | null; close_reason: string | null; kept_together: number | string | null }>(
+      `SELECT g.group_id, g.state, g.first_miami_entry_at, g.window_ends_at, g.close_reason,
+              ${keptTogetherSql("g")} AS kept_together
+         FROM ${G} g
+        WHERE g.user_id = :userId AND g.state IN ('open','closed') ORDER BY g.group_id`,
       { userId }
     ),
     []
   );
+  const groups = rows.map((r) => ({
+    ...r,
+    facts: { state: r.state, closeReason: r.close_reason, keptTogether: Number(r.kept_together ?? 0) === 1 } as CbGroupFacts,
+  }));
   const now = new Date();
   const openRow = groups.find((g) => g.state === "open");
   const first = utcDate(openRow?.first_miami_entry_at ?? null);
@@ -154,17 +167,26 @@ export async function getCbState(userId: number): Promise<CbState> {
   const bills = await listCbBills(userId);
   const ready = bills.find((b) => b.totals.dueTtd > 0) ?? null;
   // The open group, even on the morning its window has just run out (the admin
-  // closes it on its next run): the customer can still say "send them".
-  const pkgs = openRow ? await openGroupPackages(Number(openRow.group_id)) : [];
-  const group: CbSendGroup | null = openRow && pkgs.length > 0
-    ? { groupId: Number(openRow.group_id), packages: pkgs, daysLeft: ends ? Math.max(0, ttDayNumber(ends) - ttDayNumber(now) + 1) : 0 }
-    : null;
+  // closes it on its next run): the customer can still say "send them". Then any
+  // group waiting under Keep together — Send now beats Keep together (2026-10-18).
+  const sendGroups: CbSendGroup[] = [];
+  for (const g of [...groups.filter((x) => x.state === "open"), ...groups.filter((x) => x.state !== "open")]) {
+    if (!offersSendNow(g.facts)) continue;
+    const pkgs = await groupPackages(Number(g.group_id));
+    if (pkgs.length === 0) continue;
+    const isOpen = g === openRow;
+    sendGroups.push({
+      groupId: Number(g.group_id),
+      packages: pkgs,
+      daysLeft: isOpen && ends ? Math.max(0, ttDayNumber(ends) - ttDayNumber(now) + 1) : 0,
+    });
+  }
   return {
     ...base,
     open: openStillRunning ? { day: windowDay(first!, now), windowEnd: ttDateLabel(ends!) } : null,
-    closedWaiting: groups.some((g) => g.state === "closed" && g.close_reason !== "customer") || (!!openRow && !openStillRunning),
-    group,
-    preparing: groups.some((g) => g.state === "closed" && g.close_reason === "customer"),
+    closedWaiting: groups.some((g) => isClosedWaitingGroup(g.facts)) || (!!openRow && !openStillRunning),
+    sendGroups,
+    preparing: groups.some((g) => isPreparingGroup(g.facts)),
     billReady: ready ? { billNo: ready.billNo, dueTtd: ready.totals.dueTtd } : null,
   };
 }
@@ -249,15 +271,18 @@ export type CbPackageFacts = {
    * issued, then Ready for delivery → Out for Delivery → Delivered.
    */
   membership: CbMembership;
-  /** A member of the customer's OPEN group (Miami included) — where "Send my packages now" is offered. */
-  inOpenGroup: boolean;
+  /**
+   * A member of a group that offers "Send my packages now" (`offersSendNow`): the
+   * customer's OPEN group (Miami included) or a group waiting under Keep together.
+   */
+  sendNowOffered: boolean;
 };
 
 /** pk_id → its Consolidated Billing membership, for this customer's packages in any group. */
 export async function cbPackageFacts(userId: number): Promise<Map<number, CbPackageFacts>> {
   const rows = await safe(
-    () => excludingBfm("m.pk_id", (notBfm) => query<{ pk_id: number; cb_state: string | null; cb_bill_id: number | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null }>(
-      `SELECT m.pk_id, ${CB_MEMBERSHIP_SELECT}
+    () => excludingBfm("m.pk_id", (notBfm) => query<{ pk_id: number; cb_state: string | null; cb_bill_id: number | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_close_reason: string | null; cb_kept: number | string | null }>(
+      `SELECT m.pk_id, ${CB_MEMBERSHIP_SELECT}, g.close_reason AS cb_close_reason, ${keptTogetherSql("g")} AS cb_kept
          FROM ${M} m
          JOIN ${G} g ON g.group_id = m.group_id
          LEFT JOIN ${B} b ON b.bill_id = g.bill_id
@@ -269,7 +294,9 @@ export async function cbPackageFacts(userId: number): Promise<Map<number, CbPack
   const out = new Map<number, CbPackageFacts>();
   for (const r of rows) {
     const membership = cbMembershipFromRow(r);
-    if (membership) out.set(Number(r.pk_id), { membership, inOpenGroup: membership.state === "open" });
+    if (!membership) continue;
+    const facts: CbGroupFacts = { state: membership.state, closeReason: r.cb_close_reason ?? null, keptTogether: Number(r.cb_kept ?? 0) === 1 };
+    out.set(Number(r.pk_id), { membership, sendNowOffered: offersSendNow(facts) });
   }
   return out;
 }

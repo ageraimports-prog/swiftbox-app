@@ -152,3 +152,41 @@ export function billTotals(children: { houseAccount?: boolean; totalTtd: number;
     status: children.length > 0 && children.every((c) => c.houseAccount) ? "house" : due === 0 ? "paid" : paid > 0 ? "partial" : "unpaid",
   };
 }
+
+/* ─────────────── "Send my packages now" — which groups offer it ─────────────── */
+
+/**
+ * A group waiting under "Keep together" (SwiftboxAdmin, 2026-10-17): the owner
+ * sent a released group back to wait for a package that never arrived, so it is
+ * CLOSED with bill_id NULL while it still owns its Consolidated Bill row. This is
+ * the admin's ONE condition (SwiftboxAdmin CLAUDE.md → "Send my packages now
+ * beats Keep together" and `releaseByCustomer`) — change both together. Only a
+ * group that was released ever gets a bill row, so an ordinary closed group
+ * (window ended, waiting) and an old customer-closed one never match.
+ */
+export function keptTogetherSql(alias: string): string {
+  return `(${alias}.state = 'closed' AND ${alias}.bill_id IS NULL AND EXISTS (SELECT 1 FROM swiftbox_cb_bills kb WHERE kb.group_id = ${alias}.group_id))`;
+}
+
+/** One of the customer's unreleased groups, as getCbState / cbPackageFacts read it. */
+export type CbGroupFacts = { state: string; closeReason: string | null; keptTogether: boolean };
+
+/**
+ * Brent, 2026-10-18: "Send my packages now" beats "Keep together" — the
+ * customer's latest instruction counts. The button is offered on the OPEN group
+ * and on a group waiting under Keep together; never on an ordinary closed group
+ * or on one the customer already sent (before 18 Oct that left it "preparing").
+ */
+export function offersSendNow(g: CbGroupFacts): boolean {
+  return g.state === "open" || (g.state === "closed" && g.keptTogether);
+}
+
+/** The customer already said "send them" (pre-18 Oct): "being prepared for delivery". A Keep group is waiting instead. */
+export function isPreparingGroup(g: CbGroupFacts): boolean {
+  return g.state === "closed" && g.closeReason === "customer" && !g.keptTogether;
+}
+
+/** Closed and waiting for its last package — the "Your group is complete" card (wording unchanged). */
+export function isClosedWaitingGroup(g: CbGroupFacts): boolean {
+  return g.state === "closed" && (g.closeReason !== "customer" || g.keptTogether);
+}

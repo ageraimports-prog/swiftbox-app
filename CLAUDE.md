@@ -80,9 +80,17 @@ closed group waiting until the office releases it.
 
 **"Send my packages now" (live 2026-10-01, app `928f521`, admin `3c5e874`).** 20 days
 is the most a group waits. `SendMyPackagesNow` (own card at the TOP of the Dashboard
-and on the page of any package in the open group — `cbInOpenGroup`, Miami included)
-and `SendNowPanel` inside the Account card (`showSendNow`). Shown only when
-`getCbState().group` is set: the OPEN group with ≥1 package (Buy For Me excluded).
+and on the page of any package in a group that offers it — `cbSendNowOffered`, Miami
+included) and `SendNowPanel` inside the Account card (`showSendNow`), one panel per
+entry in `getCbState().sendGroups`: every group with ≥1 package (Buy For Me excluded)
+that `offersSendNow` — the OPEN group, and since 2026-10-18 a group waiting under
+**Keep together** (Brent: "Send my packages now" beats "Keep together"; the
+customer's latest instruction counts). A Keep group = `keptTogetherSql` in
+`consolidatedBillingCore.ts`, the admin's ONE condition (closed, bill_id NULL, still
+owning a `swiftbox_cb_bills` row — SwiftboxAdmin CLAUDE.md; change both together).
+It keeps the "Your group is complete" card, never shows a day count, and is never
+"preparing". An ordinary closed group and a customer-closed ("preparing") one get no
+button.
 Names the group by description + tracking (`cbWaitingSummary`), shows the timing-free
 `CB_SEND_NOW_HINT` (R13a — "Ships automatically in N days" was removed 2026-10-04), and confirms IN the page — `cbSendNowConfirmText(n)` (2026-10-18, matching the admin's new rule): "This closes your current group. Packages that have already arrived will be billed together now. Any still on the way will be billed and delivered on their own when they arrive. New packages you receive will start a new group. Continue?" with `CB_SEND_NOW_YES` "Yes, send these now" / `CB_SEND_NOW_NO` "Keep waiting"; `/api/consolidated-billing/release` refuses anything without `confirmed: true` (`src/lib/send-now-request.ts`, tested in `sendMyPackagesNow.test.ts`). Every screen uses `SendNowPanel`; never call the route from anywhere else (no `window.confirm` — it froze the Chrome
 extension and is poor on phones). `POST /api/consolidated-billing/release` forwards

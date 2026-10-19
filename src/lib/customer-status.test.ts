@@ -12,7 +12,7 @@ describe("customer-status-core (code-identical to the admin's copy)", () => {
     let admin: string | null = null;
     for (const dir of ["SwiftboxAdmin", "SwiftboxAdmin-custstatus"]) {
       try {
-        admin = readFileSync(join(__dirname, "..", "..", "..", dir, "lib", "customer-status-core.ts"), "utf8").replace(/\r\n/g, "\n");
+        admin = readFileSync(join(process.env.SWIFTBOX_ADMIN_DIR ?? join(__dirname, "..", "..", "..", dir), "lib", "customer-status-core.ts"), "utf8").replace(/\r\n/g, "\n");
         break;
       } catch {
         /* not checked out here */

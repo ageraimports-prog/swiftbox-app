@@ -34,7 +34,7 @@ export async function GET() {
   // decided below by the shared rule and sent as `status`.
   const rows = await query<Row>(
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight, p.pcs,
-            p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
+            p.shipper, p.commodities, p.date, ${await airdropPackageColumns()},
             s.ship_no, s.ship_status, ${CLEARED_SQL} AS cleared,
             ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at
        FROM mod_packages p

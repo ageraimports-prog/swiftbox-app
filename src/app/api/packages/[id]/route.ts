@@ -50,7 +50,7 @@ export async function GET(
   // id 404s rather than leaking that it exists.
   const rows = await query<Row>(
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight,
-            p.volumetric_weight, p.pcs, p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
+            p.volumetric_weight, p.pcs, p.shipper, p.commodities, p.date, ${await airdropPackageColumns()},
             s.ship_id, s.ship_no, s.ship_status,
             s.miami_date, s.transit_date, s.awaiting_date,
             s.ofd_date, s.delivered_date, ${CLEARED_SQL} AS cleared,

@@ -14,8 +14,10 @@
  *
  * STAGES are the customer app's five, 0–4 (In Miami … Delivered), derived from
  * the RAW ship_status of the package's own shipment row — the same mapping as
- * SwiftboxApp `shipStatusToStage`, plus the admin's derived Cleared (6), which a
- * customer sees as Awaiting Clearance.
+ * SwiftboxApp `shipStatusToStage`, plus the admin's derived Cleared (6), which
+ * sits on the Awaiting Clearance step. (Since 2026-10-19 a package on an ISSUED
+ * invoice reads "Cleared – Ready to Deliver" on that step — that is decided in
+ * customer-facing-status-core.ts, not here.)
  *
  * THE MERGE RULE (Brent, 2026-10-06):
  *  - A STAGE label (In Transit … Delivered) shows while the real stage is BEHIND
@@ -110,7 +112,16 @@ export type StoredOverride = {
   key: string;
   note: string | null;
   baseStage: number;
+  /**
+   * When it was set, 'YYYY-MM-DD HH:MM:SS' on the DATABASE clock (set_at is
+   * NOW()). Compared only with an invoice's issued_at, also NOW(), so the two
+   * are on the same clock. Absent = unknown.
+   */
+  setAt?: string | null;
 };
+
+/** SQL: an override row `o`'s set_at in StoredOverride.setAt's format. */
+export const OVERRIDE_SET_AT_SQL = "DATE_FORMAT(o.set_at, '%Y-%m-%d %H:%i:%s')";
 
 /** Is this stored override still the thing the customer should see? */
 export function isOverrideActive(o: StoredOverride | null | undefined, realStage: CustomerStage): boolean {

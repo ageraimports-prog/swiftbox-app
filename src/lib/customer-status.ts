@@ -1,7 +1,7 @@
 import "server-only";
 import { query } from "@/lib/db";
-import { CUSTOMER_STATUS_TABLE, type StoredOverride } from "@/lib/customer-status-core";
-import { customerFacingView, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
+import { CUSTOMER_STATUS_TABLE, OVERRIDE_SET_AT_SQL, type StoredOverride } from "@/lib/customer-status-core";
+import { customerFacingView, invoiceIssuedAtSql, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
 
 /**
  * Customer-facing status set by the office (admin migration 055,
@@ -19,15 +19,15 @@ export async function customerStatusOverrides(userId: number, pkIds: number[]): 
   try {
     // ids are validated positive integers → safe to inline. The user_id join is
     // the ownership check: another customer's package can never be matched.
-    const rows = await query<{ pk_id: number; override_key: string; note: string | null; base_stage: number }>(
-      `SELECT o.pk_id, o.override_key, o.note, o.base_stage
+    const rows = await query<{ pk_id: number; override_key: string; note: string | null; base_stage: number; set_at: string | null }>(
+      `SELECT o.pk_id, o.override_key, o.note, o.base_stage, ${OVERRIDE_SET_AT_SQL} AS set_at
          FROM ${CUSTOMER_STATUS_TABLE} o
          JOIN mod_packages p ON p.pk_id = o.pk_id AND p.user_id = :userId
         WHERE o.pk_id IN (${ids.join(",")})`,
       { userId }
     );
     for (const r of rows) {
-      out.set(Number(r.pk_id), { key: String(r.override_key), note: r.note, baseStage: Number(r.base_stage) });
+      out.set(Number(r.pk_id), { key: String(r.override_key), note: r.note, baseStage: Number(r.base_stage), setAt: r.set_at });
     }
   } catch {
     // Table missing / bridge hiccup → normal status everywhere.
@@ -51,6 +51,8 @@ export function viewFor(input: {
   pkType: number | null;
   cb?: CbMembership | null;
   airdrop?: { receivedAt: string | null; mode: string | null };
+  /** The package's ISSUED invoice (INVOICE_ISSUED_AT_SQL); null = on none. */
+  invoiceIssuedAt?: string | null;
   nowMs?: number;
 }): CustomerFacingView {
   return customerFacingView({
@@ -60,9 +62,18 @@ export function viewFor(input: {
     override: input.override ?? null,
     cb: input.cb ?? null,
     airdrop: input.airdrop ?? null,
+    invoiceIssuedAt: input.invoiceIssuedAt ?? null,
     nowMs: input.nowMs,
   });
 }
+
+/**
+ * SQL: the issued_at of the package `p`'s ISSUED invoice ('' = no time), NULL
+ * when on none — an issued invoice means the customer sees Cleared – Ready to
+ * Deliver (Brent, 2026-10-19). The shared core's query, so the app, the website
+ * and the admin read the same fact.
+ */
+export const INVOICE_ISSUED_AT_SQL = invoiceIssuedAtSql("p.pk_id");
 
 /** SQL: 1 when the shipment row aliased `s` has been marked cleared (admin migration 017). */
 export const CLEARED_SQL = "(SELECT COUNT(*) FROM swiftbox_shipment_clearance sc WHERE sc.ship_no = s.ship_no) > 0";

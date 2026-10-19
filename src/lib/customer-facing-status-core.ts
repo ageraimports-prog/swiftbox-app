@@ -15,6 +15,15 @@
  * Billing membership, the Airdrop receive time) and asks this.
  *
  * ORDER
+ *  0. AN ISSUED INVOICE (Brent, 2026-10-18/19): a package on an issued invoice
+ *     is in Trinidad and ready to dispatch, so until it is out for delivery
+ *     the customer sees "Cleared – Ready to Deliver" — nothing earlier, ever.
+ *     It beats Consolidated Billing's masking, the 5 pm drop and the real
+ *     stage. Of the office's statuses only these still show: a stage label
+ *     LATER than it (Out for Delivery / Delivered), and a notice (Delayed / On
+ *     hold) set AT OR AFTER the invoice was issued — one set before is stale
+ *     (`isPreIssueOverride`; the admin deletes those on issue). Out for
+ *     Delivery (raw 4) and Delivered (raw 5) are shown as normal.
  *  1. A status the office set (customer-status-core.ts). A notice ("Delayed",
  *     "On hold — contact us") always wins. A stage label wins too, except on a
  *     package HELD by Consolidated Billing, which only ever gets a notice.
@@ -39,11 +48,45 @@
  * DISPLAY ONLY. Nothing here is written anywhere; the real status, customs,
  * invoices, delivery and the admin's own chips never read it.
  */
-import { CUSTOMER_STAGE_LABELS, customerStageOf, customerStatusView, type CustomerStage, type StoredOverride } from "./customer-status-core";
+import { CUSTOMER_STAGE_LABELS, cleanNote, customerStageOf, customerStatusStage, customerStatusView, isCustomerStatusKey, isOverrideActive, type CustomerStage, type StoredOverride } from "./customer-status-core";
 import { inTransitLabel, isAutoTransitDue } from "./auto-transit-core";
 
 export const CB_CONSOLIDATING_LABEL = "Consolidating — will be delivered together with your other packages";
 export const CB_READY_LABEL = "Ready for delivery";
+
+/** What a customer sees once the package's invoice is issued (the admin's own chip wording). */
+export const CLEARED_READY_LABEL = "Cleared – Ready to Deliver";
+
+/**
+ * SQL: the issued_at of the ISSUED invoice the package `pkExpr` is on, as
+ * 'YYYY-MM-DD HH:MM:SS' on the database clock; '' when issued with no time
+ * stamped; NULL when it is on no issued invoice. swiftbox_invoice_packages.pk_id
+ * is UNIQUE, so there is at most one. Every surface reads the fact with this.
+ */
+export function invoiceIssuedAtSql(pkExpr: string): string {
+  return `(SELECT COALESCE(DATE_FORMAT(i_cf.issued_at, '%Y-%m-%d %H:%i:%s'), '') FROM swiftbox_invoice_packages ip_cf JOIN swiftbox_invoices i_cf ON i_cf.invoice_id = ip_cf.invoice_id WHERE ip_cf.pk_id = ${pkExpr} AND i_cf.lifecycle = 'issued' LIMIT 1)`;
+}
+
+/** A value read with invoiceIssuedAtSql → CustomerFacingInput.invoiceIssuedAt (NULL stays null = not issued). */
+export function invoiceIssuedAtFromRow(v: unknown): string | null {
+  return v == null ? null : String(v);
+}
+
+/**
+ * Is this office status stale once the package's invoice is issued — i.e.
+ * EARLIER in the flow than Cleared – Ready to Deliver? A stage label up to
+ * Awaiting Clearance always is; Out for Delivery / Delivered never are. A
+ * notice is stale unless it was set at or after the issue (both times known,
+ * same database clock). Unknown key → stale.
+ */
+export function isPreIssueOverride(o: StoredOverride, issuedAt: string | null | undefined): boolean {
+  if (!isCustomerStatusKey(o.key)) return true;
+  const stage = customerStatusStage(o.key);
+  if (stage != null) return stage <= 2;
+  const set = o.setAt ? String(o.setAt) : "";
+  const at = issuedAt ? String(issuedAt) : "";
+  return !(set && at && set >= at);
+}
 
 /** A Consolidated Billing member's progress steps, 0–4 (the stepper / timeline). */
 export const CB_STEP_LABELS: readonly string[] = [
@@ -111,6 +154,11 @@ export type CustomerFacingInput = {
   cb?: CbMembership | null;
   /** Airdrop receive time + mode, for the 5 pm drop. */
   airdrop?: { receivedAt: string | null; mode: string | null } | null;
+  /**
+   * The package's ISSUED invoice, read with invoiceIssuedAtSql: its issued_at
+   * ('' = issued, time unknown); null / absent = on no issued invoice.
+   */
+  invoiceIssuedAt?: string | null;
   nowMs?: number;
 };
 
@@ -128,6 +176,11 @@ export type CustomerFacingView = {
   cb: boolean;
   /** The Consolidating step: nothing after Miami may show, not even a date. */
   consolidating: boolean;
+  /**
+   * On an issued invoice and not yet out for delivery: Cleared – Ready to
+   * Deliver, on step 2. A stepper names that step CLEARED_READY_LABEL.
+   */
+  ready: boolean;
 };
 
 /** A CB member's step from its real facts. */
@@ -153,7 +206,22 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
   const cb = i.cb ?? null;
   const step = cb ? cbStep(cb, s, cleared, auto) : null;
   const word = (stage: CustomerStage) => (stage === 1 ? inTransitLabel(i.pkType ?? 1) : CUSTOMER_STAGE_LABELS[stage]);
-  const base = { cb: !!cb, consolidating: step === 1 };
+
+  // 0. An issued invoice: Cleared – Ready to Deliver until out for delivery.
+  if (i.invoiceIssuedAt != null && s !== 4 && s !== 5) {
+    const ready = { cb: !!cb, consolidating: false, ready: true };
+    const o = i.override && !isPreIssueOverride(i.override, i.invoiceIssuedAt) ? i.override : null;
+    const later = o ? customerStatusStage(o.key) : null;
+    if (o && later != null && later > 2) {
+      return { ...ready, ready: false, stage: later, label: word(later), source: "office", notice: false, note: cleanNote(o.note) };
+    }
+    if (o && later == null && isOverrideActive(o, 2)) {
+      return { ...ready, stage: 2, label: customerStatusView(o, 2, false)?.label ?? CLEARED_READY_LABEL, source: "office", notice: true, note: cleanNote(o.note) };
+    }
+    return { ...ready, stage: 2, label: CLEARED_READY_LABEL, source: "real", notice: false, note: null };
+  }
+
+  const base = { cb: !!cb, consolidating: step === 1, ready: false };
 
   const office = customerStatusView(i.override, real, isCbHeld(cb), false);
   if (office?.kind === "notice") {

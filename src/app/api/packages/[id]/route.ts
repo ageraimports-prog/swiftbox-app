@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -28,6 +28,7 @@ type Row = {
   ofd_date: string | null;
   delivered_date: string | null;
   cleared: number | null;
+  invoice_issued_at: string | null;
 };
 
 export async function GET(
@@ -52,7 +53,8 @@ export async function GET(
             p.volumetric_weight, p.pcs, p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
             s.ship_id, s.ship_no, s.ship_status,
             s.miami_date, s.transit_date, s.awaiting_date,
-            s.ofd_date, s.delivered_date, ${CLEARED_SQL} AS cleared
+            s.ofd_date, s.delivered_date, ${CLEARED_SQL} AS cleared,
+            ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
       WHERE p.pk_id = :pkId AND p.user_id = :userId
@@ -76,6 +78,7 @@ export async function GET(
     pkType: Number(r.pk_type),
     cb: cb?.membership ?? null,
     airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
+    invoiceIssuedAt: r.invoice_issued_at,
   });
   // A Consolidated Billing member never sends its shipment number, its real
   // stage, or a transit / clearance date: where it is and when it moves is

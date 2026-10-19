@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -21,6 +21,7 @@ type Row = {
   ship_no: string | null;
   ship_status: number | null;
   cleared: number | null;
+  invoice_issued_at: string | null;
 };
 
 export async function GET() {
@@ -34,7 +35,8 @@ export async function GET() {
   const rows = await query<Row>(
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight, p.pcs,
             p.shipper, p.commodities, p.date, ${airdropPackageColumns()},
-            s.ship_no, s.ship_status, ${CLEARED_SQL} AS cleared
+            s.ship_no, s.ship_status, ${CLEARED_SQL} AS cleared,
+            ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
       WHERE p.user_id = :userId
@@ -60,6 +62,7 @@ export async function GET() {
       pkType: Number(r.pk_type),
       cb: cb.get(Number(r.pk_id))?.membership ?? null,
       airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
+      invoiceIssuedAt: r.invoice_issued_at,
       nowMs: now,
     });
     return {

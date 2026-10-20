@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -48,6 +48,7 @@ export async function GET() {
   // each read on its own and never fatal.
   const cb = await cbPackageFacts(session.id).catch(() => new Map());
   const overrides = await customerStatusOverrides(session.id, rows.map((r) => Number(r.pk_id)));
+  const floors = await customerDisplayFloors(session.id, rows.map((r) => Number(r.pk_id)));
   const now = Date.now();
 
   const packages = rows.map((r) => {
@@ -63,6 +64,7 @@ export async function GET() {
       cb: cb.get(Number(r.pk_id))?.membership ?? null,
       airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
       invoiceIssuedAt: r.invoice_issued_at,
+      displayFloor: floors.get(Number(r.pk_id)) ?? null,
       nowMs: now,
     });
     return {

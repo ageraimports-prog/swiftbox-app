@@ -1,7 +1,7 @@
 import "server-only";
 import { query } from "@/lib/db";
 import { CUSTOMER_STATUS_TABLE, OVERRIDE_SET_AT_SQL, type StoredOverride } from "@/lib/customer-status-core";
-import { customerFacingView, invoiceIssuedAtSql, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
+import { customerFacingView, displayFloorOfRow, invoiceIssuedAtSql, DISPLAY_FLOOR_TABLE, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
 
 /**
  * Customer-facing status set by the office (admin migration 055,
@@ -36,6 +36,37 @@ export async function customerStatusOverrides(userId: number, pkIds: number[]): 
 }
 
 /**
+ * The highest status each package's customer has already been shown (admin
+ * migration 083, swiftbox_package_display_status — written only by the admin's
+ * one guarded writer). READ ONLY here. What a customer sees never goes
+ * backwards: a package shown In Transit stays at least In Transit when its
+ * shipment is linked to an Airdrop manifest. A separate query, never a JOIN,
+ * and it never throws: table missing / read failed = no floor (the old rule).
+ */
+export async function customerDisplayFloors(userId: number, pkIds: number[]): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  const ids = [...new Set(pkIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (ids.length === 0) return out;
+  try {
+    // ids are validated positive integers → safe to inline; the user_id join is the ownership check.
+    const rows = await query<{ pk_id: number; display_rank: number }>(
+      `SELECT d.pk_id, d.display_rank
+         FROM ${DISPLAY_FLOOR_TABLE} d
+         JOIN mod_packages p ON p.pk_id = d.pk_id AND p.user_id = :userId
+        WHERE d.pk_id IN (${ids.join(",")})`,
+      { userId }
+    );
+    for (const r of rows) {
+      const f = displayFloorOfRow(r.display_rank);
+      if (f != null) out.set(Number(r.pk_id), f);
+    }
+  } catch {
+    // Table missing (083 not run) / bridge hiccup → the old rule everywhere.
+  }
+  return out;
+}
+
+/**
  * What the customer sees for one package — through THE shared rule,
  * customer-facing-status-core.ts (code-identical with the admin and the
  * website): the office's status, Consolidated Billing ("Consolidating" from
@@ -53,6 +84,8 @@ export function viewFor(input: {
   airdrop?: { receivedAt: string | null; mode: string | null };
   /** The package's ISSUED invoice (INVOICE_ISSUED_AT_SQL); null = on none. */
   invoiceIssuedAt?: string | null;
+  /** The never-backwards floor (customerDisplayFloors); absent = none. */
+  displayFloor?: number | null;
   nowMs?: number;
 }): CustomerFacingView {
   return customerFacingView({
@@ -63,6 +96,7 @@ export function viewFor(input: {
     cb: input.cb ?? null,
     airdrop: input.airdrop ?? null,
     invoiceIssuedAt: input.invoiceIssuedAt ?? null,
+    displayFloor: input.displayFloor ?? null,
     nowMs: input.nowMs,
   });
 }

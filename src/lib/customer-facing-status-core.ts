@@ -45,6 +45,18 @@
  *     a Consolidated Billing member.
  *  4. The real stage, in the customer's words.
  *
+ * NEVER BACKWARDS (Brent, 2026-10-20). `displayFloor` is the highest status the
+ * customer has already been shown (SwiftboxAdmin swiftbox_package_display_status,
+ * migration 083, written only through the admin's one guarded writer). Every
+ * step above shows AT LEAST that: a package the 5 pm drop already showed In
+ * Transit does not fall back to In Miami when its shipment is linked to an
+ * Airdrop manifest, and a Consolidated Billing member that already read
+ * "Consolidating" does not fall back to In Miami. The floor is a ladder rank
+ * (package-status-core.ts in the admin): 0 In Miami, 1 In Transit, 2 Awaiting
+ * Clearance, 3 Cleared (shown as Awaiting Clearance), 4 Ready to Deliver. It
+ * never reaches Out for Delivery / Delivered — those come from the real stage.
+ * Absent / null = no floor (the table may not exist yet): exactly the old rule.
+ *
  * DISPLAY ONLY. Nothing here is written anywhere; the real status, customs,
  * invoices, delivery and the admin's own chips never read it.
  */
@@ -159,15 +171,34 @@ export type CustomerFacingInput = {
    * ('' = issued, time unknown); null / absent = on no issued invoice.
    */
   invoiceIssuedAt?: string | null;
+  /**
+   * The highest ladder rank already shown to the customer (0–4, see the header);
+   * null / absent = none. Read with displayFloorOfRow.
+   */
+  displayFloor?: number | null;
   nowMs?: number;
 };
+
+/** The admin's customer-facing floor table (migration 083). Read only here. */
+export const DISPLAY_FLOOR_TABLE = "swiftbox_package_display_status";
+
+/** A display_rank read from DISPLAY_FLOOR_TABLE → CustomerFacingInput.displayFloor (junk → null). */
+export function displayFloorOfRow(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, 4) : null;
+}
 
 export type CustomerFacingView = {
   /** Position on the progress bar, 0–4: CUSTOMER_STAGE_LABELS, or CB_STEP_LABELS when `cb`. */
   stage: CustomerStage;
   label: string;
-  /** office = set by the office; consolidated = Consolidated Billing; auto = the 5 pm drop; real = the real stage. */
-  source: "office" | "consolidated" | "auto" | "real";
+  /**
+   * office = set by the office; consolidated = Consolidated Billing; auto = the
+   * 5 pm drop; floor = already shown earlier (never goes backwards); real = the
+   * real stage.
+   */
+  source: "office" | "consolidated" | "auto" | "floor" | "real";
   /** The label is an office notice (Delayed / On hold): show it highlighted, the bar stays at `stage`. */
   notice: boolean;
   /** The office's note under its status, if any. */
@@ -198,19 +229,27 @@ function cbStepOfStage(stage: CustomerStage): CustomerStage {
 }
 
 export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
+  const floor = displayFloorOfRow(i.displayFloor) ?? 0;
+  // The floor as a customer stage: In Miami 0, In Transit 1, Awaiting Clearance /
+  // Cleared / Ready 2 (Ready = the issued-invoice step).
+  const floorStage: CustomerStage = floor >= 2 ? 2 : (floor as CustomerStage);
   const raw = i.shipStatus == null || i.shipStatus === "" ? null : Number(i.shipStatus);
   const s = raw === 6 ? 3 : raw != null && Number.isInteger(raw) ? raw : null;
   const cleared = raw === 6 || (s === 3 && !!i.cleared);
   const real = customerStageOf(s);
   const auto = i.airdrop ? isAutoTransitDue(i.airdrop.receivedAt, i.airdrop.mode, i.nowMs ?? Date.now()) : false;
   const cb = i.cb ?? null;
-  const step = cb ? cbStep(cb, s, cleared, auto) : null;
+  const cbRaw = cb ? cbStep(cb, s, cleared, auto) : null;
+  // A member already shown "Consolidating" never falls back to In Miami.
+  const step: CustomerStage | null = cbRaw === 0 && floorStage >= 1 ? 1 : cbRaw;
   const word = (stage: CustomerStage) => (stage === 1 ? inTransitLabel(i.pkType ?? 1) : CUSTOMER_STAGE_LABELS[stage]);
 
-  // 0. An issued invoice: Cleared – Ready to Deliver until out for delivery.
-  if (i.invoiceIssuedAt != null && s !== 4 && s !== 5) {
+  // 0. An issued invoice (or a customer already shown Ready to Deliver):
+  //    Cleared – Ready to Deliver until out for delivery.
+  if ((i.invoiceIssuedAt != null || floor >= 4) && s !== 4 && s !== 5) {
     const ready = { cb: !!cb, consolidating: false, ready: true };
-    const o = i.override && !isPreIssueOverride(i.override, i.invoiceIssuedAt) ? i.override : null;
+    const issuedAt = i.invoiceIssuedAt ?? "";
+    const o = i.override && !isPreIssueOverride(i.override, issuedAt) ? i.override : null;
     const later = o ? customerStatusStage(o.key) : null;
     if (o && later != null && later > 2) {
       return { ...ready, ready: false, stage: later, label: word(later), source: "office", notice: false, note: cleanNote(o.note) };
@@ -218,24 +257,27 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
     if (o && later == null && isOverrideActive(o, 2)) {
       return { ...ready, stage: 2, label: customerStatusView(o, 2, false)?.label ?? CLEARED_READY_LABEL, source: "office", notice: true, note: cleanNote(o.note) };
     }
-    return { ...ready, stage: 2, label: CLEARED_READY_LABEL, source: "real", notice: false, note: null };
+    return { ...ready, stage: 2, label: CLEARED_READY_LABEL, source: i.invoiceIssuedAt != null ? "real" : "floor", notice: false, note: null };
   }
 
   const base = { cb: !!cb, consolidating: step === 1, ready: false };
 
   const office = customerStatusView(i.override, real, isCbHeld(cb), false);
   if (office?.kind === "notice") {
-    return { ...base, stage: step ?? real, label: office.label, source: "office", notice: true, note: office.note };
+    return { ...base, stage: step ?? (Math.max(real, floorStage) as CustomerStage), label: office.label, source: "office", notice: true, note: office.note };
   }
-  if (office?.kind === "stage") {
+  if (office?.kind === "stage" && (cb || office.stage > floorStage)) {
     return { ...base, consolidating: false, stage: cb ? cbStepOfStage(office.stage) : office.stage, label: word(office.stage), source: "office", notice: false, note: office.note };
   }
   if (cb && step != null) {
     const label = step === 1 ? CB_CONSOLIDATING_LABEL : step === 2 ? CB_READY_LABEL : CUSTOMER_STAGE_LABELS[step];
     return { ...base, stage: step, label, source: step === 1 || step === 2 ? "consolidated" : "real", notice: false, note: null };
   }
-  if (auto && real < 1) {
+  if (auto && real < 1 && floorStage <= 1) {
     return { ...base, stage: 1, label: word(1), source: "auto", notice: false, note: null };
+  }
+  if (floorStage > real) {
+    return { ...base, stage: floorStage, label: word(floorStage), source: "floor", notice: false, note: null };
   }
   return { ...base, stage: real, label: word(real), source: "real", notice: false, note: null };
 }

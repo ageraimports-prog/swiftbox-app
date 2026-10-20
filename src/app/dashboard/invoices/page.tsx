@@ -49,6 +49,7 @@ function EmptyState() {
 export default function InvoicesPage() {
   const [invoices, setInvoices] = React.useState<InvoiceSummary[] | null>(null);
   const [bills, setBills] = React.useState<BillSummary[]>([]);
+  const [credits, setCredits] = React.useState<{ name: string; remainingTtd: number }[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -62,6 +63,7 @@ export default function InvoicesPage() {
         if (!cancelled) {
           setInvoices(data.invoices);
           setBills(data.bills ?? []);
+          setCredits(data.credits ?? []);
         }
       })
       .catch(() => {
@@ -89,6 +91,19 @@ export default function InvoicesPage() {
           <SkeletonCard />
           <SkeletonCard />
         </>
+      )}
+
+      {/* Credits carried from a voided invoice: what is left, taken off the next invoice. */}
+      {credits.length > 0 && (
+        <section className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          {credits.map((c) => (
+            <div key={c.name} className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="text-mist">{c.name}</span>
+              <span className="font-semibold tabular-nums text-mist">TT${c.remainingTtd.toFixed(2)} remaining</span>
+            </div>
+          ))}
+          <p className="mt-1 text-xs text-muted-dark">Taken off your next invoice automatically.</p>
+        </section>
       )}
 
       {/* Consolidated Bills: one per delivery, instead of their invoices one by one. */}

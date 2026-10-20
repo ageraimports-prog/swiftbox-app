@@ -4,6 +4,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { cbHiddenInvoiceIds, listCbBills } from "@/lib/consolidated-billing";
 import { invoicePaymentStatus } from "@/lib/invoice-money-core";
+import { carriedCreditBalances } from "@/lib/carried-credits";
 
 type Row = {
   house_account: number;
@@ -94,8 +95,12 @@ export async function GET() {
     packages: byInvoice.get(r.invoice_no) ?? [],
   }));
 
+  // Credits carried from a voided invoice, with what is left of each (never throws).
+  const credits = await carriedCreditBalances(session.id);
+
   return NextResponse.json({
     invoices,
+    credits,
     bills: bills.map((b) => ({
       billNo: b.billNo,
       date: b.date,

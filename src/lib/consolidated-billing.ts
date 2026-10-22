@@ -9,6 +9,9 @@ import {
   ttDayNumber,
   packageSection,
   billTotals,
+  reconcileChildLines,
+  type ChildLine,
+  type ItemCustomsWeights,
   type PackageSection,
   type BillTotals,
 } from "@/lib/consolidatedBillingCore";
@@ -309,30 +312,47 @@ export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
   return new Set([...onBill.map((r) => Number(r.invoice_id)), ...held]);
 }
 
-type ChildRow = { house_account: number; invoice_id: number; invoice_no: string; total_ttd: string; amount_paid: string; ship_no: string | null; billing_mode: string | null };
+type ChildRow = { house_account: number; invoice_id: number; invoice_no: string; total_ttd: string; amount_paid: string; ship_no: string | null; billing_mode: string | null; roe: string | null };
 
 async function children(billId: number): Promise<ChildRow[]> {
   return query<ChildRow>(
-    `SELECT ${await invoiceHouseColumn("i")}, i.invoice_id, i.invoice_no, i.total_ttd, i.amount_paid, i.ship_no, i.billing_mode
+    `SELECT ${await invoiceHouseColumn("i")}, i.invoice_id, i.invoice_no, i.total_ttd, i.amount_paid, i.ship_no, i.billing_mode, i.roe
        FROM ${BI} bi JOIN swiftbox_invoices i ON i.invoice_id = bi.invoice_id
       WHERE bi.bill_id = :b ORDER BY i.invoice_id`,
     { b: billId }
   );
 }
 
+type BillLine = { lineType: string; description: string; amountTtd: number; basis: string | null; currency: string; amount: number };
+
 async function linesFor(invoiceIds: number[]) {
-  if (invoiceIds.length === 0) return new Map<number, { lineType: string; description: string; amountTtd: number; basis: string | null }[]>();
-  const rows = await query<{ invoice_id: number; line_type: string; description: string; amount_ttd: string; basis: string | null }>(
-    `SELECT invoice_id, line_type, description, amount_ttd, basis FROM swiftbox_invoice_lines
+  if (invoiceIds.length === 0) return new Map<number, BillLine[]>();
+  const rows = await query<{ invoice_id: number; line_type: string; description: string; currency: string | null; amount: string | null; amount_ttd: string; basis: string | null }>(
+    `SELECT invoice_id, line_type, description, currency, amount, amount_ttd, basis FROM swiftbox_invoice_lines
       WHERE invoice_id IN (${invoiceIds.map((n) => Number(n)).join(",")}) ORDER BY invoice_id, sort_order`
   );
-  const out = new Map<number, { lineType: string; description: string; amountTtd: number; basis: string | null }[]>();
+  const out = new Map<number, BillLine[]>();
   for (const r of rows) {
     const k = Number(r.invoice_id);
     if (!out.has(k)) out.set(k, []);
-    out.get(k)!.push({ lineType: r.line_type, description: r.description, amountTtd: Number(r.amount_ttd), basis: r.basis });
+    out.get(k)!.push({ lineType: r.line_type, description: r.description, amountTtd: Number(r.amount_ttd), basis: r.basis, currency: String(r.currency ?? ""), amount: Number(r.amount ?? 0) });
   }
   return out;
+}
+
+/**
+ * One invoice's lines as the bill DISPLAYS them (admin getBillDetail does the
+ * same): the cent or two of shipping-conversion rounding settled onto its own
+ * total by reconcileChildLines, so the bill's lines add up to Σ invoice totals.
+ * Display only — nothing stored moves.
+ */
+function displayLines(k: ChildRow, lines: BillLine[]): ChildLine[] {
+  const roe = Number(k.roe ?? 0);
+  return reconcileChildLines(
+    lines.map((l) => ({ lineType: l.lineType, description: l.description, amountTtd: l.amountTtd, basis: l.basis,
+      exactTtd: l.currency === "USD" && roe > 0 ? l.amount * roe : undefined })),
+    Number(k.total_ttd)
+  );
 }
 
 /** One package on a bill, for the list card's headline ("Shoes + 4 more") and tracking line. */
@@ -399,8 +419,17 @@ export type CbBillPackage = {
 
 export type CbBillDetail = { billNo: string; date: string; packages: CbBillPackage[]; totals: BillTotals };
 
-/** One ISSUED bill of this customer's, computed live from its invoices. Null = not theirs / not issued. */
-export async function getCbBill(userId: number, billNo: string): Promise<CbBillDetail | null> {
+/**
+ * One ISSUED bill of this customer's, computed live from its invoices. Null = not
+ * theirs / not issued. `customs` = the admin's per-WR customs figures (pk_id →
+ * duty / OPT / VAT / other, fetchCbBillAdmin): an invoice holding several WRs
+ * then shows each WR's own government charges (Brent, 2026-10-22).
+ */
+export async function getCbBill(
+  userId: number,
+  billNo: string,
+  customs: Map<number, ItemCustomsWeights> | null = null
+): Promise<CbBillDetail | null> {
   if (!/^CB-\d{6,}$/.test(billNo)) return null;
   const b = (await safe(
     () => query<{ bill_id: number; bill_no: string; issued_at: string | null }>(
@@ -450,11 +479,16 @@ export async function getCbBill(userId: number, billNo: string): Promise<CbBillD
       tracking: mine.map((p) => (p.tracking ?? "").trim()).filter(Boolean).join(", "),
       contents: mine.map((p) => (p.commodities ?? "").trim()).filter(Boolean).join(", "),
       section: packageSection(
-        lines.get(Number(k.invoice_id)) ?? [],
-        mine.map((p) => ({
-          description: (p.goods_desc_override ?? "").trim() || (p.commodities ?? "").trim() || (p.asycuda_description ?? "").trim() || "Goods",
-          declaredValueUsd: Math.round(Number(p.ship_value ?? 0) * 100) / 100,
-        }))
+        displayLines(k, lines.get(Number(k.invoice_id)) ?? []),
+        mine.map((p) => {
+          const description = (p.goods_desc_override ?? "").trim() || (p.commodities ?? "").trim() || (p.asycuda_description ?? "").trim() || "Goods";
+          return {
+            // Several WRs on one invoice: one item per WR, named by WR.
+            description: mine.length > 1 && p.wr ? `${p.wr} · ${description}` : description,
+            declaredValueUsd: Math.round(Number(p.ship_value ?? 0) * 100) / 100,
+            customs: mine.length > 1 ? customs?.get(Number(p.pk_id)) ?? null : null,
+          };
+        })
       ),
     };
   });
@@ -484,20 +518,26 @@ export async function fetchCbBillPdf(userId: number, billNo: string): Promise<Ar
  * weight, the group's combined exact weight and billed weight (rounded up once),
  * the same packages billed separately, and what that saved. Computed by the admin
  * from the invoices' ACTUAL figures — never worked out here.
+ *
+ * The admin TRIMS what it sends the app (billing separation, 2026-10-21): only
+ * billedLb is certain. Everything else may be absent, so every reader guards it
+ * (components/CbWeightsPanel.tsx cbWeightsPanelView) — a missing field hides
+ * its own row, never the page.
  */
 export type CbBillWeights = {
   ready: boolean;
   /** False when some package joined at its rounded intake pound (no scale weight). */
   allExact?: boolean;
-  /** kind: "exact" (scale), "rounded" (only the recorded whole pound), "missing". */
-  packages: { pkId: number; wr: string; exactLb: number | null; wholeLb: number; kind?: "exact" | "rounded" | "missing" }[];
-  exactTotalLb: number;
+  /** kind: "exact" (scale), "rounded" (only the recorded whole pound), "missing". Not sent by a trimming admin. */
+  packages?: { pkId: number; wr: string; exactLb: number | null; wholeLb: number; kind?: "exact" | "rounded" | "missing" }[];
+  exactTotalLb?: number;
   billedLb: number;
-  separateLb: number;
-  savingLb: number;
+  /** The same packages, each rounded up on its own. */
+  separateLb?: number;
+  savingLb?: number;
   /** TOTAL saved — freight + fuel + insurance (2026-10-02). */
-  savingUsd: number;
-  savingTtd: number;
+  savingUsd?: number;
+  savingTtd?: number;
   /** The freight + fuel part of savingUsd. Absent from an admin older than 2026-10-02. */
   freightSavingUsd?: number;
   /**
@@ -505,14 +545,43 @@ export type CbBillWeights = {
    * cover still per package. Null/absent → every package carries its own.
    */
   insurance?: {
-    combinedValueUsd: number;
-    chargedUsd: number;
-    separateUsd: number;
-    savingUsd: number;
-    tvWrs: string[];
-    coverCapUsd: number;
+    combinedValueUsd?: number;
+    chargedUsd?: number;
+    separateUsd?: number;
+    savingUsd?: number;
+    tvWrs?: string[];
+    coverCapUsd?: number;
   } | null;
 };
+
+/**
+ * One read of the admin's bill-weights route: the weights (null when the admin
+ * did not send the full set — the panel keeps its old rule) and the per-WR
+ * customs figures (empty when none). Never throws; the bill still shows.
+ */
+export async function fetchCbBillAdmin(
+  userId: number,
+  billNo: string
+): Promise<{ weights: CbBillWeights | null; customs: Map<number, ItemCustomsWeights> | null }> {
+  const none = { weights: null, customs: null };
+  try {
+    const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
+    if (!key) return none;
+    const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
+    const url = `${base}/api/consolidated-billing/bill-weights?billNo=${encodeURIComponent(billNo)}&userId=${Number(userId)}`;
+    const res = await fetch(url, { headers: { "x-consolidation-key": key }, cache: "no-store" });
+    if (!res.ok) return none;
+    const w = (await res.json()) as CbBillWeights & { customs?: ({ pkId: number } & ItemCustomsWeights)[] };
+    const rows = Array.isArray(w?.customs) ? w.customs : [];
+    const customs = rows.length
+      ? new Map(rows.map((c) => [Number(c.pkId), { duty: Number(c.duty) || 0, opt: Number(c.opt) || 0, vat: Number(c.vat) || 0, other: Number(c.other) || 0 }] as const))
+      : null;
+    // Only billedLb is required: the trimmed response has no per-package list.
+    return { weights: w && typeof w.billedLb === "number" ? w : null, customs };
+  } catch {
+    return none;
+  }
+}
 
 /** The bill's weights from the admin. Null = not available (the bill still shows). */
 export async function fetchCbBillWeights(userId: number, billNo: string): Promise<CbBillWeights | null> {
@@ -524,7 +593,7 @@ export async function fetchCbBillWeights(userId: number, billNo: string): Promis
     const res = await fetch(url, { headers: { "x-consolidation-key": key }, cache: "no-store" });
     if (!res.ok) return null;
     const w = (await res.json()) as CbBillWeights;
-    return w && typeof w.billedLb === "number" && Array.isArray(w.packages) ? w : null;
+    return w && typeof w.billedLb === "number" ? w : null;
   } catch {
     return null;
   }

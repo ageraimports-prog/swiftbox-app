@@ -157,7 +157,9 @@ export async function GET(
       shippingTtd: Number(h.shipping_ttd),
       customsTotalTtd: Number(h.customs_total_ttd),
       referralCreditTtd: money.referralCreditTtd,
-      // The owner's discount ("Discount (reason)"), already inside totalTtd.
+      // Credit lines Swiftbox added on the draft — shown under their own words.
+      ownerCredits: money.ownerCredits,
+      // The owner's discount ("Discount" / "Discount (label)"), already inside totalTtd.
       discount: money.discount,
       // What was charged before the discount — the footer's "Total due".
       chargesTotalTtd: money.chargesTotalTtd,

@@ -53,7 +53,11 @@ export function groupDisplay(members: { shipStatus: number | null; awaitingDate:
   return { shipStatus: min, awaitingDate: latest };
 }
 
-export type ChildLine = { lineType: string; description: string; amountTtd: number; basis?: string | null };
+export type ChildLine = {
+  lineType: string; description: string; amountTtd: number; basis?: string | null;
+  /** Display only: the line's unrounded TT$ (US$ amount × the invoice's roe) — see reconcileChildLines. */
+  exactTtd?: number;
+};
 
 export type CustomsItem = {
   description: string;
@@ -77,12 +81,97 @@ export type PackageSection = {
 const cents = (n: number) => Math.round((Number(n) || 0) * 100);
 const fromCents = (c: number) => c / 100;
 
+// Ported from SwiftboxAdmin lib/consolidated-billing-core.ts (2026-10-18) — keep identical.
+const SHIPPING_LINE_TYPES = ["freight", "fuel", "insurance"];
+
+/**
+ * DISPLAY ONLY — make one child invoice's lines add up to its own stored total.
+ *
+ * Why it is needed: the Consolidated Billing pricing (cb-group-pricing
+ * rewriteShipping) stores the header shipping_ttd as ONE conversion of
+ * (freight + fuel + insurance) US$ to TT$, but each line's amount_ttd as its OWN
+ * conversion. Each rounding is honest, but the three rounded lines can differ
+ * from the rounded sum by a cent or two — so a bill that adds up its children's
+ * lines (108.25 + 21.62 + 13.58 + 312.85 = 456.30) disagreed with the sum of the
+ * children's totals (456.33), which is what the customer pays.
+ *
+ * The rule: the invoice's total is right and is never touched. The difference
+ * (total − Σ lines, in cents) is the shipping rounding, so it is settled on the
+ * invoice's positive shipping lines, one cent at a time: to the line whose own
+ * rounding lost the most (`exactTtd`, the US$ × roe it was converted from), so
+ * each line ends as close as possible to its true conversion; without exact
+ * figures, largest line first. No line moves by more than a cent. Only a
+ * difference rounding can explain is settled: at most ⌊(n+1)/2⌋ cents for n
+ * shipping lines (each conversion is off by < ½ cent, the header by < ½ cent).
+ * Anything larger — or an invoice with no shipping line — is returned as it is,
+ * so a real disagreement still shows (billTotals.reconciles = false).
+ * Nothing is written: stored amounts and totals stay exactly as they are.
+ */
+export function reconcileChildLines<L extends ChildLine>(lines: L[], totalTtd: number): L[] {
+  const residual = cents(totalTtd) - lines.reduce((n, l) => n + cents(l.amountTtd), 0);
+  if (residual === 0) return lines;
+  const candidates = lines
+    .map((l, i) => ({ i, c: cents(l.amountTtd), exact: l.exactTtd }))
+    .filter((x) => SHIPPING_LINE_TYPES.includes(lines[x.i].lineType) && x.c > 0);
+  const withExact = candidates.every((x) => x.exact != null && Number.isFinite(x.exact));
+  // Positive residual: the most under-rounded line first; negative: the most over-rounded.
+  const lost = (x: { c: number; exact?: number }) => (residual > 0 ? 1 : -1) * ((x.exact as number) * 100 - x.c);
+  const shipping = candidates.sort((a, b) =>
+    (withExact ? lost(b) - lost(a) : 0) || b.c - a.c || a.i - b.i);
+  if (shipping.length === 0 || Math.abs(residual) > Math.floor((shipping.length + 1) / 2)) return lines;
+  const out = lines.slice();
+  const step = residual > 0 ? 1 : -1;
+  for (let k = 0; k < Math.abs(residual); k++) {
+    const x = shipping[k % shipping.length];
+    out[x.i] = { ...out[x.i], amountTtd: fromCents(cents(out[x.i].amountTtd) + step) };
+  }
+  return out;
+}
+
+/** One WR's customs figures as the customs engine works them out (TT$) — the ratio a split follows. */
+export type ItemCustomsWeights = { duty: number; opt: number; vat: number; other: number };
+
+/**
+ * DISPLAY ONLY (Brent, 2026-10-22): one stored total, in cents, split across
+ * items in proportion to their weights, to the cent — largest remainder, ties to
+ * the earlier item — so the parts always add up to the total. No weight anywhere
+ * (e.g. a duty typed by hand over uncoded goods) → it all stays on the first
+ * item. Ported byte-for-byte to SwiftboxApp src/lib/consolidatedBillingCore.ts.
+ */
+export function splitCustomsCents(totalCents: number, weights: number[]): number[] {
+  const out = weights.map(() => 0);
+  if (out.length === 0) return out;
+  const w = weights.map((x) => Math.max(0, Number(x) || 0));
+  const sum = w.reduce((a, b) => a + b, 0);
+  if (sum <= 0 || totalCents === 0) {
+    out[0] = totalCents;
+    return out;
+  }
+  const sign = totalCents < 0 ? -1 : 1;
+  const abs = Math.abs(totalCents);
+  const raw = w.map((x) => (abs * x) / sum);
+  const base = raw.map((r) => Math.floor(r + 1e-9));
+  let left = abs - base.reduce((a, b) => a + b, 0);
+  const order = raw.map((r, i) => ({ f: r - base[i], i })).sort((a, b) => b.f - a.f || a.i - b.i);
+  for (let k = 0; left > 0; k++, left--) base[order[k % order.length].i] += 1;
+  return base.map((c) => c * sign);
+}
+
 function isCustomsOther(l: ChildLine): boolean {
   return l.basis === "as assessed by customs" || l.description.trim().toLowerCase() === "other taxes";
 }
 
-/** One package's block, from its invoice's lines. An ocean invoice has no OPT line. */
-export function packageSection(lines: ChildLine[], items: { description: string; declaredValueUsd: number }[]): PackageSection {
+/**
+ * One package's block, from its invoice's lines. An ocean invoice has no OPT line.
+ * An invoice holding several WRs gets one item per WR; when every item carries
+ * the customs engine's own figures (`customs`, from the admin), the invoice's
+ * stored duty / OPT / VAT are split per WR by splitCustomsCents (Brent,
+ * 2026-10-22). Without them the amounts sit on the first item, as before.
+ */
+export function packageSection(
+  lines: ChildLine[],
+  items: { description: string; declaredValueUsd: number; customs?: ItemCustomsWeights | null }[]
+): PackageSection {
   let freight = 0, fuel = 0, insurance = 0, duty = 0, opt = 0, vat = 0, otherTax = 0, otherCharges = 0, credits = 0;
   for (const l of lines) {
     const c = cents(l.amountTtd);
@@ -100,6 +189,10 @@ export function packageSection(lines: ChildLine[], items: { description: string;
     }
   }
   const described = items.length > 0 ? items : [{ description: "Goods", declaredValueUsd: 0 }];
+  const split = described.length > 1 && described.every((it) => it.customs);
+  const share = (total: number, k: keyof ItemCustomsWeights) =>
+    split ? splitCustomsCents(total, described.map((it) => it.customs![k])) : described.map((_, i) => (i === 0 ? total : 0));
+  const d = share(duty, "duty"), o = share(opt, "opt"), v = share(vat, "vat"), x = share(otherTax, "other");
   return {
     freightTtd: fromCents(freight),
     fuelTtd: fromCents(fuel),
@@ -108,10 +201,10 @@ export function packageSection(lines: ChildLine[], items: { description: string;
     items: described.map((it, i) => ({
       description: it.description,
       declaredValueUsd: Number(it.declaredValueUsd) || 0,
-      dutyTtd: i === 0 ? fromCents(duty) : 0,
-      optTtd: i === 0 ? fromCents(opt) : 0,
-      vatTtd: i === 0 ? fromCents(vat) : 0,
-      otherTaxTtd: i === 0 ? fromCents(otherTax) : 0,
+      dutyTtd: fromCents(d[i]),
+      optTtd: fromCents(o[i]),
+      vatTtd: fromCents(v[i]),
+      otherTaxTtd: fromCents(x[i]),
     })),
     subtotalTtd: fromCents(freight + fuel + insurance + duty + opt + vat + otherTax + otherCharges),
     creditsTtd: fromCents(credits),

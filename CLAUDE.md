@@ -84,11 +84,14 @@ and on the page of any package in the open group — `cbInOpenGroup`, Miami incl
 and `SendNowPanel` inside the Account card (`showSendNow`). Shown only when
 `getCbState().group` is set: the OPEN group with ≥1 package (Buy For Me excluded).
 Names the group by description + tracking (`cbWaitingSummary`), shows the timing-free
-`CB_SEND_NOW_HINT` (R13a — "Ships automatically in N days" was removed 2026-10-04), and confirms IN the page — Brent's wording since 2026-10-13, `cbSendNowConfirmText(n)`: "This closes your current group. These N packages will be billed and delivered together, and any new packages you receive will start a new group. Continue?" with `CB_SEND_NOW_YES` "Yes, send these now" / `CB_SEND_NOW_NO` "Keep waiting"; `/api/consolidated-billing/release` refuses anything without `confirmed: true` (`src/lib/send-now-request.ts`, tested in `sendMyPackagesNow.test.ts`). Every screen uses `SendNowPanel`; never call the route from anywhere else (no `window.confirm` — it froze the Chrome
+`CB_SEND_NOW_HINT` (R13a — "Ships automatically in N days" was removed 2026-10-04), and confirms IN the page — `cbSendNowConfirmText(n)` (2026-10-18, matching the admin's new rule): "This closes your current group. Packages that have already arrived will be billed together now. Any still on the way will be billed and delivered on their own when they arrive. New packages you receive will start a new group. Continue?" with `CB_SEND_NOW_YES` "Yes, send these now" / `CB_SEND_NOW_NO` "Keep waiting"; `/api/consolidated-billing/release` refuses anything without `confirmed: true` (`src/lib/send-now-request.ts`, tested in `sendMyPackagesNow.test.ts`). Every screen uses `SendNowPanel`; never call the route from anywhere else (no `window.confirm` — it froze the Chrome
 extension and is poor on phones). `POST /api/consolidated-billing/release` forwards
 only the session's user id + groupId to the admin, which owns every rule (closes the
-group as on day 21, refuses anyone else's group, answers "already" to a repeat). The
-switch stays ON. After: `preparing` → "Your packages are being prepared for delivery";
+group, refuses anyone else's group, answers "already" to a repeat). Since 2026-10-18
+(Brent) nothing stays held after the tap: the admin bills the packages that have
+ARRIVED (cleared + checked in, or exempt) together on one draft Consolidated Bill when
+there are 2+, and DETACHES every other package (and a lone arrived one) to bill and
+deliver on its own. The switch stays ON. After: `preparing` → "Your packages are being prepared for delivery";
 cards read "Being prepared for delivery" (`cbPreparing`, only once a package has left
 Miami) — still never a stage or a place. A tap broadcasts `CB_STATE_EVENT` so the other
 cards on the page update. Copy: `consolidatedBilling.ts`; tests:
@@ -406,4 +409,4 @@ retry recovery; later opt-ins are protected. Historical users are not opted out.
 After success show only: "Your packages are on their way. Consolidated Billing
 is now off — turn it back on anytime." No counts, warehouse/hold mechanics,
 email or WhatsApp. Confirmation explains the switch-off. Admin and app branch
-changes require Brent's review; no merge, push or deployment is authorized.
+changes were approved for deployment by Brent on 22 October 2026, after the guarded admin was deployed and verified with migration 085 absent. Keep that gate closed until Brent approves Claude running 085.

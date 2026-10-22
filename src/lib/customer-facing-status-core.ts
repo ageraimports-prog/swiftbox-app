@@ -15,6 +15,15 @@
  * Billing membership, the Airdrop receive time) and asks this.
  *
  * ORDER
+ *  0. AN ISSUED INVOICE (Brent, 2026-10-18/19): a package on an issued invoice
+ *     is in Trinidad and ready to dispatch, so until it is out for delivery
+ *     the customer sees "Cleared – Ready to Deliver" — nothing earlier, ever.
+ *     It beats Consolidated Billing's masking, the 5 pm drop and the real
+ *     stage. Of the office's statuses only these still show: a stage label
+ *     LATER than it (Out for Delivery / Delivered), and a notice (Delayed / On
+ *     hold) set AT OR AFTER the invoice was issued — one set before is stale
+ *     (`isPreIssueOverride`; the admin deletes those on issue). Out for
+ *     Delivery (raw 4) and Delivered (raw 5) are shown as normal.
  *  1. A status the office set (customer-status-core.ts). A notice ("Delayed",
  *     "On hold — contact us") always wins. A stage label wins too, except on a
  *     package HELD by Consolidated Billing, which only ever gets a notice.
@@ -36,14 +45,60 @@
  *     a Consolidated Billing member.
  *  4. The real stage, in the customer's words.
  *
+ * NEVER BACKWARDS (Brent, 2026-10-20). `displayFloor` is the highest status the
+ * customer has already been shown (SwiftboxAdmin swiftbox_package_display_status,
+ * migration 083, written only through the admin's one guarded writer). Every
+ * step above shows AT LEAST that: a package the 5 pm drop already showed In
+ * Transit does not fall back to In Miami when its shipment is linked to an
+ * Airdrop manifest, and a Consolidated Billing member that already read
+ * "Consolidating" does not fall back to In Miami. The floor is a ladder rank
+ * (package-status-core.ts in the admin): 0 In Miami, 1 In Transit, 2 Awaiting
+ * Clearance, 3 Cleared (shown as Awaiting Clearance), 4 Ready to Deliver. It
+ * never reaches Out for Delivery / Delivered — those come from the real stage.
+ * Absent / null = no floor (the table may not exist yet): exactly the old rule.
+ *
  * DISPLAY ONLY. Nothing here is written anywhere; the real status, customs,
  * invoices, delivery and the admin's own chips never read it.
  */
-import { CUSTOMER_STAGE_LABELS, customerStageOf, customerStatusView, type CustomerStage, type StoredOverride } from "./customer-status-core";
+import { CUSTOMER_STAGE_LABELS, cleanNote, customerStageOf, customerStatusStage, customerStatusView, isCustomerStatusKey, isOverrideActive, type CustomerStage, type StoredOverride } from "./customer-status-core";
 import { inTransitLabel, isAutoTransitDue } from "./auto-transit-core";
 
 export const CB_CONSOLIDATING_LABEL = "Consolidating — will be delivered together with your other packages";
 export const CB_READY_LABEL = "Ready for delivery";
+
+/** What a customer sees once the package's invoice is issued (the admin's own chip wording). */
+export const CLEARED_READY_LABEL = "Cleared – Ready to Deliver";
+
+/**
+ * SQL: the issued_at of the ISSUED invoice the package `pkExpr` is on, as
+ * 'YYYY-MM-DD HH:MM:SS' on the database clock; '' when issued with no time
+ * stamped; NULL when it is on no issued invoice. swiftbox_invoice_packages.pk_id
+ * is UNIQUE, so there is at most one. Every surface reads the fact with this.
+ */
+export function invoiceIssuedAtSql(pkExpr: string): string {
+  return `(SELECT COALESCE(DATE_FORMAT(i_cf.issued_at, '%Y-%m-%d %H:%i:%s'), '') FROM swiftbox_invoice_packages ip_cf JOIN swiftbox_invoices i_cf ON i_cf.invoice_id = ip_cf.invoice_id WHERE ip_cf.pk_id = ${pkExpr} AND i_cf.lifecycle = 'issued' LIMIT 1)`;
+}
+
+/** A value read with invoiceIssuedAtSql → CustomerFacingInput.invoiceIssuedAt (NULL stays null = not issued). */
+export function invoiceIssuedAtFromRow(v: unknown): string | null {
+  return v == null ? null : String(v);
+}
+
+/**
+ * Is this office status stale once the package's invoice is issued — i.e.
+ * EARLIER in the flow than Cleared – Ready to Deliver? A stage label up to
+ * Awaiting Clearance always is; Out for Delivery / Delivered never are. A
+ * notice is stale unless it was set at or after the issue (both times known,
+ * same database clock). Unknown key → stale.
+ */
+export function isPreIssueOverride(o: StoredOverride, issuedAt: string | null | undefined): boolean {
+  if (!isCustomerStatusKey(o.key)) return true;
+  const stage = customerStatusStage(o.key);
+  if (stage != null) return stage <= 2;
+  const set = o.setAt ? String(o.setAt) : "";
+  const at = issuedAt ? String(issuedAt) : "";
+  return !(set && at && set >= at);
+}
 
 /** A Consolidated Billing member's progress steps, 0–4 (the stepper / timeline). */
 export const CB_STEP_LABELS: readonly string[] = [
@@ -113,15 +168,39 @@ export type CustomerFacingInput = {
   cb?: CbMembership | null;
   /** Airdrop receive time + mode, for the 5 pm drop. */
   airdrop?: { receivedAt: string | null; mode: string | null } | null;
+  /**
+   * The package's ISSUED invoice, read with invoiceIssuedAtSql: its issued_at
+   * ('' = issued, time unknown); null / absent = on no issued invoice.
+   */
+  invoiceIssuedAt?: string | null;
+  /**
+   * The highest ladder rank already shown to the customer (0–4, see the header);
+   * null / absent = none. Read with displayFloorOfRow.
+   */
+  displayFloor?: number | null;
   nowMs?: number;
 };
+
+/** The admin's customer-facing floor table (migration 083). Read only here. */
+export const DISPLAY_FLOOR_TABLE = "swiftbox_package_display_status";
+
+/** A display_rank read from DISPLAY_FLOOR_TABLE → CustomerFacingInput.displayFloor (junk → null). */
+export function displayFloorOfRow(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, 4) : null;
+}
 
 export type CustomerFacingView = {
   /** Position on the progress bar, 0–4: CUSTOMER_STAGE_LABELS, or CB_STEP_LABELS when `cb`. */
   stage: CustomerStage;
   label: string;
-  /** office = set by the office; consolidated = Consolidated Billing; auto = the 5 pm drop; real = the real stage. */
-  source: "office" | "consolidated" | "auto" | "real";
+  /**
+   * office = set by the office; consolidated = Consolidated Billing; auto = the
+   * 5 pm drop; floor = already shown earlier (never goes backwards); real = the
+   * real stage.
+   */
+  source: "office" | "consolidated" | "auto" | "floor" | "real";
   /** The label is an office notice (Delayed / On hold): show it highlighted, the bar stays at `stage`. */
   notice: boolean;
   /** The office's note under its status, if any. */
@@ -130,6 +209,11 @@ export type CustomerFacingView = {
   cb: boolean;
   /** The Consolidating step: nothing after Miami may show, not even a date. */
   consolidating: boolean;
+  /**
+   * On an issued invoice and not yet out for delivery: Cleared – Ready to
+   * Deliver, on step 2. A stepper names that step CLEARED_READY_LABEL.
+   */
+  ready: boolean;
 };
 
 /** A CB member's step from its real facts. */
@@ -147,29 +231,55 @@ function cbStepOfStage(stage: CustomerStage): CustomerStage {
 }
 
 export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
+  const floor = displayFloorOfRow(i.displayFloor) ?? 0;
+  // The floor as a customer stage: In Miami 0, In Transit 1, Awaiting Clearance /
+  // Cleared / Ready 2 (Ready = the issued-invoice step).
+  const floorStage: CustomerStage = floor >= 2 ? 2 : (floor as CustomerStage);
   const raw = i.shipStatus == null || i.shipStatus === "" ? null : Number(i.shipStatus);
   const s = raw === 6 ? 3 : raw != null && Number.isInteger(raw) ? raw : null;
   const cleared = raw === 6 || (s === 3 && !!i.cleared);
   const real = customerStageOf(s);
   const auto = s != null && i.airdrop ? isAutoTransitDue(i.airdrop.receivedAt, i.airdrop.mode, i.nowMs ?? Date.now()) : false;
   const cb = i.cb ?? null;
-  const step = cb ? cbStep(cb, s, cleared, auto) : null;
+  const cbRaw = cb ? cbStep(cb, s, cleared, auto) : null;
+  // A member already shown "Consolidating" never falls back to In Miami.
+  const step: CustomerStage | null = cbRaw === 0 && floorStage >= 1 ? 1 : cbRaw;
   const word = (stage: CustomerStage) => (stage === 1 ? inTransitLabel(i.pkType ?? 1) : CUSTOMER_STAGE_LABELS[stage]);
-  const base = { cb: !!cb, consolidating: step === 1 };
+
+  // 0. An issued invoice (or a customer already shown Ready to Deliver):
+  //    Cleared – Ready to Deliver until out for delivery.
+  if ((i.invoiceIssuedAt != null || floor >= 4) && s !== 4 && s !== 5) {
+    const ready = { cb: !!cb, consolidating: false, ready: true };
+    const issuedAt = i.invoiceIssuedAt ?? "";
+    const o = i.override && !isPreIssueOverride(i.override, issuedAt) ? i.override : null;
+    const later = o ? customerStatusStage(o.key) : null;
+    if (o && later != null && later > 2) {
+      return { ...ready, ready: false, stage: later, label: word(later), source: "office", notice: false, note: cleanNote(o.note) };
+    }
+    if (o && later == null && isOverrideActive(o, 2)) {
+      return { ...ready, stage: 2, label: customerStatusView(o, 2, false)?.label ?? CLEARED_READY_LABEL, source: "office", notice: true, note: cleanNote(o.note) };
+    }
+    return { ...ready, stage: 2, label: CLEARED_READY_LABEL, source: i.invoiceIssuedAt != null ? "real" : "floor", notice: false, note: null };
+  }
+
+  const base = { cb: !!cb, consolidating: step === 1, ready: false };
 
   const office = customerStatusView(i.override, real, isCbHeld(cb), false);
   if (office?.kind === "notice") {
-    return { ...base, stage: step ?? real, label: office.label, source: "office", notice: true, note: office.note };
+    return { ...base, stage: step ?? (Math.max(real, floorStage) as CustomerStage), label: office.label, source: "office", notice: true, note: office.note };
   }
-  if (office?.kind === "stage") {
+  if (office?.kind === "stage" && (cb || office.stage > floorStage)) {
     return { ...base, consolidating: false, stage: cb ? cbStepOfStage(office.stage) : office.stage, label: word(office.stage), source: "office", notice: false, note: office.note };
   }
   if (cb && step != null) {
     const label = step === 1 ? CB_CONSOLIDATING_LABEL : step === 2 ? CB_READY_LABEL : CUSTOMER_STAGE_LABELS[step];
     return { ...base, stage: step, label, source: step === 1 || step === 2 ? "consolidated" : "real", notice: false, note: null };
   }
-  if (auto && real < 1) {
+  if (auto && real < 1 && floorStage <= 1) {
     return { ...base, stage: 1, label: word(1), source: "auto", notice: false, note: null };
+  }
+  if (floorStage > real) {
+    return { ...base, stage: floorStage, label: word(floorStage), source: "floor", notice: false, note: null };
   }
   return { ...base, stage: real, label: word(real), source: "real", notice: false, note: null };
 }

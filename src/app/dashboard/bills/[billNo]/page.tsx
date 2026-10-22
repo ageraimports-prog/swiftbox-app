@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { STATUS_BADGE, formatDate, formatTtd, type InvoiceStatus } from "@/lib/invoice-line";
 import type { CbBillDetail, CbBillWeights } from "@/lib/consolidated-billing";
-import { cbGroupInsuranceLabel, cbSavingLine, formatExactLb } from "@/lib/consolidatedBilling";
+import { formatExactLb } from "@/lib/consolidatedBilling";
+import { CbWeightsPanel } from "@/components/CbWeightsPanel";
 import { formatDescription, packagesSummary, shortRef, trackingNumbers } from "@/lib/packageDisplay";
 import { RefText, TrackingLine } from "@/components/PackageCard";
 
@@ -41,14 +42,11 @@ export default function BillPage() {
   }, [billNo]);
 
   const t = bill?.totals;
-  // Combined-weight freight and group insurance: shown once the admin has priced the group.
-  const w = weights && weights.ready && weights.billedLb > 0 ? weights : null;
-  const ins = w?.insurance ?? null;
-  const saved = w ? cbSavingLine(w.savingLb, w.savingUsd, w.savingTtd, ins?.savingUsd ?? 0) : null;
   // The weight that went into the group: the scale weight, or — for a package with
-  // only a rounded intake weight — that whole pound.
+  // only a rounded intake weight — that whole pound. The admin may not send the
+  // per-package list (trimmed response) — then no package line shows a weight.
   const exactFor = (pkId: number | null | undefined) => {
-    const p = pkId == null ? undefined : weights?.packages.find((x) => x.pkId === pkId);
+    const p = pkId == null || !Array.isArray(weights?.packages) ? undefined : weights.packages.find((x) => x.pkId === pkId);
     if (!p) return null;
     if (p.exactLb != null) return p.exactLb;
     return p.kind === "rounded" && p.wholeLb > 0 ? p.wholeLb : null;
@@ -137,25 +135,8 @@ export default function BillPage() {
             );
           })}
 
-          {w && (
-            <section className="rounded-lg border border-mist/10 bg-ink-2 p-5 text-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-dark">{ins ? "Weight and insurance" : "Weight"}</p>
-              <div className="mt-2">
-                <Weight label={w.allExact === false ? "Combined weight" : "Combined exact weight"} value={formatExactLb(w.exactTotalLb)} />
-                <Weight label="Billed weight (rounded up once)" value={`${w.billedLb} lb`} strong />
-                {w.savingLb > 0 && <Weight label="Billed separately (each package rounded up)" value={`${w.separateLb} lb`} />}
-                {ins && <Weight label={cbGroupInsuranceLabel(ins.combinedValueUsd)} value={`US$${ins.chargedUsd.toFixed(2)}`} strong />}
-                {ins && ins.savingUsd > 0 && <Weight label="Insurance billed separately (per package)" value={`US$${ins.separateUsd.toFixed(2)}`} />}
-              </div>
-              {ins && (
-                <p className="mt-2 text-xs text-muted-dark">
-                  Each package is still covered on its own, up to US${ins.coverCapUsd.toFixed(0)}.
-                  {ins.tvWrs.length > 0 ? ` TVs are insured on their own (${ins.tvWrs.join(", ")}).` : ""}
-                </p>
-              )}
-              {saved && <p className="mt-3 rounded-md bg-green/10 px-3 py-2 text-sm font-bold text-green">{saved}</p>}
-            </section>
-          )}
+          {/* Combined weight + group insurance, from whatever the admin sent (guarded). */}
+          <CbWeightsPanel weights={weights} />
 
           <section className="rounded-lg border border-mist/10 bg-ink-2 p-5 text-sm">
             <Total label={`Total for ${bill.packages.length} ${bill.packages.length === 1 ? "package" : "packages"}`} value={t.chargesTtd} />
@@ -188,15 +169,6 @@ function Total({ label, value, strong, accent }: { label: string; value: number;
     <div className={`flex justify-between py-1 ${strong ? "font-bold" : ""} ${accent ? "text-green" : "text-mist"}`}>
       <span>{label}</span>
       <span>{formatTtd(value)}</span>
-    </div>
-  );
-}
-
-function Weight({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className={`flex justify-between py-1 ${strong ? "font-bold text-mist" : "text-mist"}`}>
-      <span>{label}</span>
-      <span>{value}</span>
     </div>
   );
 }

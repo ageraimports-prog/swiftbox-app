@@ -68,7 +68,8 @@ describe("customer-facing-status-core (code-identical in admin, app and website)
       ["SwiftBox Rebranded Website", "src/lib"], ["swiftbox-website", "src/lib"],
     ];
     for (const [dir, sub] of siblings) {
-      const p = join(__dirname, "..", "..", "..", dir, sub, "customer-facing-status-core.ts");
+      const explicit = dir.toLowerCase().includes("admin") ? process.env.SWIFTBOX_ADMIN_DIR : process.env.SWIFTBOX_WEBSITE_DIR;
+      const p = explicit ? join(explicit, sub, "customer-facing-status-core.ts") : join(__dirname, "..", "..", "..", dir, sub, "customer-facing-status-core.ts");
       if (existsSync(p)) expect(readFileSync(p, "utf8").replace(/\r\n/g, "\n")).toBe(mine);
     }
   });

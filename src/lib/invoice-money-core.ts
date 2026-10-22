@@ -15,7 +15,15 @@
  *     a payment.
  *   - REFERRAL / WELCOME CREDIT: every other negative line EXCEPT 'adjustment'
  *     lines (shipping waived / free pounds), which are already inside the net
- *     shipping figure.
+ *     shipping figure, and the owner's own added lines (below).
+ *   - OWNER-ADDED LINES (2026-10-18): line_type 'other' marked basis
+ *     'added by owner' — an extra charge or a credit typed on a draft. A credit
+ *     is listed under its OWN description (`ownerCredits`), never as "Referral
+ *     credit". A charge is inside the customs subtotal like any TTD line.
+ *   - CARRIED CREDIT (2026-10-19): line_type 'other' marked basis
+ *     'carried credit' — "Credit from INV-…", what the customer had paid on an
+ *     invoice voided because a package did not arrive. Listed like an owner
+ *     credit, under its own description, never as "Referral credit".
  *   - STATUS is derived from total and paid, like the stored enum, but nothing
  *     owed (a total of 0 or less) is Paid even with no payment — an invoice
  *     discounted to 0 must never read as owing.
@@ -25,11 +33,33 @@
 
 export const DISCOUNT_LINE_TYPE = "other";
 export const DISCOUNT_BASIS = "invoice discount";
+/** The marker of a line the owner added on a draft (charge or credit). */
+export const OWNER_LINE_BASIS = "added by owner";
+/** The marker of a credit carried from a voided invoice (missed flight). */
+export const CARRIED_CREDIT_LINE_BASIS = "carried credit";
 
 export type MoneyLine = { lineType: string; description: string; amountTtd: number; basis: string | null };
 
 export function isDiscountLine(l: { lineType: string; basis: string | null }): boolean {
   return l.lineType === DISCOUNT_LINE_TYPE && (l.basis ?? "").trim() === DISCOUNT_BASIS;
+}
+
+export function isOwnerLine(l: { lineType: string; basis: string | null }): boolean {
+  return l.lineType === "other" && (l.basis ?? "").trim() === OWNER_LINE_BASIS;
+}
+
+export function isCarriedCreditLine(l: { lineType: string; basis: string | null }): boolean {
+  return l.lineType === "other" && (l.basis ?? "").trim() === CARRIED_CREDIT_LINE_BASIS;
+}
+
+/**
+ * The footer row for a discount, from the reason read back out of its line:
+ * "Discount" once for the default label (never "Discount (Discount)"), else
+ * "Discount (label)". The owner's internal reason is never on the line.
+ */
+export function discountRowLabel(reason: string): string {
+  const t = String(reason ?? "").trim();
+  return !t || t === "Discount" ? "Discount" : `Discount (${t})`;
 }
 
 /** The reason back out of "Discount (reason)". */
@@ -58,8 +88,10 @@ export type InvoiceMoney<L extends MoneyLine> = {
   chargeLines: L[];
   /** The owner's discount, positive TTD, or null. Already inside totalTtd. */
   discount: { amountTtd: number; reason: string } | null;
-  /** ≤ 0 — referral / welcome credit (already inside totalTtd). */
+  /** ≤ 0 — referral / welcome credit (already inside totalTtd). Owner credits are NOT in it. */
   referralCreditTtd: number;
+  /** The owner's added CREDIT lines and carried credits (amountTtd < 0), each under its own description. */
+  ownerCredits: { description: string; amountTtd: number }[];
   /** What was charged before the discount: totalTtd + discount. */
   chargesTotalTtd: number;
   /** Zero for house invoices; otherwise total − paid, negative when overpaid. */
@@ -72,12 +104,16 @@ export function invoiceMoney<L extends MoneyLine>(lines: L[], totalTtd: number, 
   const chargeLines = lines.filter((l) => !isDiscountLine(l));
   const discountTtd = r2(-discountLines.reduce((a, l) => a + Number(l.amountTtd), 0));
   const referralCreditTtd = r2(
-    chargeLines.reduce((a, l) => (l.lineType === "adjustment" ? a : a + Math.min(0, Number(l.amountTtd))), 0)
+    chargeLines.reduce((a, l) => (l.lineType === "adjustment" || isOwnerLine(l) || isCarriedCreditLine(l) ? a : a + Math.min(0, Number(l.amountTtd))), 0)
   );
+  const ownerCredits = chargeLines
+    .filter((l) => (isOwnerLine(l) || isCarriedCreditLine(l)) && Number(l.amountTtd) < 0)
+    .map((l) => ({ description: l.description, amountTtd: r2(Number(l.amountTtd)) }));
   return {
     chargeLines,
     discount: discountTtd > 0 ? { amountTtd: discountTtd, reason: discountReasonFromDescription(discountLines[0].description) } : null,
     referralCreditTtd,
+    ownerCredits,
     chargesTotalTtd: r2(Number(totalTtd) + discountTtd),
     balance: house ? 0 : r2(Number(totalTtd) - Number(amountPaid)),
     status: invoicePaymentStatus(totalTtd, amountPaid, house),

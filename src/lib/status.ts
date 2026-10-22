@@ -18,7 +18,7 @@
  */
 
 import { inTransitLabel } from "./auto-transit-core";
-import { CB_STEP_LABELS, type CustomerFacingView } from "./customer-facing-status-core";
+import { CB_STEP_LABELS, CLEARED_READY_LABEL, type CustomerFacingView } from "./customer-facing-status-core";
 
 export type Stage = 0 | 1 | 2 | 3 | 4;
 
@@ -105,7 +105,7 @@ export const CB_CONSOLIDATING_BADGE = "bg-violet-400/10 text-violet-300 border b
 /** A notice the office set ("Delayed", "On hold — contact us"): highlighted, never a stage. */
 export const NOTICE_BADGE = "bg-amber-400/15 text-amber-200 border border-amber-400/50";
 
-/** A Consolidated Billing member's step 2, Ready for delivery. */
+/** Step 2 once ready: a Consolidated Billing member's Ready for delivery, or Cleared – Ready to Deliver. */
 const CB_READY_BADGE = "bg-green/10 text-green border border-green/25";
 
 /**
@@ -120,12 +120,14 @@ export function packageBadge(
   if (!status) return stageMeta(shipStatus, freight);
   if (status.notice) return { label: status.label, badge: NOTICE_BADGE };
   if (status.consolidating) return { label: status.label, badge: CB_CONSOLIDATING_BADGE };
-  if (status.cb && status.stage === 2) return { label: status.label, badge: CB_READY_BADGE };
+  if (status.ready || (status.cb && status.stage === 2)) return { label: status.label, badge: CB_READY_BADGE };
   return { label: status.label, badge: STAGES[status.stage].badge };
 }
 
 /** The stepper's labels: a Consolidated Billing member has its own steps (no transit, no clearance). */
 export function stepLabels(status: ShownStatus | null | undefined, freight?: number | null): string[] {
-  if (status?.cb) return [...CB_STEP_LABELS];
-  return STAGES.map((_, i) => stageLabel(i as Stage, freight));
+  const labels = status?.cb ? [...CB_STEP_LABELS] : STAGES.map((_, i) => stageLabel(i as Stage, freight));
+  // Invoice issued (Brent, 2026-10-19): step 2 is "Cleared – Ready to Deliver".
+  if (status?.ready) labels[2] = CLEARED_READY_LABEL;
+  return labels;
 }

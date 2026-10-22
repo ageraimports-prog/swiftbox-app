@@ -88,11 +88,7 @@ export function cbWaitingSummary(titles: string[]): string {
   return titles.length ? `Your group: ${titles.join(', ')}` : 'Your group';
 }
 
-/**
- * The confirmation, before anything happens — Brent's words (2026-10-13), with
- * the real package count. Customers were tapping the button without knowing it
- * CLOSES the group. Nothing is sent until the customer taps CB_SEND_NOW_YES.
- */
+/** Send now freezes the current group and switches enrollment off until the customer opts in again. */
 export function cbSendNowConfirmText(_count?: number): string {
   void _count;
   return 'This sends your current group together and switches Consolidated Billing off. Turn it back on anytime. Continue?';
@@ -154,7 +150,7 @@ export const CB_FAQ: { q: string; a: string }[] = [
   { q: "Does Consolidated Billing cost extra?", a: "No. Consolidated Billing is free." },
   {
     q: "What does “Send my packages now” do?",
-    a: "Got everything you ordered? Tap “Send my packages now” in the app and we'll deliver them together, with one bill. You can also turn Consolidated Billing off in the Account tab.",
+    a: `Got everything you ordered? Tap “Send my packages now” in the app and we'll deliver them together, with one bill. Consolidated Billing then switches off. Turn it back on anytime in the Account tab.`,
   },
   {
     q: "Does Consolidated Billing lower my freight and insurance?",

@@ -131,6 +131,7 @@ export const REMOVED_FROM_SHIPMENT_ACTION = "removed_from_shipment";
  * Putting it on any shipment again ends that by itself. entity_id is compared
  * as a number on purpose: no charset conversion between the two tables.
  */
-export function airdropReceivedAtSql(a = "a"): string {
+export function airdropReceivedAtSql(a = "a", _manifestReady=false): string {
+  void _manifestReady;
   return `CASE WHEN NOT EXISTS (SELECT 1 FROM mod_shipment rfs_s WHERE rfs_s.package_id = ${a}.pk_id AND TRIM(COALESCE(rfs_s.ship_no,'')) <> '') THEN NULL ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(${a}.snapshot, '"received_at":"', -1), '"', 1) END`;
 }

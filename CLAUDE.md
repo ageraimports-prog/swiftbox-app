@@ -395,3 +395,15 @@ PAUSE, not a removal: every page, route and table stays.
 - **Separate from Consolidated Billing.** `src/lib/consolidated-billing.ts`
   excludes `swiftbox_bfm_packages` from every "waiting for your group" read
   (`excludingBfm`, which retries without the clause if that table is missing).
+
+
+## Settled Send-now enrollment decision — 22 October 2026
+
+This supersedes the older keep-switch-ON/fresh-group wording above. Send now
+switches Consolidated Billing OFF until the customer turns it back on normally.
+Admin owns the guarded write, durable release, on-to-off customer-app audit and
+retry recovery; later opt-ins are protected. Historical users are not opted out.
+After success show only: "Your packages are on their way. Consolidated Billing
+is now off — turn it back on anytime." No counts, warehouse/hold mechanics,
+email or WhatsApp. Confirmation explains the switch-off. Admin and app branch
+changes require Brent's review; no merge, push or deployment is authorized.

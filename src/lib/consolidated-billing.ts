@@ -518,20 +518,26 @@ export async function fetchCbBillPdf(userId: number, billNo: string): Promise<Ar
  * weight, the group's combined exact weight and billed weight (rounded up once),
  * the same packages billed separately, and what that saved. Computed by the admin
  * from the invoices' ACTUAL figures — never worked out here.
+ *
+ * The admin TRIMS what it sends the app (billing separation, 2026-10-21): only
+ * billedLb is certain. Everything else may be absent, so every reader guards it
+ * (components/CbWeightsPanel.tsx cbWeightsPanelView) — a missing field hides
+ * its own row, never the page.
  */
 export type CbBillWeights = {
   ready: boolean;
   /** False when some package joined at its rounded intake pound (no scale weight). */
   allExact?: boolean;
-  /** kind: "exact" (scale), "rounded" (only the recorded whole pound), "missing". */
-  packages: { pkId: number; wr: string; exactLb: number | null; wholeLb: number; kind?: "exact" | "rounded" | "missing" }[];
-  exactTotalLb: number;
+  /** kind: "exact" (scale), "rounded" (only the recorded whole pound), "missing". Not sent by a trimming admin. */
+  packages?: { pkId: number; wr: string; exactLb: number | null; wholeLb: number; kind?: "exact" | "rounded" | "missing" }[];
+  exactTotalLb?: number;
   billedLb: number;
-  separateLb: number;
-  savingLb: number;
+  /** The same packages, each rounded up on its own. */
+  separateLb?: number;
+  savingLb?: number;
   /** TOTAL saved — freight + fuel + insurance (2026-10-02). */
-  savingUsd: number;
-  savingTtd: number;
+  savingUsd?: number;
+  savingTtd?: number;
   /** The freight + fuel part of savingUsd. Absent from an admin older than 2026-10-02. */
   freightSavingUsd?: number;
   /**
@@ -539,12 +545,12 @@ export type CbBillWeights = {
    * cover still per package. Null/absent → every package carries its own.
    */
   insurance?: {
-    combinedValueUsd: number;
-    chargedUsd: number;
-    separateUsd: number;
-    savingUsd: number;
-    tvWrs: string[];
-    coverCapUsd: number;
+    combinedValueUsd?: number;
+    chargedUsd?: number;
+    separateUsd?: number;
+    savingUsd?: number;
+    tvWrs?: string[];
+    coverCapUsd?: number;
   } | null;
 };
 
@@ -570,7 +576,8 @@ export async function fetchCbBillAdmin(
     const customs = rows.length
       ? new Map(rows.map((c) => [Number(c.pkId), { duty: Number(c.duty) || 0, opt: Number(c.opt) || 0, vat: Number(c.vat) || 0, other: Number(c.other) || 0 }] as const))
       : null;
-    return { weights: w && typeof w.billedLb === "number" && Array.isArray(w.packages) ? w : null, customs };
+    // Only billedLb is required: the trimmed response has no per-package list.
+    return { weights: w && typeof w.billedLb === "number" ? w : null, customs };
   } catch {
     return none;
   }
@@ -586,7 +593,7 @@ export async function fetchCbBillWeights(userId: number, billNo: string): Promis
     const res = await fetch(url, { headers: { "x-consolidation-key": key }, cache: "no-store" });
     if (!res.ok) return null;
     const w = (await res.json()) as CbBillWeights;
-    return w && typeof w.billedLb === "number" && Array.isArray(w.packages) ? w : null;
+    return w && typeof w.billedLb === "number" ? w : null;
   } catch {
     return null;
   }

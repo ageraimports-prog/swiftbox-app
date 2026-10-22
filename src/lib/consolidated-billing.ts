@@ -208,7 +208,7 @@ export async function setCbSetting(
 
 /**
  * "Send my packages now" — through the admin, which closes the group exactly as
- * on day 21 (reason 'customer') and owns every rule. The switch is untouched.
+ * on day 21 (reason 'customer') and owns every rule. New Send now switches CB off.
  * `already` = the group had already stopped taking packages (a double tap, a
  * retry, or the window closed meanwhile) — a friendly no-op, not an error.
  * Throws a customer-safe sentence when the admin refuses or can't be reached.

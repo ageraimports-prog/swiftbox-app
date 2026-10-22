@@ -132,5 +132,5 @@ export const REMOVED_FROM_SHIPMENT_ACTION = "removed_from_shipment";
  * as a number on purpose: no charset conversion between the two tables.
  */
 export function airdropReceivedAtSql(a = "a"): string {
-  return `CASE WHEN EXISTS (SELECT 1 FROM swiftbox_audit_log rfs WHERE rfs.entity_type = 'package' AND rfs.action = '${REMOVED_FROM_SHIPMENT_ACTION}' AND rfs.entity_id = ${a}.pk_id) AND NOT EXISTS (SELECT 1 FROM mod_shipment rfs_s WHERE rfs_s.package_id = ${a}.pk_id) THEN NULL ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(${a}.snapshot, '"received_at":"', -1), '"', 1) END`;
+  return `CASE WHEN NOT EXISTS (SELECT 1 FROM mod_shipment rfs_s WHERE rfs_s.package_id = ${a}.pk_id AND TRIM(COALESCE(rfs_s.ship_no,'')) <> '') THEN NULL ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(${a}.snapshot, '"received_at":"', -1), '"', 1) END`;
 }

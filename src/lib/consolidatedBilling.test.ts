@@ -39,8 +39,8 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
   });
   it("turning it on includes packages already with us (2026-10-03), never 'future packages only'", () => {
     expect(copy.CB_EXISTING_INCLUDED).toBe("Packages you've already ordered are included too.");
-    expect(copy.cbEnrolledText(1)).toBe("Your package already with us is in your group.");
-    expect(copy.cbEnrolledText(2)).toBe("Your 2 packages already with us are in your group.");
+    expect(copy.cbEnrolledText(1)).toBe("Your packages already with us are included in your group.");
+    expect(copy.cbEnrolledText(2)).toBe(copy.cbEnrolledText(1));
     expect(allCopy).not.toMatch(/future packages|from now on only|only new packages/i);
   });
   it("combined-weight freight + group insurance: the FAQ says Yes, with the 0.5 lb example", () => {

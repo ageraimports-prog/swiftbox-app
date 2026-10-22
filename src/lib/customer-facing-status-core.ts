@@ -59,6 +59,7 @@ export const CB_STEP_LABELS: readonly string[] = [
  * Buy For Me package), as the admin's claim read gives it.
  */
 export type CbMembership = {
+  shippingReleased?: boolean;
   /** open | closed | released */
   state: string;
   /** The group's bill: null = not built yet, 0 = released with nothing to bill, >0 = the bill. */
@@ -77,7 +78,7 @@ export type CbMembership = {
  * bill, or of a group with nothing to bill, flows on its own.
  */
 export function isCbHeld(m: CbMembership | null | undefined): boolean {
-  if (!m) return false;
+  if (!m || m.shippingReleased) return false;
   if (m.state === "open" || m.state === "closed") return true;
   if (m.state !== "released" || m.offBillReason) return false;
   if (m.billId === 0) return false;
@@ -85,13 +86,14 @@ export function isCbHeld(m: CbMembership | null | undefined): boolean {
 }
 
 /** SQL for the membership facts of the member row `m` (swiftbox_cb_group_packages) — join `g` = groups, `b` = bills. */
-export const CB_MEMBERSHIP_SELECT = "g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason";
+export const CB_MEMBERSHIP_SELECT = "g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason, (g.close_reason = 'customer' AND g.state IN ('closed','released')) AS cb_shipping_released";
 
 /** A row read with CB_MEMBERSHIP_SELECT → CbMembership. */
-export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null }): CbMembership | null {
+export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_shipping_released?: number | string | null }): CbMembership | null {
   if (!r.cb_state) return null;
   return {
     state: String(r.cb_state),
+    shippingReleased: !!Number(r.cb_shipping_released),
     billId: r.cb_bill_id == null ? null : Number(r.cb_bill_id),
     billLifecycle: r.cb_bill_lifecycle ?? null,
     offBillReason: r.cb_off_bill_reason ? String(r.cb_off_bill_reason) : null,
@@ -149,7 +151,7 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
   const s = raw === 6 ? 3 : raw != null && Number.isInteger(raw) ? raw : null;
   const cleared = raw === 6 || (s === 3 && !!i.cleared);
   const real = customerStageOf(s);
-  const auto = i.airdrop ? isAutoTransitDue(i.airdrop.receivedAt, i.airdrop.mode, i.nowMs ?? Date.now()) : false;
+  const auto = s != null && i.airdrop ? isAutoTransitDue(i.airdrop.receivedAt, i.airdrop.mode, i.nowMs ?? Date.now()) : false;
   const cb = i.cb ?? null;
   const step = cb ? cbStep(cb, s, cleared, auto) : null;
   const word = (stage: CustomerStage) => (stage === 1 ? inTransitLabel(i.pkType ?? 1) : CUSTOMER_STAGE_LABELS[stage]);

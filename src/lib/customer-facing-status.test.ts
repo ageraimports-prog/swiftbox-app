@@ -33,9 +33,10 @@ describe("Consolidated Billing masking", () => {
       }
     }
   });
-  it("the 5 pm drop shows Consolidating, never In Transit to Piarco", () => {
+  it("an unmanifested package stays In Miami after 5 pm; a manifested member can consolidate", () => {
     const v = customerFacingView({ shipStatus: null, cb: CLOSED, airdrop: { receivedAt: MON, mode: "air" }, nowMs: TUE5 });
-    expect(v.label).toBe(CB_CONSOLIDATING_LABEL);
+    expect(v.label).toBe('In Miami');
+    expect(customerFacingView({shipStatus:1,cb:CLOSED,airdrop:{receivedAt:MON,mode:'air'},nowMs:TUE5}).label).toBe(CB_CONSOLIDATING_LABEL);
   });
   it("once the bill is issued: Ready for delivery → Out for Delivery → Delivered", () => {
     expect(customerFacingView({ shipStatus: 3, cleared: true, cb: REL_ISSUED }).label).toBe(CB_READY_LABEL);

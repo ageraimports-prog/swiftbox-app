@@ -53,10 +53,9 @@ export const CB_LONG_DESCRIPTION =
 export const CB_EXISTING_INCLUDED = "Packages you've already ordered are included too.";
 
 /** After turning it on, when packages already with us joined the group. */
-export function cbEnrolledText(count: number): string {
-  return count === 1
-    ? "Your package already with us is in your group."
-    : `Your ${count} packages already with us are in your group.`;
+export function cbEnrolledText(_count: number): string {
+  void _count;
+  return 'Your packages already with us are included in your group.';
 }
 
 /** Confirm before turning it OFF. */
@@ -86,9 +85,7 @@ export const CB_SEND_NOW_HINT =
 
 /** "3 packages in your group: Shoes, Headphones, Household Items" — what they ARE, never a WR. */
 export function cbWaitingSummary(titles: string[]): string {
-  const n = titles.length;
-  const head = `${n} ${n === 1 ? "package" : "packages"} in your group`;
-  return n === 0 ? head : `${head}: ${titles.join(", ")}`;
+  return titles.length ? `Your group: ${titles.join(', ')}` : 'Your group';
 }
 
 /**
@@ -96,10 +93,11 @@ export function cbWaitingSummary(titles: string[]): string {
  * the real package count. Customers were tapping the button without knowing it
  * CLOSES the group. Nothing is sent until the customer taps CB_SEND_NOW_YES.
  */
-export function cbSendNowConfirmText(count: number): string {
-  const these = count === 1 ? "This 1 package" : `These ${count} packages`;
-  return `This closes your current group. ${these} will be billed and delivered together, and any new packages you receive will start a new group. Continue?`;
+export function cbSendNowConfirmText(_count?: number): string {
+  void _count;
+  return 'This sends your current group together and switches Consolidated Billing off. Turn it back on anytime. Continue?';
 }
+export const CB_SEND_NOW_DONE = 'Your packages are on their way. Consolidated Billing is now off — turn it back on anytime.';
 
 /** The confirmation's two buttons. */
 export const CB_SEND_NOW_YES = "Yes, send these now";

@@ -9,24 +9,20 @@ import { customerFacingView } from "./customer-facing-status-core";
 describe('"Send my packages now" (2026-10-01)', () => {
   it("names the group by what the packages are, never by WR/SWF", () => {
     expect(copy.cbWaitingSummary(["Shoes", "Headphones", "Household Items"])).toBe(
-      "3 packages in your group: Shoes, Headphones, Household Items"
+      "Your group: Shoes, Headphones, Household Items"
     );
-    expect(copy.cbWaitingSummary(["Shoes"])).toBe("1 package in your group: Shoes");
+    expect(copy.cbWaitingSummary(["Shoes"])).toBe("Your group: Shoes");
     expect(copy.cbWaitingSummary(["Shoes", "Headphones"])).not.toMatch(/\bWR\d|\bSWF\d/);
   });
   it("R13a: the hint under the list gives no timing (was 'Ships automatically in N days')", () => {
     expect(copy.CB_SEND_NOW_HINT).toBe("Got everything you ordered? Tap Send my packages now and we'll deliver them together.");
     expect((copy as Record<string, unknown>).cbShipsAutomaticallyText).toBeUndefined();
   });
-  it("confirms in Brent's words, with the real count, before acting (2026-10-13)", () => {
-    expect(copy.cbSendNowConfirmText(3)).toBe(
-      "This closes your current group. These 3 packages will be billed and delivered together, and any new packages you receive will start a new group. Continue?"
-    );
-    expect(copy.cbSendNowConfirmText(11)).toMatch(/These 11 packages/);
-    expect(copy.cbSendNowConfirmText(1)).toMatch(/This 1 package will be billed/);
-    expect(copy.CB_SEND_NOW_YES).toBe("Yes, send these now");
-    expect(copy.CB_SEND_NOW_NO).toBe("Keep waiting");
-    expect(copy.CB_SEND_NOW_BUTTON).toBe("Send my packages now");
+  it("confirms the settled switch-off rule without counts", () => {
+    expect(copy.cbSendNowConfirmText(3)).toBe("This sends your current group together and switches Consolidated Billing off. Turn it back on anytime. Continue?");
+    expect(copy.cbSendNowConfirmText(1)).toBe(copy.cbSendNowConfirmText(11));
+    expect(copy.CB_SEND_NOW_DONE).toContain("Consolidated Billing is now off");
+    expect(copy.CB_SEND_NOW_DONE).not.toMatch(/\d|count|outstanding|hold|warehouse/i);
   });
   it("the server refuses a send that did not come through the confirmation", () => {
     expect(parseSendNowRequest({ groupId: 7, confirmed: true })).toEqual({ ok: true, groupId: 7 });

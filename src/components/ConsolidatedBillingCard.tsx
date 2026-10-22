@@ -28,6 +28,7 @@ type State = {
   group: SendGroup | null;
   preparing: boolean;
   billReady: { billNo: string; dueTtd: number } | null;
+  sendNowMessage?:string;
 };
 
 /**
@@ -97,15 +98,16 @@ export default function ConsolidatedBillingCard({
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">{CB_NAME}</p>
           <div className="mt-2 space-y-2 text-sm text-mist">
-            {!on && <p>{CB_LONG_DESCRIPTION}</p>}
-            {!on && <p>{CB_EXISTING_INCLUDED}</p>}
+            {state.sendNowMessage && <p role="status" className="font-semibold">{state.sendNowMessage}</p>}
+            {!on && !state.sendNowMessage && <p>{CB_LONG_DESCRIPTION}</p>}
+            {!on && !state.sendNowMessage && <p>{CB_EXISTING_INCLUDED}</p>}
             {on && note && <p className="font-semibold">{note}</p>}
             {/* On the Dashboard the card at the top already says it. */}
-            {showSendNow && state.preparing && <p className="font-semibold">{CB_PREPARING_TEXT}</p>}
+            {showSendNow && state.preparing && !state.sendNowMessage && <p className="font-semibold">{CB_PREPARING_TEXT}</p>}
             {/* R13a: no day count, window date or place, so an open group and no group yet read the same. */}
             {on && state.closedWaiting && <p>{CB_CLOSED_CARD}</p>}
             {on && !state.closedWaiting && <p>{CB_ON_TEXT}</p>}
-            {!on && state.closedWaiting && <p>{CB_CLOSED_CARD}</p>}
+            {!on && state.closedWaiting && !state.sendNowMessage && <p>{CB_CLOSED_CARD}</p>}
           </div>
         </div>
         <button

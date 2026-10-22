@@ -91,7 +91,9 @@ describe("In Transit wording", () => {
     expect(stageMeta(2, 1).label).toBe("In Transit to Piarco");
     const ad = { receivedAt: tt("12", "10:00"), mode: "air" };
     const auto = customerFacingView({ shipStatus: null, pkType: 1, airdrop: ad, nowMs: at("13", "17:00") });
-    expect(packageBadge(auto, null, 1).label).toBe("In Transit to Piarco");
+    expect(packageBadge(auto, null, 1).label).toBe("In Miami");
+    const manifested=customerFacingView({shipStatus:1,pkType:1,airdrop:ad,nowMs:at("13", "17:00")});
+    expect(packageBadge(manifested,null,1).label).toBe("In Transit to Piarco");
     expect(packageBadge(null, null, 1).label).toBe("In Miami");
   });
 });

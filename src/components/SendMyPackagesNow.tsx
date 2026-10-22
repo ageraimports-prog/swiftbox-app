@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   CB_NAME,
   CB_PREPARING_TEXT,
+  CB_SEND_NOW_DONE,
   CB_SEND_NOW_BUTTON,
   CB_SEND_NOW_HINT,
   CB_SEND_NOW_NO,
@@ -22,7 +23,7 @@ export type SendGroup = {
 };
 
 /** The slice of the Consolidated Billing state these pieces read. */
-export type SendState = { group: SendGroup | null; preparing: boolean };
+export type SendState = { group: SendGroup | null; preparing: boolean; sendNowMessage?:string };
 
 /**
  * Every "Send my packages now" on screen listens for this, so a tap on the
@@ -60,8 +61,9 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
       if (!res.ok) throw new Error(data.error ?? "Couldn't send your packages. Please try again.");
       setStep(data.already ? "already" : "done");
       if (data.state) {
-        onDone?.(data.state);
-        announce(data.state);
+        const updated={...data.state,sendNowMessage:data.state.settingOn ? undefined : CB_SEND_NOW_DONE};
+        onDone?.(updated);
+        announce(updated);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't send your packages. Please try again.");
@@ -72,8 +74,7 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
   if (step === "done" || step === "already") {
     return (
       <p role="status" className="rounded-lg border border-green/30 bg-green/10 px-3 py-2.5 text-sm font-semibold text-mist">
-        {step === "already" ? "Already on its way. " : ""}
-        {CB_PREPARING_TEXT}
+        {step === 'done' ? CB_SEND_NOW_DONE : 'Your release has already been recorded.'}
       </p>
     );
   }
@@ -92,7 +93,7 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
               </li>
             );
           })}
-          {count > 4 && <li className="text-xs text-muted-dark">+{count - 4} more</li>}
+          {count > 4 && <li className="text-xs text-muted-dark">More packages in your group</li>}
         </ul>
         <p className="mt-2 text-xs text-muted-dark">{CB_SEND_NOW_HINT}</p>
       </div>
@@ -158,12 +159,12 @@ export default function SendMyPackagesNow({ className = "" }: { className?: stri
     };
   }, []);
 
-  if (!state || (!state.group && !state.preparing)) return null;
+  if (!state || (!state.group && !state.preparing && !state.sendNowMessage)) return null;
   return (
     <section className={`rounded-lg border border-green/30 bg-ink-2 p-4 ${className}`}>
       <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">{CB_NAME}</p>
       <div className="mt-2">
-        {state.group ? (
+        {state.sendNowMessage ? <p role="status" className="text-sm font-semibold text-mist">{state.sendNowMessage}</p> : state.group ? (
           <SendNowPanel key={state.group.groupId} group={state.group} />
         ) : (
           <p role="status" className="text-sm font-semibold text-mist">{CB_PREPARING_TEXT}</p>

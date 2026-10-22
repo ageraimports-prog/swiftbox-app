@@ -128,12 +128,50 @@ export function reconcileChildLines<L extends ChildLine>(lines: L[], totalTtd: n
   return out;
 }
 
+/** One WR's customs figures as the customs engine works them out (TT$) — the ratio a split follows. */
+export type ItemCustomsWeights = { duty: number; opt: number; vat: number; other: number };
+
+/**
+ * DISPLAY ONLY (Brent, 2026-10-22): one stored total, in cents, split across
+ * items in proportion to their weights, to the cent — largest remainder, ties to
+ * the earlier item — so the parts always add up to the total. No weight anywhere
+ * (e.g. a duty typed by hand over uncoded goods) → it all stays on the first
+ * item. Ported byte-for-byte to SwiftboxApp src/lib/consolidatedBillingCore.ts.
+ */
+export function splitCustomsCents(totalCents: number, weights: number[]): number[] {
+  const out = weights.map(() => 0);
+  if (out.length === 0) return out;
+  const w = weights.map((x) => Math.max(0, Number(x) || 0));
+  const sum = w.reduce((a, b) => a + b, 0);
+  if (sum <= 0 || totalCents === 0) {
+    out[0] = totalCents;
+    return out;
+  }
+  const sign = totalCents < 0 ? -1 : 1;
+  const abs = Math.abs(totalCents);
+  const raw = w.map((x) => (abs * x) / sum);
+  const base = raw.map((r) => Math.floor(r + 1e-9));
+  let left = abs - base.reduce((a, b) => a + b, 0);
+  const order = raw.map((r, i) => ({ f: r - base[i], i })).sort((a, b) => b.f - a.f || a.i - b.i);
+  for (let k = 0; left > 0; k++, left--) base[order[k % order.length].i] += 1;
+  return base.map((c) => c * sign);
+}
+
 function isCustomsOther(l: ChildLine): boolean {
   return l.basis === "as assessed by customs" || l.description.trim().toLowerCase() === "other taxes";
 }
 
-/** One package's block, from its invoice's lines. An ocean invoice has no OPT line. */
-export function packageSection(lines: ChildLine[], items: { description: string; declaredValueUsd: number }[]): PackageSection {
+/**
+ * One package's block, from its invoice's lines. An ocean invoice has no OPT line.
+ * An invoice holding several WRs gets one item per WR; when every item carries
+ * the customs engine's own figures (`customs`, from the admin), the invoice's
+ * stored duty / OPT / VAT are split per WR by splitCustomsCents (Brent,
+ * 2026-10-22). Without them the amounts sit on the first item, as before.
+ */
+export function packageSection(
+  lines: ChildLine[],
+  items: { description: string; declaredValueUsd: number; customs?: ItemCustomsWeights | null }[]
+): PackageSection {
   let freight = 0, fuel = 0, insurance = 0, duty = 0, opt = 0, vat = 0, otherTax = 0, otherCharges = 0, credits = 0;
   for (const l of lines) {
     const c = cents(l.amountTtd);
@@ -151,6 +189,10 @@ export function packageSection(lines: ChildLine[], items: { description: string;
     }
   }
   const described = items.length > 0 ? items : [{ description: "Goods", declaredValueUsd: 0 }];
+  const split = described.length > 1 && described.every((it) => it.customs);
+  const share = (total: number, k: keyof ItemCustomsWeights) =>
+    split ? splitCustomsCents(total, described.map((it) => it.customs![k])) : described.map((_, i) => (i === 0 ? total : 0));
+  const d = share(duty, "duty"), o = share(opt, "opt"), v = share(vat, "vat"), x = share(otherTax, "other");
   return {
     freightTtd: fromCents(freight),
     fuelTtd: fromCents(fuel),
@@ -159,10 +201,10 @@ export function packageSection(lines: ChildLine[], items: { description: string;
     items: described.map((it, i) => ({
       description: it.description,
       declaredValueUsd: Number(it.declaredValueUsd) || 0,
-      dutyTtd: i === 0 ? fromCents(duty) : 0,
-      optTtd: i === 0 ? fromCents(opt) : 0,
-      vatTtd: i === 0 ? fromCents(vat) : 0,
-      otherTaxTtd: i === 0 ? fromCents(otherTax) : 0,
+      dutyTtd: fromCents(d[i]),
+      optTtd: fromCents(o[i]),
+      vatTtd: fromCents(v[i]),
+      otherTaxTtd: fromCents(x[i]),
     })),
     subtotalTtd: fromCents(freight + fuel + insurance + duty + opt + vat + otherTax + otherCharges),
     creditsTtd: fromCents(credits),

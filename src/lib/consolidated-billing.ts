@@ -11,6 +11,7 @@ import {
   billTotals,
   reconcileChildLines,
   type ChildLine,
+  type ItemCustomsWeights,
   type PackageSection,
   type BillTotals,
 } from "@/lib/consolidatedBillingCore";
@@ -418,8 +419,17 @@ export type CbBillPackage = {
 
 export type CbBillDetail = { billNo: string; date: string; packages: CbBillPackage[]; totals: BillTotals };
 
-/** One ISSUED bill of this customer's, computed live from its invoices. Null = not theirs / not issued. */
-export async function getCbBill(userId: number, billNo: string): Promise<CbBillDetail | null> {
+/**
+ * One ISSUED bill of this customer's, computed live from its invoices. Null = not
+ * theirs / not issued. `customs` = the admin's per-WR customs figures (pk_id →
+ * duty / OPT / VAT / other, fetchCbBillAdmin): an invoice holding several WRs
+ * then shows each WR's own government charges (Brent, 2026-10-22).
+ */
+export async function getCbBill(
+  userId: number,
+  billNo: string,
+  customs: Map<number, ItemCustomsWeights> | null = null
+): Promise<CbBillDetail | null> {
   if (!/^CB-\d{6,}$/.test(billNo)) return null;
   const b = (await safe(
     () => query<{ bill_id: number; bill_no: string; issued_at: string | null }>(
@@ -470,10 +480,15 @@ export async function getCbBill(userId: number, billNo: string): Promise<CbBillD
       contents: mine.map((p) => (p.commodities ?? "").trim()).filter(Boolean).join(", "),
       section: packageSection(
         displayLines(k, lines.get(Number(k.invoice_id)) ?? []),
-        mine.map((p) => ({
-          description: (p.goods_desc_override ?? "").trim() || (p.commodities ?? "").trim() || (p.asycuda_description ?? "").trim() || "Goods",
-          declaredValueUsd: Math.round(Number(p.ship_value ?? 0) * 100) / 100,
-        }))
+        mine.map((p) => {
+          const description = (p.goods_desc_override ?? "").trim() || (p.commodities ?? "").trim() || (p.asycuda_description ?? "").trim() || "Goods";
+          return {
+            // Several WRs on one invoice: one item per WR, named by WR.
+            description: mine.length > 1 && p.wr ? `${p.wr} · ${description}` : description,
+            declaredValueUsd: Math.round(Number(p.ship_value ?? 0) * 100) / 100,
+            customs: mine.length > 1 ? customs?.get(Number(p.pk_id)) ?? null : null,
+          };
+        })
       ),
     };
   });
@@ -532,6 +547,34 @@ export type CbBillWeights = {
     coverCapUsd: number;
   } | null;
 };
+
+/**
+ * One read of the admin's bill-weights route: the weights (null when the admin
+ * did not send the full set — the panel keeps its old rule) and the per-WR
+ * customs figures (empty when none). Never throws; the bill still shows.
+ */
+export async function fetchCbBillAdmin(
+  userId: number,
+  billNo: string
+): Promise<{ weights: CbBillWeights | null; customs: Map<number, ItemCustomsWeights> | null }> {
+  const none = { weights: null, customs: null };
+  try {
+    const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
+    if (!key) return none;
+    const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
+    const url = `${base}/api/consolidated-billing/bill-weights?billNo=${encodeURIComponent(billNo)}&userId=${Number(userId)}`;
+    const res = await fetch(url, { headers: { "x-consolidation-key": key }, cache: "no-store" });
+    if (!res.ok) return none;
+    const w = (await res.json()) as CbBillWeights & { customs?: ({ pkId: number } & ItemCustomsWeights)[] };
+    const rows = Array.isArray(w?.customs) ? w.customs : [];
+    const customs = rows.length
+      ? new Map(rows.map((c) => [Number(c.pkId), { duty: Number(c.duty) || 0, opt: Number(c.opt) || 0, vat: Number(c.vat) || 0, other: Number(c.other) || 0 }] as const))
+      : null;
+    return { weights: w && typeof w.billedLb === "number" && Array.isArray(w.packages) ? w : null, customs };
+  } catch {
+    return none;
+  }
+}
 
 /** The bill's weights from the admin. Null = not available (the bill still shows). */
 export async function fetchCbBillWeights(userId: number, billNo: string): Promise<CbBillWeights | null> {

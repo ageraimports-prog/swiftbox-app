@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 import * as copy from "./consolidatedBilling";
-import { packageSection, billTotals, groupDisplay, windowDay, ttDateLabel, reconcileChildLines, type ChildLine } from "./consolidatedBillingCore";
+import { packageSection, billTotals, groupDisplay, windowDay, ttDateLabel, reconcileChildLines, splitCustomsCents, type ChildLine } from "./consolidatedBillingCore";
 
 const allCopy = [
   copy.CB_SHORT_LINE,
@@ -267,5 +267,45 @@ describe("Consolidated Bill lines add up to the total (display only)", () => {
   it("leaves a gap rounding cannot explain (3 cents) alone", () => {
     const k = stored(7.96, 1.59, 2, 20);
     expect(reconcileChildLines(k.lines, r2(k.totalTtd + 0.03))).toBe(k.lines);
+  });
+});
+
+describe("government charges per WR (Brent, 2026-10-22)", () => {
+  const lines: ChildLine[] = [
+    { lineType: "freight", description: "Freight", amountTtd: 216.51 },
+    { lineType: "duty", description: "Customs Duty", amountTtd: 240.66, basis: "as assessed by customs" },
+    { lineType: "vat", description: "VAT", amountTtd: 191.04, basis: "as assessed by customs" },
+  ];
+  const items = [
+    { description: "WR1367 · CLOTHING", declaredValueUsd: 28, customs: { duty: 42.08, opt: 0, vat: 33.4, other: 0 } },
+    { description: "WR1409 · CLOTHING", declaredValueUsd: 68.26, customs: { duty: 110.01, opt: 0, vat: 87.31, other: 0 } },
+  ];
+  it("splits the invoice's stored customs per WR and adds up to the cent", () => {
+    const s = packageSection(lines, items);
+    expect(s.items.map((i) => Math.round((i.dutyTtd + i.vatTtd) * 100)).reduce((a, b) => a + b, 0)).toBe(24066 + 19104);
+    expect(s.items[0].dutyTtd).toBeGreaterThan(0);
+    expect(s.items[1].dutyTtd).toBeGreaterThan(s.items[0].dutyTtd);
+  });
+  it("keeps the old layout without the admin's figures", () => {
+    const s = packageSection(lines, items.map(({ customs: _c, ...rest }) => rest));
+    expect(s.items[0].dutyTtd).toBe(240.66);
+    expect(s.items[1].dutyTtd).toBe(0);
+  });
+  it("splitCustomsCents is the admin's (largest remainder, ties to the earlier item)", () => {
+    expect(splitCustomsCents(100, [1, 1, 1])).toEqual([34, 33, 33]);
+    expect(splitCustomsCents(500, [0, 0])).toEqual([500, 0]);
+  });
+  it("is byte-for-byte the admin's copy when both checkouts sit side by side", () => {
+    const admin = path.resolve(process.cwd(), "..", "SwiftboxAdmin", "lib", "consolidated-billing-core.ts");
+    if (!fs.existsSync(admin)) return;
+    const pick = (t: string) => {
+      const n = t.split("\r\n").join("\n");
+      const a = n.indexOf("/** One WR's customs figures");
+      const end = "  return base.map((c) => c * sign);\n}";
+      return a < 0 ? null : n.slice(a, n.indexOf(end, a) + end.length);
+    };
+    const theirs = pick(fs.readFileSync(admin, "utf8"));
+    if (theirs == null) return; // that checkout predates the split
+    expect(pick(fs.readFileSync(path.resolve(__dirname, "consolidatedBillingCore.ts"), "utf8"))).toBe(theirs);
   });
 });

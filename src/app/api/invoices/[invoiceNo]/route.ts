@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { billingModeOf } from "@/lib/invoice-line";
-import { cbHiddenInvoiceIds, cbBillForInvoice } from "@/lib/consolidated-billing";
+import { cbHiddenInvoiceIds, cbBillForInvoice, fetchInvoiceBreakdown } from "@/lib/consolidated-billing";
 import { invoiceMoney } from "@/lib/invoice-money-core";
 
 type HeaderRow = {
@@ -129,6 +129,10 @@ export async function GET(
     { id: h.invoice_id }
   );
 
+  // Several packages: shipping once, government charges per package — the admin's
+  // own rows, the same as the PDF and email (Brent, 2026-10-22). Null → plain list.
+  const breakdown = pkgRows.length > 1 ? await fetchInvoiceBreakdown(session.id, h.invoice_no) : null;
+
   const total = Number(h.total_ttd);
   const paid = Number(h.amount_paid);
   // The money split — charges, referral credit, the owner's discount, balance,
@@ -167,6 +171,7 @@ export async function GET(
       amountPaid: paid,
       balance: money.balance,
       createdAt: h.created_at,
+      breakdown,
       lines: money.chargeLines.map((l) => ({
         lineType: l.line_type,
         description: l.description,

@@ -15,6 +15,7 @@ import {
 } from "@/lib/invoice-line";
 import { packageIdentity } from "@/lib/packageDisplay";
 import { RefText, TrackingLine } from "@/components/PackageCard";
+import type { InvoiceBreakdown } from "@/lib/consolidated-billing";
 
 type Line = {
   lineType: string;
@@ -74,7 +75,64 @@ type Invoice = {
   lines: Line[];
   payments: Payment[];
   packages: Pkg[];
+  /** Several packages: shipping once, government charges per package (admin rows). Optional/null → plain list. */
+  breakdown?: InvoiceBreakdown | null;
 };
+
+const num = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Shipping once for the group, then one government-charges block per package. Phone rows, no table. */
+function Breakdown({ layout }: { layout: NonNullable<InvoiceBreakdown["layout"]> }) {
+  const c = layout.customs;
+  return (
+    <>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-dark">
+        Shipping · one charge for all {layout.packageCount} packages
+      </h2>
+      <ul className="flex flex-col">
+        {layout.shipping.rows.map((r, i) => (
+          <li key={i} className="flex items-start justify-between gap-4 border-b border-mist/10 py-3 first:pt-0">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white">{r.label}</p>
+              {r.basis && <p className="mt-0.5 text-xs text-muted-dark">{r.basis}</p>}
+              {r.note && <p className="mt-0.5 text-[10px] text-muted-dark/70">{r.note}</p>}
+            </div>
+            <div className="shrink-0 text-right">
+              <p className={`text-sm font-bold ${r.amountTtd < 0 ? "text-green" : "text-white"}`}>{lineMoney("TTD", r.amountTtd)}</p>
+              {r.currency === "USD" && <p className="mt-0.5 text-xs text-muted-dark">{lineMoney("USD", r.amount)}</p>}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <TotalRow label="Shipping subtotal" value={formatTtd(layout.shipping.subtotalTtd)} emphasis />
+
+      <h2 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-widest text-muted-dark">
+        Government charges · per package
+      </h2>
+      <ul className="flex flex-col">
+        {c.rows.map((r) => (
+          <li key={r.pkId} className="border-b border-mist/10 py-3 first:pt-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-green">{r.receipt}</p>
+                <p className="mt-0.5 text-xs text-muted-dark">{r.description} · declared US${num(r.declaredValueUsd)}</p>
+              </div>
+              <p className="shrink-0 text-sm font-bold text-white">{lineMoney("TTD", r.subtotalTtd)}</p>
+            </div>
+            <p className="mt-1 text-xs text-muted-dark">
+              Duty {num(r.dutyTtd)} · OPT {num(r.optTtd)} · VAT {num(r.vatTtd)}
+              {c.showOther && <> · Other tax {num(r.otherTtd)}</>}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <TotalRow label="Customs total" value={formatTtd(c.totalTtd)} emphasis />
+      {layout.otherCharges.map((o, i) => (
+        <TotalRow key={`ot${i}`} label={o.description} value={formatTtd(o.amountTtd)} />
+      ))}
+    </>
+  );
+}
 
 /** Line amounts carry their own currency label — "USD 19.90" / "TTD 135.53". */
 function lineMoney(currency: string, amount: number): string {
@@ -323,6 +381,9 @@ export default function InvoiceDetailPage() {
 
           {/* Charges — rows, not a table: a table is too wide for a phone. */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
+            {invoice.breakdown?.layout ? (
+              <Breakdown layout={invoice.breakdown.layout} />
+            ) : (<>
             <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-dark">
               Charges
             </h2>
@@ -373,6 +434,7 @@ export default function InvoiceDetailPage() {
                 );
               })}
             </ul>
+            </>)}
 
             {/* Shipping + Customs − Credit = Total */}
             <div className="mt-4 border-t border-mist/10 pt-3">
@@ -407,6 +469,9 @@ export default function InvoiceDetailPage() {
                 value={formatTtd(invoice.balance)}
                 emphasis
               />
+              {!invoice.houseAccount && (invoice.breakdown?.otherOpenTtd ?? 0) > 0 && (
+                <TotalRow label="Your other open balance" value={formatTtd(invoice.breakdown!.otherOpenTtd)} />
+              )}
             </div>
           </section>
 

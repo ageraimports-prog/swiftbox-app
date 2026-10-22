@@ -613,3 +613,49 @@ export async function cbBillForInvoice(invoiceId: number): Promise<{ billNo: str
   );
   return r[0] ? { billNo: r[0].bill_no, issued: r[0].lifecycle === "issued" } : null;
 }
+
+/**
+ * The per-package layout of an invoice holding several packages (Brent,
+ * 2026-10-22): shipping once for the group, government charges per package —
+ * worked out by the admin (lib/invoice-layout-core.ts there), the SAME rows its
+ * PDF and email print. Rendered as given; nothing is recomputed here. Null = not
+ * available (the screen keeps its plain charge list). Never throws.
+ */
+export type InvoiceBreakdown = {
+  layout: {
+    kind: "consolidated";
+    packageCount: number;
+    shipping: {
+      rows: { label: string; basis: string; note: string | null; currency: string; amount: number; amountTtd: number }[];
+      subtotalTtd: number;
+    };
+    customs: {
+      rows: {
+        pkId: number; receipt: string; description: string; declaredValueUsd: number;
+        dutyTtd: number; optTtd: number; vatTtd: number; otherTtd: number; subtotalTtd: number;
+      }[];
+      showOther: boolean;
+      dutyTtd: number; optTtd: number; vatTtd: number; otherTtd: number; totalTtd: number;
+    };
+    otherCharges: { description: string; amountTtd: number }[];
+  } | null;
+  otherOpenTtd: number;
+};
+
+export async function fetchInvoiceBreakdown(userId: number, invoiceNo: string): Promise<InvoiceBreakdown | null> {
+  try {
+    const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
+    if (!key) return null;
+    const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
+    const url = `${base}/api/consolidated-billing/invoice-breakdown?invoiceNo=${encodeURIComponent(invoiceNo)}&userId=${Number(userId)}`;
+    const res = await fetch(url, { headers: { "x-consolidation-key": key }, cache: "no-store" });
+    if (!res.ok) return null;
+    const b = (await res.json()) as InvoiceBreakdown;
+    const l = b?.layout;
+    // Guard the shape: a malformed answer hides the breakdown, never the invoice.
+    const valid = !l || (Array.isArray(l.shipping?.rows) && Array.isArray(l.customs?.rows) && Array.isArray(l.otherCharges));
+    return valid ? { layout: l ?? null, otherOpenTtd: Number(b?.otherOpenTtd) || 0 } : null;
+  } catch {
+    return null;
+  }
+}

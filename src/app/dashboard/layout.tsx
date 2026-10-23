@@ -1,5 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { query } from "@/lib/db";
 import TabBar from "@/components/TabBar";
 import { getSession } from "@/lib/session";
 import { countPackagesNeedingPrealert } from "@/lib/prealert-pick-server";
@@ -20,6 +22,13 @@ export default async function DashboardLayout({
   } catch {
     prealertCount = 0;
   }
+  let unreadNotices = 0;
+  try {
+    const rows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM swiftbox_package_status_notices n JOIN mod_packages p ON p.pk_id=n.pk_id WHERE p.user_id=:userId AND n.kind='received_app' AND n.status='unread'`, { userId: session.id });
+    unreadNotices = Number(rows[0]?.n ?? 0);
+  } catch {
+    // A bridge interruption must not hide the customer's packages.
+  }
 
   return (
     <div className="min-h-screen bg-ink">
@@ -33,9 +42,9 @@ export default async function DashboardLayout({
             priority
             className="h-6 w-auto"
           />
-          <p className="text-sm font-semibold text-mist">
-            Hi <span className="text-green">{firstName}</span>
-          </p>
+          <div className="flex items-center gap-3"><Link href="/dashboard/notices" className="text-sm font-semibold text-mist" aria-label={`Notices${unreadNotices ? `, ${unreadNotices} unread` : ''}`}>
+            Notices {unreadNotices > 0 && <span className="rounded-full bg-green px-2 py-0.5 text-ink">{unreadNotices}</span>}
+          </Link><p className="text-sm font-semibold text-mist">Hi <span className="text-green">{firstName}</span></p></div>
         </div>
       </header>
 

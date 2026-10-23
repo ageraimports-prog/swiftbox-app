@@ -636,6 +636,13 @@ export type InvoiceBreakdown = {
       }[];
       showOther: boolean;
       dutyTtd: number; optTtd: number; vatTtd: number; otherTtd: number; totalTtd: number;
+      /**
+       * "totals" = the office chose to show government charges as ONE line each
+       * (Customs Duty, OPT, VAT) instead of a row per receipt (Brent, 2026-10-23).
+       * Optional: an older admin sends neither. Rendered as given.
+       */
+      mode?: "totals";
+      totals?: { lineType: string; label: string; amountTtd: number }[];
     };
     otherCharges: { description: string; amountTtd: number }[];
   } | null;

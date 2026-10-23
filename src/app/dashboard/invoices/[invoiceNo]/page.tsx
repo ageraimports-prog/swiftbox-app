@@ -106,6 +106,26 @@ function Breakdown({ layout }: { layout: NonNullable<InvoiceBreakdown["layout"]>
       </ul>
       <TotalRow label="Shipping subtotal" value={formatTtd(layout.shipping.subtotalTtd)} emphasis />
 
+      {c.mode === "totals" && c.totals ? (
+        /* As totals (the office's choice): one line each, summed across every package. */
+        <>
+          <h2 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-widest text-muted-dark">
+            Government charges · all {layout.packageCount} packages
+          </h2>
+          <ul className="flex flex-col">
+            {c.totals.map((t) => (
+              <li key={t.lineType} className="flex items-start justify-between gap-4 border-b border-mist/10 py-3 first:pt-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white">{t.label}</p>
+                  <p className="mt-0.5 text-xs text-muted-dark">as assessed by customs</p>
+                </div>
+                <p className="shrink-0 text-sm font-bold text-white">{lineMoney("TTD", t.amountTtd)}</p>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+      <>
       <h2 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-widest text-muted-dark">
         Government charges · per package
       </h2>
@@ -126,6 +146,8 @@ function Breakdown({ layout }: { layout: NonNullable<InvoiceBreakdown["layout"]>
           </li>
         ))}
       </ul>
+      </>
+      )}
       <TotalRow label="Customs total" value={formatTtd(c.totalTtd)} emphasis />
       {layout.otherCharges.map((o, i) => (
         <TotalRow key={`ot${i}`} label={o.description} value={formatTtd(o.amountTtd)} />

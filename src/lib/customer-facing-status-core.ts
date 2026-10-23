@@ -15,6 +15,18 @@
  * Billing membership, the Airdrop receive time) and asks this.
  *
  * ORDER
+ *  G. CONSOLIDATED BILLING GROUP STATUS (Brent, 2026-10-23) — first, for an
+ *     ACTIVE member whose own package is not Out for Delivery / Delivered, when
+ *     the surface read the group facts (CB_MEMBERSHIP_SELECT does):
+ *       - group still collecting (before Send now / opt-out / a release):
+ *         "Consolidating", whatever the real stage — In Miami included;
+ *       - group released: EVERY member shows the real status of the group's
+ *         LEAST-ADVANCED member (cbGroupLeastSql), never below the group's own
+ *         floor (cbGroupFloorSql) — the group moves through the stages together
+ *         and never backwards. `group` on the answer; `cb` stays true, so no
+ *         shipment number, date or customs detail shows.
+ *     An office notice (Delayed / On hold) still shows on top. Without group
+ *     facts (groupReleased undefined) the older steps below apply unchanged.
  *  0. AN ISSUED INVOICE (Brent, 2026-10-18/19): a package on an issued invoice
  *     is in Trinidad and ready to dispatch, so until it is out for delivery
  *     the customer sees "Cleared – Ready to Deliver" — nothing earlier, ever.
@@ -123,6 +135,12 @@ export type CbMembership = {
   billLifecycle: string | null;
   /** Set when this member was left off its group's bill (R11). */
   offBillReason: string | null;
+  /** The group stopped collecting (Send now, opt-out, a release) — read with CB_GROUP_RELEASED_SQL. */
+  groupReleased?: boolean;
+  /** The group's least-advanced member (CB_GROUP_CODE), read with cbGroupLeastSql. */
+  groupLeast?: number | null;
+  /** The group's never-backwards floor (ladder rank 0–4), read with cbGroupFloorSql. */
+  groupFloor?: number | null;
 };
 
 /**
@@ -140,11 +158,46 @@ export function isCbHeld(m: CbMembership | null | undefined): boolean {
   return m.billId == null || m.billLifecycle !== "issued";
 }
 
+/**
+ * GROUP STATUS (Brent, 2026-10-23). After Send now (or opt-out, or any release)
+ * every member of a group shows the real status of its LEAST-ADVANCED member,
+ * and the group's shown status only ever moves forward. Codes:
+ */
+export const CB_GROUP_CODE = { MIAMI: 0, TRANSIT: 1, CLEARANCE: 2, READY: 4, OUT_FOR_DELIVERY: 5, DELIVERED: 6 } as const;
+
+/**
+ * SQL: the least-advanced code (CB_GROUP_CODE) over the ACTIVE members of the
+ * group of membership row `m` — archived members never count. Per member: no
+ * shipment line (or raw 0/1) = In Miami; raw 2 = In Transit; on an ISSUED
+ * invoice = Ready; raw 3 = Awaiting Clearance; raw 4 = Out for Delivery; raw 5 =
+ * Delivered. A package's newest shipment line is the one that counts.
+ */
+export function cbGroupLeastSql(m: string): string {
+  return `(SELECT MIN(CASE WHEN s_gl.ship_id IS NULL THEN 0 WHEN s_gl.ship_status >= 5 THEN 6 WHEN s_gl.ship_status = 4 THEN 5
+      WHEN EXISTS (SELECT 1 FROM swiftbox_invoice_packages ip_gl JOIN swiftbox_invoices i_gl ON i_gl.invoice_id = ip_gl.invoice_id WHERE ip_gl.pk_id = m_gl.pk_id AND i_gl.lifecycle = 'issued') THEN 4
+      WHEN s_gl.ship_status = 3 THEN 2 WHEN s_gl.ship_status = 2 THEN 1 ELSE 0 END)
+    FROM swiftbox_cb_group_packages m_gl JOIN mod_packages p_gl ON p_gl.pk_id = m_gl.pk_id
+    LEFT JOIN mod_shipment s_gl ON s_gl.ship_id = (SELECT MAX(s2_gl.ship_id) FROM mod_shipment s2_gl WHERE s2_gl.package_id = m_gl.pk_id)
+   WHERE m_gl.group_id = ${m}.group_id AND m_gl.removed_at IS NULL AND NOT (p_gl.archived_at IS NOT NULL AND s_gl.ship_id IS NULL))`;
+}
+
+/**
+ * The group's own never-backwards floor (a ladder rank 0–4, see the header): the
+ * admin keeps it in DISPLAY_FLOOR_TABLE under pk_id = −group_id (a negative id is
+ * never a package). NULL = nothing shown yet.
+ */
+export function cbGroupFloorSql(m: string): string {
+  return `(SELECT f_gl.display_rank FROM swiftbox_package_display_status f_gl WHERE f_gl.pk_id = -${m}.group_id)`;
+}
+
+/** The group stopped collecting: Send now, opt-out, an office release, or released when the window closed. */
+export const CB_GROUP_RELEASED_SQL = "(g.state = 'released' OR (g.close_reason IN ('customer','turned_off') AND g.state IN ('closed','released')))";
+
 /** SQL for the membership facts of the member row `m` (swiftbox_cb_group_packages) — join `g` = groups, `b` = bills. */
-export const CB_MEMBERSHIP_SELECT = "g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason, (g.close_reason = 'customer' AND g.state IN ('closed','released')) AS cb_shipping_released";
+export const CB_MEMBERSHIP_SELECT = `g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason, (g.close_reason = 'customer' AND g.state IN ('closed','released')) AS cb_shipping_released, ${CB_GROUP_RELEASED_SQL} AS cb_group_released, ${cbGroupLeastSql("m")} AS cb_group_least, ${cbGroupFloorSql("m")} AS cb_group_floor`;
 
 /** A row read with CB_MEMBERSHIP_SELECT → CbMembership. */
-export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_shipping_released?: number | string | null }): CbMembership | null {
+export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_shipping_released?: number | string | null; cb_group_released?: number | string | null; cb_group_least?: number | string | null; cb_group_floor?: number | string | null }): CbMembership | null {
   if (!r.cb_state) return null;
   return {
     state: String(r.cb_state),
@@ -152,7 +205,22 @@ export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: nu
     billId: r.cb_bill_id == null ? null : Number(r.cb_bill_id),
     billLifecycle: r.cb_bill_lifecycle ?? null,
     offBillReason: r.cb_off_bill_reason ? String(r.cb_off_bill_reason) : null,
+    groupReleased: !!Number(r.cb_group_released),
+    groupLeast: r.cb_group_least == null || r.cb_group_least === "" ? null : Number(r.cb_group_least),
+    groupFloor: displayFloorOfRow(r.cb_group_floor),
   };
+}
+
+/** A group's least-advanced code → the ladder rank its members show (Out for Delivery / Delivered stay codes 5 / 6). */
+export function cbGroupRankOfCode(code: number): number {
+  return code >= CB_GROUP_CODE.OUT_FOR_DELIVERY ? code : code === CB_GROUP_CODE.READY ? 4 : Math.max(0, Math.min(2, code));
+}
+
+/** The rank a released group shows: its least-advanced member, never below the group's floor. */
+export function cbGroupShownRank(m: Pick<CbMembership, "groupLeast" | "groupFloor">): number | null {
+  if (m.groupLeast == null || !Number.isFinite(m.groupLeast)) return null;
+  const rank = cbGroupRankOfCode(m.groupLeast);
+  return rank >= 5 ? rank : Math.max(rank, m.groupFloor ?? 0);
 }
 
 export type CustomerFacingInput = {
@@ -214,6 +282,12 @@ export type CustomerFacingView = {
    * Deliver, on step 2. A stepper names that step CLEARED_READY_LABEL.
    */
   ready: boolean;
+  /**
+   * A released Consolidated Billing member showing its GROUP's status (the
+   * least-advanced member's): the ordinary steps (CUSTOMER_STAGE_LABELS), still
+   * with no shipment number, date or customs detail (`cb` stays true).
+   */
+  group?: boolean;
 };
 
 /** A CB member's step from its real facts. */
@@ -245,6 +319,30 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
   // A member already shown "Consolidating" never falls back to In Miami.
   const step: CustomerStage | null = cbRaw === 0 && floorStage >= 1 ? 1 : cbRaw;
   const word = (stage: CustomerStage) => (stage === 1 ? inTransitLabel(i.pkType ?? 1) : CUSTOMER_STAGE_LABELS[stage]);
+
+  // CB. Consolidated Billing group status (Brent, 2026-10-23) — before everything
+  //     but the package's own Out for Delivery / Delivered.
+  if (cb && cb.groupReleased !== undefined && s !== 4 && s !== 5) {
+    const notice = (stage: CustomerStage, extra: Partial<CustomerFacingView>) => {
+      const o = customerStatusView(i.override, real, true, false);
+      return o?.kind === "notice"
+        ? ({ cb: true, consolidating: false, ready: false, ...extra, stage, label: o.label, source: "office", notice: true, note: o.note } as CustomerFacingView)
+        : null;
+    };
+    if (!cb.groupReleased) {
+      // Until Send now: "Consolidating", whatever the real stage (In Miami too).
+      const consolidating = { cb: true, consolidating: true, ready: false, group: false };
+      return notice(1, consolidating) ?? { ...consolidating, stage: 1, label: CB_CONSOLIDATING_LABEL, source: "consolidated", notice: false, note: null };
+    }
+    const rank = cbGroupShownRank(cb);
+    if (rank != null) {
+      // After Send now: the least-advanced member's real status, never backwards.
+      const stage: CustomerStage = rank >= 6 ? 4 : rank === 5 ? 3 : rank >= 2 ? 2 : (rank as CustomerStage);
+      const ready = rank === 4;
+      const extra = { cb: true, consolidating: false, ready, group: true };
+      return notice(stage, extra) ?? { ...extra, stage, label: ready ? CLEARED_READY_LABEL : word(stage), source: "consolidated", notice: false, note: null };
+    }
+  }
 
   // 0. An issued invoice (or a customer already shown Ready to Deliver):
   //    Cleared – Ready to Deliver until out for delivery.

@@ -120,13 +120,14 @@ export function packageBadge(
   if (!status) return stageMeta(shipStatus, freight);
   if (status.notice) return { label: status.label, badge: NOTICE_BADGE };
   if (status.consolidating) return { label: status.label, badge: CB_CONSOLIDATING_BADGE };
-  if (status.ready || (status.cb && status.stage === 2)) return { label: status.label, badge: CB_READY_BADGE };
+  if (status.ready || (status.cb && !status.group && status.stage === 2)) return { label: status.label, badge: CB_READY_BADGE };
   return { label: status.label, badge: STAGES[status.stage].badge };
 }
 
 /** The stepper's labels: a Consolidated Billing member has its own steps (no transit, no clearance). */
 export function stepLabels(status: ShownStatus | null | undefined, freight?: number | null): string[] {
-  const labels = status?.cb ? [...CB_STEP_LABELS] : STAGES.map((_, i) => stageLabel(i as Stage, freight));
+  // After Send now a member shows its GROUP's real status (Brent, 2026-10-23): the ordinary steps.
+  const labels = status?.cb && !status.group ? [...CB_STEP_LABELS] : STAGES.map((_, i) => stageLabel(i as Stage, freight));
   // Invoice issued (Brent, 2026-10-19): step 2 is "Cleared – Ready to Deliver".
   if (status?.ready) labels[2] = CLEARED_READY_LABEL;
   return labels;

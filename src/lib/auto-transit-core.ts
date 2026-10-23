@@ -5,7 +5,15 @@
  * `src/lib/auto-transit-core.ts`, SwiftboxAdmin `lib/auto-transit-core.ts` and
  * the website's `src/lib/auto-transit-core.ts`. Change all three together.
  *
- * THE RULE (Brent, 2026-10-08). The Hialeah warehouse (Airdrop) drops packages
+ * SWITCHED OFF (Brent, 2026-10-23): `AUTO_TRANSIT_ENABLED` is false, so
+ * `isAutoTransitDue` always answers false and NO customer surface shows the
+ * clock-inferred "In Transit to Piarco". In Transit comes only from the real
+ * Airdrop manifest departure (20 Oct ruling, status pipeline), and an inferred
+ * In Transit that a later fact contradicts would break the never-backwards rule.
+ * The schedule below is kept (pure, tested) for the record; turning it back on
+ * is a decision for Brent, made in all three copies together.
+ *
+ * THE RULE AS IT WAS (Brent, 2026-10-08). The Hialeah warehouse (Airdrop) drops packages
  * at the airport on WEEKDAYS. Everything Airdrop received up to 5:00 pm
  * TRINIDAD time on a drop day goes on the NEXT drop day's 5:00 pm drop, and
  * from then the customer sees "In Transit to Piarco":
@@ -79,12 +87,16 @@ export function autoTransitAt(receivedAt: string | null | undefined, mode: strin
   return nextDropAfter(nextDropAfter(ms));
 }
 
-/** Has the package's 5 pm drop passed? */
+/** The 5 pm clock rule is OFF (Brent, 2026-10-23) — see the header. */
+export const AUTO_TRANSIT_ENABLED: boolean = false;
+
+/** Has the package's 5 pm drop passed? Always false while the rule is off. */
 export function isAutoTransitDue(
   receivedAt: string | null | undefined,
   mode: string | null | undefined,
   nowMs: number
 ): boolean {
+  if (!AUTO_TRANSIT_ENABLED) return false;
   const at = autoTransitAt(receivedAt, mode);
   return at != null && nowMs >= at;
 }

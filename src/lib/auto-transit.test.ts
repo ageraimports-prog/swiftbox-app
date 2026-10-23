@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  AUTO_TRANSIT_ENABLED,
   autoTransitAt,
   inTransitLabel,
   isAutoTransitDue,
@@ -37,9 +38,13 @@ describe("5 pm In Transit rule (Brent, 2026-10-08)", () => {
     expect(flip("17", "12:00")).toBe("Tue 20 Oct, 5:00 pm"); // Saturday
     expect(flip("18", "12:00")).toBe("Tue 20 Oct, 5:00 pm"); // Sunday
   });
-  it("is due from 5:00 pm exactly, not a minute before", () => {
+  it("the schedule still lands on 5:00 pm exactly", () => {
+    expect(autoTransitAt(tt("12", "10:00"), "air")).toBe(at("13", "17:00"));
+  });
+  it("is SWITCHED OFF (Brent, 2026-10-23): never due, whatever the clock", () => {
+    expect(AUTO_TRANSIT_ENABLED).toBe(false);
     expect(isAutoTransitDue(tt("12", "10:00"), "air", at("13", "16:59"))).toBe(false);
-    expect(isAutoTransitDue(tt("12", "10:00"), "air", at("13", "17:00"))).toBe(true);
+    expect(isAutoTransitDue(tt("12", "10:00"), "air", at("20", "17:00"))).toBe(false);
   });
   it("reads Airdrop's UTC timestamps (Mon 4:50 pm Trinidad = 20:50 UTC)", () => {
     expect(ttDropLabel(autoTransitAt("2026-10-12T20:50:00.123456+00:00", "air")!)).toBe("Tue 13 Oct, 5:00 pm");
@@ -92,8 +97,9 @@ describe("In Transit wording", () => {
     const ad = { receivedAt: tt("12", "10:00"), mode: "air" };
     const auto = customerFacingView({ shipStatus: null, pkType: 1, airdrop: ad, nowMs: at("13", "17:00") });
     expect(packageBadge(auto, null, 1).label).toBe("In Miami");
+    // The 5 pm rule is off: In Transit comes only from the real departure.
     const manifested=customerFacingView({shipStatus:1,pkType:1,airdrop:ad,nowMs:at("13", "17:00")});
-    expect(packageBadge(manifested,null,1).label).toBe("In Transit to Piarco");
+    expect(packageBadge(manifested,null,1).label).toBe("In Miami");
     expect(packageBadge(null, null, 1).label).toBe("In Miami");
   });
 });

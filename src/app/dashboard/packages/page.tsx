@@ -1,7 +1,32 @@
 "use client";
 
 import * as React from "react";
-import PackageCard, { type PackageSummary } from "@/components/PackageCard";
+import PackageCard, { TrackingLine, type PackageSummary } from "@/components/PackageCard";
+import { trackingNumbers } from "@/lib/packageDisplay";
+
+/** A pre-alert with no package yet (R4): the status is the shared rule's — never a count or a place beyond Miami. */
+export type PrealertSummary = {
+  id: number;
+  tracking: string;
+  storeName: string;
+  description: string;
+  status: { label: string; flagged: boolean };
+};
+
+function PrealertCard({ p }: { p: PrealertSummary }) {
+  const [tracking] = trackingNumbers(p.tracking);
+  const badge = p.status.flagged ? "bg-amber-400/15 text-amber-200 border border-amber-400/50" : "bg-mist/10 text-muted-dark border border-mist/15";
+  return (
+    <div className="rounded-lg border border-dashed border-mist/15 bg-ink-2 p-4" data-testid="prealert-card">
+      <div className="flex items-start justify-between gap-3">
+        <p className="sb-disp min-w-0 truncate text-lg text-mist">{p.description || p.storeName || "Pre-alerted package"}</p>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge}`}>{p.status.label}</span>
+      </div>
+      {tracking && <TrackingLine tracking={tracking} className="mt-1" />}
+      <p className="mt-2 text-xs text-muted-dark">Pre-alert{p.storeName ? ` · ${p.storeName}` : ""}</p>
+    </div>
+  );
+}
 
 function SkeletonCard() {
   return (
@@ -64,6 +89,7 @@ function EmptyState() {
 
 export default function PackagesPage() {
   const [packages, setPackages] = React.useState<PackageSummary[] | null>(null);
+  const [prealerts, setPrealerts] = React.useState<PrealertSummary[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
 
@@ -75,7 +101,7 @@ export default function PackagesPage() {
         return res.json();
       })
       .then((data) => {
-        if (!cancelled) setPackages(data.packages);
+        if (!cancelled) { setPackages(data.packages); setPrealerts(Array.isArray(data.prealerts) ? data.prealerts : []); }
       })
       .catch(() => {
         if (!cancelled)
@@ -105,7 +131,9 @@ export default function PackagesPage() {
         </>
       )}
 
-      {packages && packages.length === 0 && <EmptyState />}
+      {packages && packages.length === 0 && prealerts.length === 0 && <EmptyState />}
+
+      {packages && prealerts.map((p) => <PrealertCard key={`pre-${p.id}`} p={p} />)}
 
       {packages?.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
     </div>

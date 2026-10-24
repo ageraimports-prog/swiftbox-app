@@ -19,7 +19,13 @@
  *     ACTIVE member whose own package is not Out for Delivery / Delivered, when
  *     the surface read the group facts (CB_MEMBERSHIP_SELECT does):
  *       - group still collecting (before Send now / opt-out / a release):
- *         "Consolidating", whatever the real stage — In Miami included;
+ *         exactly one of two labels (R1, Brent, 2026-10-23, Hugh Pierre
+ *         SBX-0891): "Received in Miami" while the package is checked in at the
+ *         Miami warehouse and has not shipped (no shipment line, or a line at
+ *         raw 0 / 1), else "Consolidating" — for EVERYTHING after Miami:
+ *         shipped, in the air, landed, clearing, cleared, held — until Send
+ *         now. A member already shown Consolidating never reads Received in
+ *         Miami again (R2: the floor), which only matters for backfilled rows;
  *       - group released: EVERY member shows the real status of the group's
  *         LEAST-ADVANCED member (cbGroupLeastSql), never below the group's own
  *         floor (cbGroupFloorSql) — the group moves through the stages together
@@ -41,7 +47,7 @@
  *     package HELD by Consolidated Billing, which only ever gets a notice.
  *  2. CONSOLIDATED BILLING (Brent, 2026-10-13). An ACTIVE member of a group
  *     (not removed from it, never Buy For Me), in any group state:
- *       - not yet left Miami (no shipment line, 5 pm drop not passed) → In Miami
+ *       - not yet left Miami (no shipment line, 5 pm drop not passed) → Received in Miami
  *       - out for delivery / delivered (raw 4 / 5)                  → those
  *       - NOT held (released and its bill issued, released with nothing to
  *         bill, or left off the bill), at 3 and cleared             → Ready for delivery
@@ -69,6 +75,12 @@
  * never reaches Out for Delivery / Delivered — those come from the real stage.
  * Absent / null = no floor (the table may not exist yet): exactly the old rule.
  *
+ * PRE-ALERTS (R4, Brent, 2026-10-23). A pre-alert with NO package checked in yet
+ * is a state the customer may see, through `prealertFacingStatus`: "Not yet
+ * received in Miami", or "Flagged — checking with warehouse" once the office's
+ * missing-check-in flag is on it. Neither is a count nor a location; the only
+ * place ever named is Miami.
+ *
  * DISPLAY ONLY. Nothing here is written anywhere; the real status, customs,
  * invoices, delivery and the admin's own chips never read it.
  */
@@ -77,6 +89,25 @@ import { inTransitLabel, isAutoTransitDue } from "./auto-transit-core";
 
 export const CB_CONSOLIDATING_LABEL = "Consolidating — will be delivered together with your other packages";
 export const CB_READY_LABEL = "Ready for delivery";
+/** A Consolidated Billing member checked in at the Miami warehouse and not yet shipped (R1). */
+export const CB_RECEIVED_MIAMI_LABEL = "Received in Miami";
+
+/** A pre-alert whose package has not been checked in at the Miami warehouse (R4). */
+export const PREALERT_NOT_RECEIVED_LABEL = "Not yet received in Miami";
+/** The same pre-alert once the office has flagged the missing check-in to the warehouse. */
+export const PREALERT_FLAGGED_LABEL = "Flagged — checking with warehouse";
+
+export type PrealertFacingStatus = { label: string; flagged: boolean };
+
+/**
+ * What the customer sees for a PRE-ALERT with no package yet (R4): never a
+ * count, never a location beyond Miami. `flagged` = an active missing-check-in
+ * flag (the admin's swiftbox_prealert_flags row with no cleared_at).
+ */
+export function prealertFacingStatus(i: { flagged?: boolean | null }): PrealertFacingStatus {
+  const flagged = !!i.flagged;
+  return { label: flagged ? PREALERT_FLAGGED_LABEL : PREALERT_NOT_RECEIVED_LABEL, flagged };
+}
 
 /** What a customer sees once the package's invoice is issued (the admin's own chip wording). */
 export const CLEARED_READY_LABEL = "Cleared – Ready to Deliver";
@@ -114,7 +145,7 @@ export function isPreIssueOverride(o: StoredOverride, issuedAt: string | null | 
 
 /** A Consolidated Billing member's progress steps, 0–4 (the stepper / timeline). */
 export const CB_STEP_LABELS: readonly string[] = [
-  CUSTOMER_STAGE_LABELS[0],
+  CB_RECEIVED_MIAMI_LABEL,
   "Consolidating",
   CB_READY_LABEL,
   CUSTOMER_STAGE_LABELS[3],
@@ -290,11 +321,15 @@ export type CustomerFacingView = {
   group?: boolean;
 };
 
-/** A CB member's step from its real facts. */
+/**
+ * A CB member's step from its real facts. Step 0 = checked in at Miami and not
+ * shipped (no shipment line, or a line still at raw 0 / 1 — a manifest built
+ * but not departed; In Transit comes only from the real departure). R1.
+ */
 function cbStep(m: CbMembership, s: number | null, cleared: boolean, auto: boolean): CustomerStage {
   if (s === 5) return 4;
   if (s === 4) return 3;
-  if (s == null && !auto) return 0;
+  if ((s == null || s <= 1) && !auto) return 0;
   if (!isCbHeld(m) && s === 3 && cleared) return 2;
   return 1;
 }
@@ -330,7 +365,13 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
         : null;
     };
     if (!cb.groupReleased) {
-      // Until Send now: "Consolidating", whatever the real stage (In Miami too).
+      // Until Send now (R1): checked in at Miami and not shipped → "Received in
+      // Miami"; everything after Miami → "Consolidating". Never backwards (R2):
+      // a member already shown Consolidating (floor ≥ In Transit) stays there.
+      if (real === 0 && !auto && floorStage < 1) {
+        const received = { cb: true, consolidating: false, ready: false, group: false };
+        return notice(0, received) ?? { ...received, stage: 0, label: CB_RECEIVED_MIAMI_LABEL, source: "consolidated", notice: false, note: null };
+      }
       const consolidating = { cb: true, consolidating: true, ready: false, group: false };
       return notice(1, consolidating) ?? { ...consolidating, stage: 1, label: CB_CONSOLIDATING_LABEL, source: "consolidated", notice: false, note: null };
     }
@@ -370,8 +411,8 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
     return { ...base, consolidating: false, stage: cb ? cbStepOfStage(office.stage) : office.stage, label: word(office.stage), source: "office", notice: false, note: office.note };
   }
   if (cb && step != null) {
-    const label = step === 1 ? CB_CONSOLIDATING_LABEL : step === 2 ? CB_READY_LABEL : CUSTOMER_STAGE_LABELS[step];
-    return { ...base, stage: step, label, source: step === 1 || step === 2 ? "consolidated" : "real", notice: false, note: null };
+    const label = step === 0 ? CB_RECEIVED_MIAMI_LABEL : step === 1 ? CB_CONSOLIDATING_LABEL : step === 2 ? CB_READY_LABEL : CUSTOMER_STAGE_LABELS[step];
+    return { ...base, stage: step, label, source: step <= 2 ? "consolidated" : "real", notice: false, note: null };
   }
   if (auto && real < 1 && floorStage <= 1) {
     return { ...base, stage: 1, label: word(1), source: "auto", notice: false, note: null };

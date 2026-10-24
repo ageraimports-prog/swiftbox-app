@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import TabBar from "@/components/TabBar";
 import { getSession } from "@/lib/session";
+import { unreadFlagCount } from "@/lib/prealert-flags";
 import { countPackagesNeedingPrealert } from "@/lib/prealert-pick-server";
 
 export default async function DashboardLayout({
@@ -29,6 +30,8 @@ export default async function DashboardLayout({
   } catch {
     // A bridge interruption must not hide the customer's packages.
   }
+  // Pre-alert flags ("we've flagged … to the Miami warehouse") count as notices too; never fatal.
+  unreadNotices += await unreadFlagCount(session.id);
 
   return (
     <div className="min-h-screen bg-ink">

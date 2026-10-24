@@ -3,6 +3,17 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { execute } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { markFlagRead } from "@/lib/prealert-flags";
+
+export async function markFlagNoticeRead(form: FormData) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const flagId = Number(form.get("flagId"));
+  if (!Number.isSafeInteger(flagId) || flagId < 1) throw new Error("Invalid notice.");
+  await markFlagRead(session.id, flagId);
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/notices");
+}
 
 export async function markReceivedNoticeRead(form: FormData) {
   const session = await getSession();

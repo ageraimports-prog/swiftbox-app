@@ -5,6 +5,10 @@ import {
   customerFacingView,
   CB_CONSOLIDATING_LABEL,
   CB_READY_LABEL,
+  CB_RECEIVED_MIAMI_LABEL,
+  PREALERT_FLAGGED_LABEL,
+  PREALERT_NOT_RECEIVED_LABEL,
+  prealertFacingStatus,
   type CbMembership,
 } from "./customer-facing-status-core";
 import { packageBadge, stepLabels } from "./status";
@@ -22,10 +26,16 @@ const MON = "2026-10-12T10:00:00-04:00";
 const TUE5 = Date.parse("2026-10-13T17:00:00-04:00");
 
 describe("Consolidated Billing masking", () => {
-  it("In Miami until it leaves, then Consolidating at every stage until the bill is issued", () => {
-    expect(customerFacingView({ shipStatus: null, cb: OPEN }).label).toBe("In Miami");
+  it("Received in Miami until it ships (R1, 2026-10-23), then Consolidating at every stage until the bill is issued", () => {
+    expect(customerFacingView({ shipStatus: null, cb: OPEN }).label).toBe(CB_RECEIVED_MIAMI_LABEL);
     for (const m of [OPEN, CLOSED, REL_DRAFT]) {
-      for (const s of [0, 1, 2, 3]) {
+      for (const s of [null, 0, 1]) {
+        const v = customerFacingView({ shipStatus: s, cb: m });
+        expect(v.label).toBe(CB_RECEIVED_MIAMI_LABEL);
+        expect(v.stage).toBe(0);
+        expect(v.consolidating).toBe(false);
+      }
+      for (const s of [2, 3]) {
         const v = customerFacingView({ shipStatus: s, cb: m, cleared: s === 3 });
         expect(v.label).toBe(CB_CONSOLIDATING_LABEL);
         expect(v.consolidating).toBe(true);
@@ -33,10 +43,23 @@ describe("Consolidated Billing masking", () => {
       }
     }
   });
-  it("an unmanifested package stays In Miami after 5 pm; a manifested member can consolidate", () => {
+  it("an unmanifested package stays Received in Miami after 5 pm (rule off); a manifest built but not departed is still Miami (R1)", () => {
     const v = customerFacingView({ shipStatus: null, cb: CLOSED, airdrop: { receivedAt: MON, mode: "air" }, nowMs: TUE5 });
-    expect(v.label).toBe('In Miami');
-    expect(customerFacingView({shipStatus:1,cb:CLOSED,airdrop:{receivedAt:MON,mode:'air'},nowMs:TUE5}).label).toBe(CB_CONSOLIDATING_LABEL);
+    expect(v.label).toBe(CB_RECEIVED_MIAMI_LABEL);
+    expect(customerFacingView({shipStatus:1,cb:CLOSED,airdrop:{receivedAt:MON,mode:'air'},nowMs:TUE5}).label).toBe(CB_RECEIVED_MIAMI_LABEL);
+    expect(customerFacingView({shipStatus:2,cb:CLOSED}).label).toBe(CB_CONSOLIDATING_LABEL);
+  });
+  it("R1 with group facts: exactly two labels before Send now; R2: a member shown Consolidating never goes back", () => {
+    const collecting: CbMembership = { ...OPEN, groupReleased: false, groupLeast: 0, groupFloor: null };
+    const labels = new Set([null, 0, 1, 2, 3].map((s) => customerFacingView({ shipStatus: s, cb: collecting, cleared: s === 3 }).label));
+    expect([...labels].sort()).toEqual([CB_CONSOLIDATING_LABEL, CB_RECEIVED_MIAMI_LABEL].sort());
+    expect(customerFacingView({ shipStatus: null, cb: collecting, displayFloor: 1 }).label).toBe(CB_CONSOLIDATING_LABEL);
+    expect(stepLabels(customerFacingView({ shipStatus: null, cb: collecting }))[0]).toBe(CB_RECEIVED_MIAMI_LABEL);
+  });
+  it("R4: a pre-alert with no package yet", () => {
+    expect(prealertFacingStatus({}).label).toBe(PREALERT_NOT_RECEIVED_LABEL);
+    expect(prealertFacingStatus({ flagged: true }).label).toBe(PREALERT_FLAGGED_LABEL);
+    for (const l of [PREALERT_NOT_RECEIVED_LABEL, PREALERT_FLAGGED_LABEL, CB_RECEIVED_MIAMI_LABEL]) expect(l).not.toMatch(/trinidad|chaguanas|held|hialeah|[0-9]/i);
   });
   it("once the bill is issued: Ready for delivery → Out for Delivery → Delivered", () => {
     expect(customerFacingView({ shipStatus: 3, cleared: true, cb: REL_ISSUED }).label).toBe(CB_READY_LABEL);

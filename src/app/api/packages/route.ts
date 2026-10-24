@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
 import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { openPrealertRows } from "@/lib/prealert-flags";
 
 type Row = {
   pk_id: number;
@@ -47,6 +48,10 @@ export async function GET() {
   // Consolidated Billing membership and the office's status (display only),
   // each read on its own and never fatal.
   const cb = await cbPackageFacts(session.id).catch(() => new Map());
+  // R4 (Brent, 2026-10-23): the customer's pre-alerts with no package yet —
+  // "Not yet received in Miami", or "Flagged — checking with warehouse" once the
+  // office flagged the missing check-in. Read on its own, never fatal.
+  const prealerts = await openPrealertRows(session.id);
   const overrides = await customerStatusOverrides(session.id, rows.map((r) => Number(r.pk_id)));
   const floors = await customerDisplayFloors(session.id, rows.map((r) => Number(r.pk_id)));
   const now = Date.now();
@@ -86,5 +91,5 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ packages });
+  return NextResponse.json({ packages, prealerts });
 }

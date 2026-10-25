@@ -119,3 +119,20 @@ export function invoiceMoney<L extends MoneyLine>(lines: L[], totalTtd: number, 
     status: invoicePaymentStatus(totalTtd, amountPaid, house),
   };
 }
+
+/**
+ * What is left of a REFERRAL / WELCOME credit (Brent, 2026-10-25, migration 092).
+ * A credit is spent in parts: each issued invoice takes what fits and the rest
+ * waits for the next one. swiftbox_referral_credit_uses is the only record of
+ * where it went; `liveUsedTtd` is the SUM of its uses whose invoice still exists
+ * under that number and is not void (a void or deleted invoice gives the money
+ * back with no write). `useRows` counts every use row, live or not.
+ *
+ * One guard for rows older than 092: a credit marked applied = 1 that has NO use
+ * row at all was spent whole the old way and is read as used up, never as money
+ * back. Never below 0. Money in TTD, exact to the cent.
+ */
+export function referralCreditRemaining(c: { amount: number; applied: number | boolean; useRows: number; liveUsedTtd: number }): number {
+  if (Number(c.applied) === 1 && Number(c.useRows) === 0) return 0;
+  return Math.max(0, r2(Number(c.amount) - Number(c.liveUsedTtd)));
+}

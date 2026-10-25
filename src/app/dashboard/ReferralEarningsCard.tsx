@@ -49,8 +49,9 @@ export default function ReferralEarningsCard({ stats }: { stats: ReferralStats }
         </p>
       )}
       <p className="mt-1 text-xs text-muted-dark">
-        Credit is applied to your next Swiftbox invoice. It can’t be exchanged
-        for cash or transferred.
+        Credit comes off your next Swiftbox invoice — if that invoice is smaller,
+        the rest comes off the one after. It can’t be exchanged for cash or
+        transferred.
       </p>
 
       {/* Money split: available vs redeemed. */}

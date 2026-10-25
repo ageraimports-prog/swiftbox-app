@@ -2,6 +2,7 @@ import "server-only";
 import { randomInt } from "node:crypto";
 import { query, execute } from "@/lib/db";
 import { friendDisplayName, referralStage, type ReferralStage } from "@/lib/referral-list";
+import { referralCreditRemaining } from "@/lib/invoice-money-core";
 
 /* ───────────────────────── Sub-piece D: earnings stats ───────────────────────── */
 
@@ -15,9 +16,14 @@ import { friendDisplayName, referralStage, type ReferralStage } from "@/lib/refe
  *  - welcomeCredit  the one kind='welcome' credit they were given for signing up with
  *                   someone's code, if any. Shown separately, never folded into the
  *                   headline.
- *  - available      credits not yet applied to an invoice (applied = 0), BOTH kinds —
- *                   this is spendable money, and the welcome credit spends the same.
- *  - redeemed       credits already applied to an invoice (applied = 1), both kinds.
+ *  - available      what is LEFT of every credit, BOTH kinds — this is spendable
+ *                   money, and the welcome credit spends the same. Since SwiftboxAdmin
+ *                   migration 092 (2026-10-25) a credit is spent in PARTS: each
+ *                   invoice takes what fits, the rest waits for the next one, so
+ *                   left = amount − its live uses (swiftbox_referral_credit_uses;
+ *                   referralCreditRemaining in invoice-money-core, shared with the
+ *                   admin). Before 092 exists: unapplied credits (applied = 0).
+ *  - redeemed       what has come off invoices, both kinds (amount − left).
  *  - qualifiedCount referrals that reached a first delivery (status = 'qualified').
  *  - pendingCount   referrals signed up but not yet delivered (status = 'pending').
  *
@@ -76,14 +82,51 @@ export async function getReferralStats(referrerId: number): Promise<ReferralStat
 
   const c = credits[0];
   const n = counts[0];
+  const parts = await creditSplitInParts(referrerId);
   return {
     totalEarned: Number(c?.total_earned ?? 0),
     welcomeCredit: Number(c?.welcome_credit ?? 0),
-    available: Number(c?.available ?? 0),
-    redeemed: Number(c?.redeemed ?? 0),
+    available: parts ? parts.available : Number(c?.available ?? 0),
+    redeemed: parts ? parts.redeemed : Number(c?.redeemed ?? 0),
     qualifiedCount: Number(n?.qualified_count ?? 0),
     pendingCount: Number(n?.pending_count ?? 0),
   };
+}
+
+/**
+ * Available / applied from the credit USES (admin migration 092): per credit,
+ * left = amount − live uses (a use counts while its invoice exists under that
+ * number and is not void). Null when the uses table is not on this database
+ * yet — the caller then keeps the applied = 0 / 1 reading (fails safe).
+ */
+async function creditSplitInParts(referrerId: number): Promise<{ available: number; redeemed: number } | null> {
+  type Row = { amount: string; applied: number; live_used: string; use_rows: number };
+  let rows: Row[];
+  try {
+    rows = await query<Row>(
+      `SELECT c.amount, c.applied,
+              COALESCE((SELECT SUM(u.amount_ttd) FROM swiftbox_referral_credit_uses u
+                         WHERE u.credit_id = c.id
+                           AND EXISTS (SELECT 1 FROM swiftbox_invoices lx WHERE lx.invoice_id = u.invoice_id
+                                         AND BINARY lx.invoice_no = BINARY u.invoice_no AND lx.lifecycle IN ('draft','held','issued'))), 0) AS live_used,
+              (SELECT COUNT(*) FROM swiftbox_referral_credit_uses u2 WHERE u2.credit_id = c.id) AS use_rows
+         FROM referral_credits c
+        WHERE c.referrer_id = :referrerId`,
+      { referrerId }
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/doesn't exist|no such table|Unknown column/i.test(msg)) return null;
+    throw e;
+  }
+  let available = 0;
+  let redeemed = 0;
+  for (const r of rows) {
+    const left = referralCreditRemaining({ amount: Number(r.amount), applied: Number(r.applied), useRows: Number(r.use_rows), liveUsedTtd: Number(r.live_used) });
+    available += left;
+    redeemed += Number(r.amount) - left;
+  }
+  return { available: Math.round(available * 100) / 100, redeemed: Math.round(redeemed * 100) / 100 };
 }
 
 /* ───────────────────────── "Your referrals" list ───────────────────────── */
@@ -176,7 +219,7 @@ export async function getReferralList(referrerId: number): Promise<ReferralListI
  *                                first package is DELIVERED.
  *   REFERRAL_WELCOME_TTD  (50) → the REFERRED customer, created by SwiftboxAdmin
  *                                when their FIRST invoice is issued and applied to
- *                                it (carried forward if that invoice is smaller).
+ *                                it; what doesn't fit comes off the next invoice.
  *
  * Keep both in step with SwiftboxAdmin lib/referrals.ts (which issues the rows)
  * and with the public copy on swiftboxtt.com/referral and /terms.

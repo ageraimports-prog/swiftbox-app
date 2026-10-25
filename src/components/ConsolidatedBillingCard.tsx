@@ -18,6 +18,7 @@ import {
 } from "@/lib/consolidatedBilling";
 import { SendNowPanel, CB_STATE_EVENT, type SendGroup } from "@/components/SendMyPackagesNow";
 import { formatTtd } from "@/lib/invoice-line";
+import { TOBAGO_DELIVERY_SHORT, TOBAGO_DELIVERY_LONG, TOBAGO_DELIVERY_FAQ_Q } from "@/lib/tobago-delivery";
 
 type State = {
   settingOn: boolean;
@@ -28,23 +29,29 @@ type State = {
   group: SendGroup | null;
   preparing: boolean;
   billReady: { billNo: string; dueTtd: number } | null;
+  /** Delivered in Tobago (users.zone, else the address) — only then the Tobago delivery line shows. */
+  tobago?: boolean;
   sendNowMessage?:string;
 };
 
 /**
  * Consolidated Billing: the switch, where the customer's group stands, the
  * "your bill is ready" notice, and (on Account) the FAQ. Every word comes from
- * src/lib/consolidatedBilling.ts. Nothing here says where a package is (R13).
+ * src/lib/consolidatedBilling.ts (the Tobago delivery line: src/lib/tobago-delivery.ts).
+ * Nothing here says where a package is (R13).
  */
 export default function ConsolidatedBillingCard({
   showFaq = false,
   showSendNow = false,
+  initialState = null,
 }: {
   showFaq?: boolean;
   /** "Send my packages now" beside the switch (Account). The Dashboard has its own card at the top. */
   showSendNow?: boolean;
+  /** Tests only: render a known state before the fetch. Pages leave it out. */
+  initialState?: State | null;
 }) {
-  const [state, setState] = React.useState<State | null>(null);
+  const [state, setState] = React.useState<State | null>(initialState);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [note, setNote] = React.useState<string | null>(null);
@@ -108,6 +115,8 @@ export default function ConsolidatedBillingCard({
             {on && state.closedWaiting && <p>{CB_CLOSED_CARD}</p>}
             {on && !state.closedWaiting && <p>{CB_ON_TEXT}</p>}
             {!on && state.closedWaiting && !state.sendNowMessage && <p>{CB_CLOSED_CARD}</p>}
+            {/* Tobago customers only (Brent, 25 Oct 2026): the delivery fee and how Consolidated Billing groups it. */}
+            {state.tobago && <p className="text-xs text-muted-dark">{TOBAGO_DELIVERY_SHORT}</p>}
           </div>
         </div>
         <button
@@ -165,7 +174,7 @@ export default function ConsolidatedBillingCard({
       {showFaq && (
         <div className="mt-4 border-t border-mist/10 pt-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Questions</p>
-          {CB_FAQ.map((f) => (
+          {(state.tobago ? [...CB_FAQ, { q: TOBAGO_DELIVERY_FAQ_Q, a: TOBAGO_DELIVERY_LONG }] : CB_FAQ).map((f) => (
             <details key={f.q} className="border-b border-mist/10 py-2 last:border-b-0">
               <summary className="cursor-pointer text-sm font-medium text-mist">{f.q}</summary>
               <p className="mt-1 text-xs text-muted-dark">{f.a}</p>

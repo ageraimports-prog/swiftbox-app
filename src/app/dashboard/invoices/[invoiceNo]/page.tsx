@@ -14,6 +14,7 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoice-line";
 import { packageIdentity } from "@/lib/packageDisplay";
+import { customerChargeLabel } from "@/lib/tobago-delivery";
 import { RefText, TrackingLine } from "@/components/PackageCard";
 import type { InvoiceBreakdown } from "@/lib/consolidated-billing";
 
@@ -150,7 +151,7 @@ function Breakdown({ layout }: { layout: NonNullable<InvoiceBreakdown["layout"]>
       )}
       <TotalRow label="Customs total" value={formatTtd(c.totalTtd)} emphasis />
       {layout.otherCharges.map((o, i) => (
-        <TotalRow key={`ot${i}`} label={o.description} value={formatTtd(o.amountTtd)} />
+        <TotalRow key={`ot${i}`} label={customerChargeLabel(o.description)} value={formatTtd(o.amountTtd)} />
       ))}
     </>
   );
@@ -425,7 +426,7 @@ export default function InvoiceDetailPage() {
                           credit ? "text-green" : "text-white"
                         }`}
                       >
-                        {l.description}
+                        {customerChargeLabel(l.description)}
                       </p>
                       {basis.main && (
                         <p className="mt-0.5 text-xs text-muted-dark">

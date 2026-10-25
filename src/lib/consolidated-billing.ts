@@ -2,6 +2,7 @@ import { invoiceHouseColumn } from "./house-accounts";
 import "server-only";
 import { query } from "@/lib/db";
 import { swiftCodeFromAc } from "@/lib/consolidatedBilling";
+import { isTobagoCustomer } from "@/lib/tobago-delivery";
 import {
   utcDate,
   windowDay,
@@ -97,6 +98,8 @@ export type CbState = {
   preparing: boolean;
   /** The newest issued bill with money still due — the in-app notice. */
   billReady: { billNo: string; dueTtd: number } | null;
+  /** Delivered in Tobago (users.zone, else the address): the card shows the Tobago delivery line. */
+  tobago: boolean;
 };
 
 /** One package in the open group, for "3 packages waiting: Shoes, …". */
@@ -130,14 +133,15 @@ async function openGroupPackages(groupId: number): Promise<CbSendPackage[]> {
 }
 
 export async function getCbState(userId: number): Promise<CbState> {
-  const u = (await query<{ consolidated_billing: number; ac: string }>(
-    "SELECT consolidated_billing, ac FROM users WHERE id = :userId LIMIT 1",
+  const u = (await query<{ consolidated_billing: number; ac: string; zone: string | null; city: string | null; address: string | null }>(
+    "SELECT consolidated_billing, ac, zone, city, address FROM users WHERE id = :userId LIMIT 1",
     { userId }
   ))[0];
   const base = {
     settingOn: Number(u?.consolidated_billing ?? 0) === 1,
     eligible: !!u,
     swiftCode: swiftCodeFromAc(u?.ac),
+    tobago: !!u && isTobagoCustomer(u),
   };
   const groups = await safe(
     () => query<{ group_id: number; state: string; first_miami_entry_at: string | null; window_ends_at: string | null; close_reason: string | null }>(

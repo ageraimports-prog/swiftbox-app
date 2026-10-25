@@ -114,7 +114,16 @@ export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (st
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setStep("idle")}
+              onClick={() => {
+                setStep("idle");
+                // "Keep waiting" is recorded for the office's activity board. Fire and
+                // forget: any failure is ignored and the customer sees nothing.
+                fetch("/api/consolidated-billing/keep-together", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ groupId: group.groupId }),
+                }).catch(() => {});
+              }}
               disabled={step === "busy"}
               className="rounded-lg border border-mist/20 px-3 py-2.5 text-sm font-semibold text-mist disabled:opacity-50"
             >

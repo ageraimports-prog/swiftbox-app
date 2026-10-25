@@ -248,6 +248,34 @@ export async function releaseCbGroup(userId: number, groupId: number): Promise<{
   }
 }
 
+/**
+ * "Keep waiting" on the Send-now question (Brent, 2026-10-25): tell the admin, which
+ * records it for the owner's Consolidated Billing activity board. A record only —
+ * nothing about the group changes. NEVER throws and never blocks the customer: any
+ * failure (no key, admin down, timeout) is swallowed and answers false.
+ */
+export async function recordKeepTogether(userId: number, groupId: number): Promise<boolean> {
+  const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
+  if (!key || !Number.isInteger(userId) || userId <= 0 || !Number.isInteger(groupId) || groupId <= 0) return false;
+  const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10_000);
+  try {
+    const res = await fetch(`${base}/api/consolidated-billing/customer-keep`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-consolidation-key": key },
+      body: JSON.stringify({ userId, groupId }),
+      signal: ctl.signal,
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type CbPackageFacts = {
   /**
    * The package's ACTIVE membership (removed members and Buy For Me are never

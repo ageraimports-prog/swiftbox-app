@@ -1,49 +1,24 @@
 "use client";
 
 import * as React from "react";
+import { addressLine2, miamiAddressFields, miamiAddressText } from "@/lib/miami-address";
 
-const STREET = "6175 NW 167th ST STE G36";
-const CITY = "Hialeah, FL 33015";
-const COUNTRY = "USA";
-
-/**
- * Address Line 2, formatted exactly as the website's `addressLine2` does it
- * (SwiftBox Rebranded Website, src/lib/miamiAddress.ts) — the unit repeated,
- * then the account code: strip anything that is not a digit, then pad to at
- * least four. Airdrop asked for "UNIT G36" at the head of the line on
- * 2026-09-19; the separator is a HYPHEN ("SWIFT-0018"), set by Brent 2026-09-24
- * after a brief colon form. The padding is unchanged.
- *
- * `users.ac` is not clean: on live, 5 accounts are stored two digits wide and 3
- * carry a leading tab. Interpolating the raw value printed `SWIFT-18` here while
- * the welcome email and the verify screen said `SWIFT-0018`, and `SWIFT-<tab>33843`
- * for the tabbed ones. This is the field the warehouse matches a package on, so
- * the two surfaces disagreeing is a lost package, not a cosmetic difference.
- */
-function swiftLabel(ac: string): string {
-  const digits = String(ac ?? "").replace(/\D+/g, "");
-  return `UNIT G36 SWIFT-${digits.padStart(4, "0")}`;
-}
-
-// Company line is intentionally omitted from the address block for now (the
-// customer's name is Address Line 1). If the warehouse later requires the
-// company name on the package, flip INCLUDE_COMPANY to true — both the display
-// and clipboard builders honor it.
+// Company line is intentionally omitted from the address for now. If the
+// warehouse later requires the company name on the package, flip
+// INCLUDE_COMPANY to true — both the display and the clipboard honor it.
 const COMPANY = "Swiftbox T&T";
 const INCLUDE_COMPANY = false;
 
 /**
- * The clean address pushed to the clipboard — NO on-screen labels, one value
- * per line, ready to paste into a checkout form. Built separately from the
- * labeled display so the two never drift into each other.
+ * What "Copy" puts on the clipboard: the same seven labelled fields as the
+ * screen, in checkout order (src/lib/miami-address.ts), one per line.
  */
-function buildCopyBlock(name: string, attn: string): string {
-  const lines = [name, attn, STREET, CITY, COUNTRY];
-  if (INCLUDE_COMPANY) lines.unshift(COMPANY);
-  return lines.join("\n");
+function buildCopyBlock(name: string, ac: string): string {
+  const text = miamiAddressText(name, ac);
+  return INCLUDE_COMPANY ? `Company: ${COMPANY}\n${text}` : text;
 }
 
-function AddressBlock({ name, attn }: { name: string; attn: string }) {
+function AddressBlock({ name, ac }: { name: string; ac: string }) {
   const [copied, setCopied] = React.useState(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -55,7 +30,7 @@ function AddressBlock({ name, attn }: { name: string; attn: string }) {
   );
 
   async function copy() {
-    const block = buildCopyBlock(name, attn);
+    const block = buildCopyBlock(name, ac);
     try {
       await navigator.clipboard.writeText(block);
     } catch {
@@ -98,26 +73,34 @@ function AddressBlock({ name, attn }: { name: string; attn: string }) {
         </button>
       </div>
 
-      <div className="mt-3 text-sm leading-relaxed">
+      <dl className="mt-3 divide-y divide-mist/10 text-sm">
         {INCLUDE_COMPANY && (
-          <p className="font-semibold text-mist">{COMPANY}</p>
+          <div className="flex items-baseline gap-3 py-1.5">
+            <dt className="w-28 flex-none text-xs font-semibold uppercase tracking-wide text-muted-dark">
+              Company
+            </dt>
+            <dd className="font-semibold text-mist">{COMPANY}</dd>
+          </div>
         )}
-        <p>
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-dark">
-            Address Line 1:{" "}
-          </span>
-          <span className="font-semibold text-mist">{name}</span>
-        </p>
-        <p>
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-dark">
-            Address Line 2:{" "}
-          </span>
-          <span className="font-bold text-green">{attn}</span>
-        </p>
-        <p className="mt-1 text-muted-dark">{STREET}</p>
-        <p className="text-muted-dark">{CITY}</p>
-        <p className="text-muted-dark">{COUNTRY}</p>
-      </div>
+        {miamiAddressFields(name, ac).map(([label, value]) => (
+          <div key={label} className="flex items-baseline gap-3 py-1.5">
+            <dt className="w-28 flex-none text-xs font-semibold uppercase tracking-wide text-muted-dark">
+              {label}
+            </dt>
+            <dd
+              className={
+                label === "Address line 2"
+                  ? "font-bold text-green"
+                  : label === "Full name"
+                    ? "font-semibold text-mist"
+                    : "text-mist"
+              }
+            >
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
@@ -133,11 +116,13 @@ export default function ShippingAddress({
     <section>
       <h2 className="sb-disp mb-1 text-lg text-mist">Your shipping address</h2>
       <p className="mb-3 text-xs text-muted-dark">
-        Use this as your US delivery address when you shop online. Always put
-        your SWIFT code in Address Line 2 so we match every package to you.
+        Use this as your US delivery address when you shop online. Enter each
+        line in the matching box at checkout. Always include Address line 2 —{" "}
+        <span className="font-semibold text-mist">{addressLine2(accountNo)}</span>{" "}
+        — it&apos;s how we know the package is yours.
       </p>
       <div className="flex flex-col gap-3">
-        <AddressBlock name={customerName} attn={swiftLabel(accountNo)} />
+        <AddressBlock name={customerName} ac={accountNo} />
       </div>
     </section>
   );

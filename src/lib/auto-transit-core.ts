@@ -5,15 +5,16 @@
  * `src/lib/auto-transit-core.ts`, SwiftboxAdmin `lib/auto-transit-core.ts` and
  * the website's `src/lib/auto-transit-core.ts`. Change all three together.
  *
- * SWITCHED OFF (Brent, 2026-10-23): `AUTO_TRANSIT_ENABLED` is false, so
- * `isAutoTransitDue` always answers false and NO customer surface shows the
- * clock-inferred "In Transit to Piarco". In Transit comes only from the real
- * Airdrop manifest departure (20 Oct ruling, status pipeline), and an inferred
- * In Transit that a later fact contradicts would break the never-backwards rule.
- * The schedule below is kept (pure, tested) for the record; turning it back on
- * is a decision for Brent, made in all three copies together.
+ * BACK ON (Brent, 2026-10-26), exactly as it was on 2026-10-08, for every
+ * package that is NOT in a Consolidated Billing group still collecting — and
+ * whether or not the package is on a shipment / Airdrop manifest yet (the
+ * 22 Oct "never In Transit while unmanifested" gate is gone). It was switched
+ * off on 2026-10-23. The status job records the drop as the customer-facing
+ * floor, so linking a manifest, creating a shipment or a resync never takes
+ * the customer back to In Miami. A package still unmanifested 5 days after
+ * its drop is listed for the owner on Airdrop attention (admin only).
  *
- * THE RULE AS IT WAS (Brent, 2026-10-08). The Hialeah warehouse (Airdrop) drops packages
+ * THE RULE (Brent, 2026-10-08). The Hialeah warehouse (Airdrop) drops packages
  * at the airport on WEEKDAYS. Everything Airdrop received up to 5:00 pm
  * TRINIDAD time on a drop day goes on the NEXT drop day's 5:00 pm drop, and
  * from then the customer sees "In Transit to Piarco":
@@ -87,8 +88,8 @@ export function autoTransitAt(receivedAt: string | null | undefined, mode: strin
   return nextDropAfter(nextDropAfter(ms));
 }
 
-/** The 5 pm clock rule is OFF (Brent, 2026-10-23) — see the header. */
-export const AUTO_TRANSIT_ENABLED: boolean = false;
+/** The 5 pm clock rule is ON (Brent, 2026-10-26; it was off 2026-10-23 → 26) — see the header. */
+export const AUTO_TRANSIT_ENABLED: boolean = true;
 
 /** Has the package's 5 pm drop passed? Always false while the rule is off. */
 export function isAutoTransitDue(
@@ -143,7 +144,7 @@ export const REMOVED_FROM_SHIPMENT_ACTION = "removed_from_shipment";
  * Putting it on any shipment again ends that by itself. entity_id is compared
  * as a number on purpose: no charset conversion between the two tables.
  */
-export function airdropReceivedAtSql(a = "a", _manifestReady=false): string {
+export function airdropReceivedAtSql(a = "a", _manifestReady = false): string {
   void _manifestReady;
-  return `CASE WHEN NOT EXISTS (SELECT 1 FROM mod_shipment rfs_s WHERE rfs_s.package_id = ${a}.pk_id AND TRIM(COALESCE(rfs_s.ship_no,'')) <> '') THEN NULL ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(${a}.snapshot, '"received_at":"', -1), '"', 1) END`;
+  return `CASE WHEN EXISTS (SELECT 1 FROM swiftbox_audit_log rfs WHERE rfs.entity_type = 'package' AND rfs.action = '${REMOVED_FROM_SHIPMENT_ACTION}' AND rfs.entity_id = ${a}.pk_id) AND NOT EXISTS (SELECT 1 FROM mod_shipment rfs_s WHERE rfs_s.package_id = ${a}.pk_id) THEN NULL ELSE SUBSTRING_INDEX(SUBSTRING_INDEX(${a}.snapshot, '"received_at":"', -1), '"', 1) END`;
 }

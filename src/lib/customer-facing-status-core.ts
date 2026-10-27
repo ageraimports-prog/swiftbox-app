@@ -18,14 +18,13 @@
  *  G. CONSOLIDATED BILLING GROUP STATUS (Brent, 2026-10-23) — first, for an
  *     ACTIVE member whose own package is not Out for Delivery / Delivered, when
  *     the surface read the group facts (CB_MEMBERSHIP_SELECT does):
- *       - group still collecting (before Send now / opt-out / a release):
- *         exactly one of two labels (R1, Brent, 2026-10-23, Hugh Pierre
- *         SBX-0891): "Received in Miami" while the package is checked in at the
- *         Miami warehouse and has not shipped (no shipment line, or a line at
- *         raw 0 / 1), else "Consolidating" — for EVERYTHING after Miami:
- *         shipped, in the air, landed, clearing, cleared, held — until Send
- *         now. A member already shown Consolidating never reads Received in
- *         Miami again (R2: the floor), which only matters for backfilled rows;
+ *       - group still collecting (an OPEN group: before Send now / opt-out /
+ *         a release): "Consolidating" for EVERY member from the moment it joins,
+ *         wherever it physically is — In Miami, shipped, in the air, landed,
+ *         clearing, cleared, held (Brent, 2026-10-26, Koren Small SWIFT-1006:
+ *         replaces the 23 Oct R1 "Received in Miami" step, which made members
+ *         still in Miami read as if nothing was being consolidated). The 5 pm
+ *         drop never applies to them;
  *       - group released: EVERY member shows the real status of the group's
  *         LEAST-ADVANCED member (cbGroupLeastSql), never below the group's own
  *         floor (cbGroupFloorSql) — the group moves through the stages together
@@ -46,8 +45,10 @@
  *     "On hold — contact us") always wins. A stage label wins too, except on a
  *     package HELD by Consolidated Billing, which only ever gets a notice.
  *  2. CONSOLIDATED BILLING (Brent, 2026-10-13). An ACTIVE member of a group
- *     (not removed from it, never Buy For Me), in any group state:
- *       - not yet left Miami (no shipment line, 5 pm drop not passed) → Received in Miami
+ *     (not removed from it, never Buy For Me), read WITHOUT group facts:
+ *       - group still collecting (open / closed, not sent)           → Consolidating
+ *       - released, not yet left Miami (no shipment line, 5 pm drop
+ *         not passed)                                              → Received in Miami
  *       - out for delivery / delivered (raw 4 / 5)                  → those
  *       - NOT held (released and its bill issued, released with nothing to
  *         bill, or left off the bill), at 3 and cleared             → Ready for delivery
@@ -60,7 +61,10 @@
  *     tells the surface to hide them. Where it is and when it ships or lands
  *     is internal only (R13 / R13a).
  *  3. The 5 pm "In Transit to Piarco" drop (auto-transit-core.ts) — never for
- *     a Consolidated Billing member.
+ *     a Consolidated Billing member. Since 2026-10-26 it applies whether or not
+ *     the package is on a shipment / Airdrop manifest yet (Brent: the 22 Oct
+ *     "never In Transit while unmanifested" gate is removed for ordinary
+ *     packages); the floor keeps it from ever going back to In Miami.
  *  4. The real stage, in the customer's words.
  *
  * NEVER BACKWARDS (Brent, 2026-10-20). `displayFloor` is the highest status the
@@ -321,14 +325,22 @@ export type CustomerFacingView = {
   group?: boolean;
 };
 
+/** The group is still collecting (open, or closed by its window but not sent / released). */
+export function cbGroupCollecting(m: CbMembership): boolean {
+  if (m.groupReleased !== undefined) return !m.groupReleased;
+  return (m.state === "open" || m.state === "closed") && !m.shippingReleased;
+}
+
 /**
- * A CB member's step from its real facts. Step 0 = checked in at Miami and not
- * shipped (no shipment line, or a line still at raw 0 / 1 — a manifest built
- * but not departed; In Transit comes only from the real departure). R1.
+ * A CB member's step from its real facts (readers without group facts). A
+ * member of a group still collecting is always Consolidating (2026-10-26).
+ * Otherwise step 0 = not yet left Miami (no shipment line, or a line still at
+ * raw 0 / 1) and the 5 pm drop not passed.
  */
 function cbStep(m: CbMembership, s: number | null, cleared: boolean, auto: boolean): CustomerStage {
   if (s === 5) return 4;
   if (s === 4) return 3;
+  if (cbGroupCollecting(m)) return 1;
   if ((s == null || s <= 1) && !auto) return 0;
   if (!isCbHeld(m) && s === 3 && cleared) return 2;
   return 1;
@@ -348,7 +360,7 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
   const s = raw === 6 ? 3 : raw != null && Number.isInteger(raw) ? raw : null;
   const cleared = raw === 6 || (s === 3 && !!i.cleared);
   const real = customerStageOf(s);
-  const auto = s != null && i.airdrop ? isAutoTransitDue(i.airdrop.receivedAt, i.airdrop.mode, i.nowMs ?? Date.now()) : false;
+  const auto = i.airdrop ? isAutoTransitDue(i.airdrop.receivedAt, i.airdrop.mode, i.nowMs ?? Date.now()) : false;
   const cb = i.cb ?? null;
   const cbRaw = cb ? cbStep(cb, s, cleared, auto) : null;
   // A member already shown "Consolidating" never falls back to In Miami.
@@ -365,13 +377,8 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
         : null;
     };
     if (!cb.groupReleased) {
-      // Until Send now (R1): checked in at Miami and not shipped → "Received in
-      // Miami"; everything after Miami → "Consolidating". Never backwards (R2):
-      // a member already shown Consolidating (floor ≥ In Transit) stays there.
-      if (real === 0 && !auto && floorStage < 1) {
-        const received = { cb: true, consolidating: false, ready: false, group: false };
-        return notice(0, received) ?? { ...received, stage: 0, label: CB_RECEIVED_MIAMI_LABEL, source: "consolidated", notice: false, note: null };
-      }
+      // Until Send now / opt-out: "Consolidating" for every member, wherever it
+      // is (2026-10-26). No location, no 5 pm drop.
       const consolidating = { cb: true, consolidating: true, ready: false, group: false };
       return notice(1, consolidating) ?? { ...consolidating, stage: 1, label: CB_CONSOLIDATING_LABEL, source: "consolidated", notice: false, note: null };
     }

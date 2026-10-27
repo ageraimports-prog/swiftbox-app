@@ -41,10 +41,10 @@ describe("5 pm In Transit rule (Brent, 2026-10-08)", () => {
   it("the schedule still lands on 5:00 pm exactly", () => {
     expect(autoTransitAt(tt("12", "10:00"), "air")).toBe(at("13", "17:00"));
   });
-  it("is SWITCHED OFF (Brent, 2026-10-23): never due, whatever the clock", () => {
-    expect(AUTO_TRANSIT_ENABLED).toBe(false);
+  it("is ON again (Brent, 2026-10-26): due from the drop, not before", () => {
+    expect(AUTO_TRANSIT_ENABLED).toBe(true);
     expect(isAutoTransitDue(tt("12", "10:00"), "air", at("13", "16:59"))).toBe(false);
-    expect(isAutoTransitDue(tt("12", "10:00"), "air", at("20", "17:00"))).toBe(false);
+    expect(isAutoTransitDue(tt("12", "10:00"), "air", at("13", "17:00"))).toBe(true);
   });
   it("reads Airdrop's UTC timestamps (Mon 4:50 pm Trinidad = 20:50 UTC)", () => {
     expect(ttDropLabel(autoTransitAt("2026-10-12T20:50:00.123456+00:00", "air")!)).toBe("Tue 13 Oct, 5:00 pm");
@@ -96,10 +96,12 @@ describe("In Transit wording", () => {
     expect(stageMeta(2, 1).label).toBe("In Transit to Piarco");
     const ad = { receivedAt: tt("12", "10:00"), mode: "air" };
     const auto = customerFacingView({ shipStatus: null, pkType: 1, airdrop: ad, nowMs: at("13", "17:00") });
-    expect(packageBadge(auto, null, 1).label).toBe("In Miami");
-    // The 5 pm rule is off: In Transit comes only from the real departure.
+    // The 5 pm rule is back (2026-10-26), with or without a shipment line.
+    expect(packageBadge(auto, null, 1).label).toBe("In Transit to Piarco");
     const manifested=customerFacingView({shipStatus:1,pkType:1,airdrop:ad,nowMs:at("13", "17:00")});
-    expect(packageBadge(manifested,null,1).label).toBe("In Miami");
+    expect(packageBadge(manifested,null,1).label).toBe("In Transit to Piarco");
+    // Never backwards: once shown, the floor keeps it after the shipment is linked.
+    expect(packageBadge(customerFacingView({shipStatus:1,pkType:1,airdrop:null,displayFloor:1}),null,1).label).toBe("In Transit to Piarco");
     expect(packageBadge(null, null, 1).label).toBe("In Miami");
   });
 });

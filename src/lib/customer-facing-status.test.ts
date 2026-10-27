@@ -26,15 +26,18 @@ const MON = "2026-10-12T10:00:00-04:00";
 const TUE5 = Date.parse("2026-10-13T17:00:00-04:00");
 
 describe("Consolidated Billing masking", () => {
-  it("Received in Miami until it ships (R1, 2026-10-23), then Consolidating at every stage until the bill is issued", () => {
-    expect(customerFacingView({ shipStatus: null, cb: OPEN }).label).toBe(CB_RECEIVED_MIAMI_LABEL);
-    for (const m of [OPEN, CLOSED, REL_DRAFT]) {
+  it("a group still collecting reads Consolidating from the moment a package joins, wherever it is (Brent, 2026-10-26)", () => {
+    for (const m of [OPEN, CLOSED]) {
       for (const s of [null, 0, 1]) {
         const v = customerFacingView({ shipStatus: s, cb: m });
-        expect(v.label).toBe(CB_RECEIVED_MIAMI_LABEL);
-        expect(v.stage).toBe(0);
-        expect(v.consolidating).toBe(false);
+        expect(v.label).toBe(CB_CONSOLIDATING_LABEL);
+        expect(v.stage).toBe(1);
+        expect(v.consolidating).toBe(true);
       }
+    }
+    // Released (older path without group facts): Received in Miami until it leaves Miami.
+    expect(customerFacingView({ shipStatus: null, cb: REL_DRAFT }).label).toBe(CB_RECEIVED_MIAMI_LABEL);
+    for (const m of [OPEN, CLOSED, REL_DRAFT]) {
       for (const s of [2, 3]) {
         const v = customerFacingView({ shipStatus: s, cb: m, cleared: s === 3 });
         expect(v.label).toBe(CB_CONSOLIDATING_LABEL);
@@ -43,17 +46,19 @@ describe("Consolidated Billing masking", () => {
       }
     }
   });
-  it("an unmanifested package stays Received in Miami after 5 pm (rule off); a manifest built but not departed is still Miami (R1)", () => {
+  it("a member past its 5 pm drop is Consolidating, never In Transit to Piarco; an ordinary package flips", () => {
     const v = customerFacingView({ shipStatus: null, cb: CLOSED, airdrop: { receivedAt: MON, mode: "air" }, nowMs: TUE5 });
-    expect(v.label).toBe(CB_RECEIVED_MIAMI_LABEL);
-    expect(customerFacingView({shipStatus:1,cb:CLOSED,airdrop:{receivedAt:MON,mode:'air'},nowMs:TUE5}).label).toBe(CB_RECEIVED_MIAMI_LABEL);
+    expect(v.label).toBe(CB_CONSOLIDATING_LABEL);
+    expect(customerFacingView({shipStatus:1,cb:CLOSED,airdrop:{receivedAt:MON,mode:'air'},nowMs:TUE5}).label).toBe(CB_CONSOLIDATING_LABEL);
+    expect(customerFacingView({shipStatus:null,pkType:1,airdrop:{receivedAt:MON,mode:'air'},nowMs:TUE5}).label).toBe("In Transit to Piarco");
     expect(customerFacingView({shipStatus:2,cb:CLOSED}).label).toBe(CB_CONSOLIDATING_LABEL);
   });
-  it("R1 with group facts: exactly two labels before Send now; R2: a member shown Consolidating never goes back", () => {
+  it("with group facts: ONE label before Send now (Consolidating); after Send now the least-advanced member's status", () => {
     const collecting: CbMembership = { ...OPEN, groupReleased: false, groupLeast: 0, groupFloor: null };
     const labels = new Set([null, 0, 1, 2, 3].map((s) => customerFacingView({ shipStatus: s, cb: collecting, cleared: s === 3 }).label));
-    expect([...labels].sort()).toEqual([CB_CONSOLIDATING_LABEL, CB_RECEIVED_MIAMI_LABEL].sort());
+    expect([...labels]).toEqual([CB_CONSOLIDATING_LABEL]);
     expect(customerFacingView({ shipStatus: null, cb: collecting, displayFloor: 1 }).label).toBe(CB_CONSOLIDATING_LABEL);
+    expect(customerFacingView({ shipStatus: 3, cb: { ...collecting, state: "released", groupReleased: true, groupLeast: 0 } }).label).toBe("In Miami");
     expect(stepLabels(customerFacingView({ shipStatus: null, cb: collecting }))[0]).toBe(CB_RECEIVED_MIAMI_LABEL);
   });
   it("R4: a pre-alert with no package yet", () => {

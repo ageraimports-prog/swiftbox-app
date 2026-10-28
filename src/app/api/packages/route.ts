@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, PACKAGE_CANCELLED_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 import { openPrealertRows } from "@/lib/prealert-flags";
 
 type Row = {
@@ -23,6 +23,7 @@ type Row = {
   ship_status: number | null;
   cleared: number | null;
   invoice_issued_at: string | null;
+  cancelled?: number | string | null;
 };
 
 export async function GET() {
@@ -37,7 +38,8 @@ export async function GET() {
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight, p.pcs,
             p.shipper, p.commodities, p.date, ${await airdropPackageColumns()},
             s.ship_no, s.ship_status, ${CLEARED_SQL} AS cleared,
-            ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at
+            ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at,
+            ${PACKAGE_CANCELLED_SQL} AS cancelled
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
       WHERE p.user_id = :userId
@@ -69,6 +71,7 @@ export async function GET() {
       cb: cb.get(Number(r.pk_id))?.membership ?? null,
       airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
       invoiceIssuedAt: r.invoice_issued_at,
+      cancelled: Number(r.cancelled ?? 0) === 1,
       displayFloor: floors.get(Number(r.pk_id)) ?? null,
       nowMs: now,
     });

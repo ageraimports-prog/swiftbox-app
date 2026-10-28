@@ -117,6 +117,34 @@ export function prealertFacingStatus(i: { flagged?: boolean | null }): PrealertF
 export const CLEARED_READY_LABEL = "Cleared – Ready to Deliver";
 
 /**
+ * CANCELLED (Brent, 2026-10-28): the office cancelled the package (picked up in
+ * Miami, never shipped). TERMINAL — it beats everything, including the
+ * never-backwards floor. Derived from swiftbox_audit_log: the package's NEWEST
+ * row among PACKAGE_CANCEL_ACTION / PACKAGE_CANCEL_UNDO_ACTION (entity
+ * 'package', entity_id = pk_id) is a cancel. The admin writes those rows
+ * (lib/package-cancel.ts); every surface only reads them.
+ */
+export const CANCELLED_FACING_LABEL = "Cancelled";
+export const PACKAGE_CANCEL_ACTION = "package_cancelled";
+export const PACKAGE_CANCEL_UNDO_ACTION = "package_cancel_undo";
+
+/** TRUE when the package whose id is the SQL expression `idExpr` is cancelled. Literals only. */
+export function packageCancelledByIdSql(idExpr: string): string {
+  return `EXISTS (SELECT 1 FROM swiftbox_audit_log pcx
+            WHERE pcx.entity_type = 'package' AND pcx.entity_id = ${idExpr}
+              AND pcx.action = '${PACKAGE_CANCEL_ACTION}'
+              AND pcx.id = (SELECT MAX(pcy.id) FROM swiftbox_audit_log pcy
+                             WHERE pcy.entity_type = 'package' AND pcy.entity_id = ${idExpr}
+                               AND pcy.action IN ('${PACKAGE_CANCEL_ACTION}', '${PACKAGE_CANCEL_UNDO_ACTION}')))`;
+}
+
+/** Same test for a package id COLUMN such as "p.pk_id" (cast to the audit log's VARCHAR so idx_entity is used). */
+export function packageCancelledColumnSql(pkColumn: string): string {
+  if (!/^([a-z][a-z0-9_]*\.)?[a-z_]+$/i.test(pkColumn)) throw new Error("Invalid SQL column");
+  return packageCancelledByIdSql(`CAST(${pkColumn} AS CHAR)`);
+}
+
+/**
  * SQL: the issued_at of the ISSUED invoice the package `pkExpr` is on, as
  * 'YYYY-MM-DD HH:MM:SS' on the database clock; '' when issued with no time
  * stamped; NULL when it is on no issued invoice. swiftbox_invoice_packages.pk_id
@@ -281,6 +309,8 @@ export type CustomerFacingInput = {
    * null / absent = none. Read with displayFloorOfRow.
    */
   displayFloor?: number | null;
+  /** The office cancelled the package (packageCancelledColumnSql). Terminal. */
+  cancelled?: boolean;
   nowMs?: number;
 };
 
@@ -323,6 +353,8 @@ export type CustomerFacingView = {
    * with no shipment number, date or customs detail (`cb` stays true).
    */
   group?: boolean;
+  /** The office cancelled the package: show CANCELLED_FACING_LABEL and no progress bar. */
+  cancelled?: boolean;
 };
 
 /** The group is still collecting (open, or closed by its window but not sent / released). */
@@ -352,6 +384,10 @@ function cbStepOfStage(stage: CustomerStage): CustomerStage {
 }
 
 export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
+  // C. Cancelled by the office: terminal, before everything (no floor, no CB mask).
+  if (i.cancelled) {
+    return { stage: 0, label: CANCELLED_FACING_LABEL, source: "office", notice: false, note: null, cb: false, consolidating: false, ready: false, cancelled: true };
+  }
   const floor = displayFloorOfRow(i.displayFloor) ?? 0;
   // The floor as a customer stage: In Miami 0, In Transit 1, Awaiting Clearance /
   // Cleared / Ready 2 (Ready = the issued-invoice step).

@@ -1,7 +1,7 @@
 import "server-only";
 import { query } from "@/lib/db";
 import { CUSTOMER_STATUS_TABLE, OVERRIDE_SET_AT_SQL, type StoredOverride } from "@/lib/customer-status-core";
-import { customerFacingView, displayFloorOfRow, invoiceIssuedAtSql, DISPLAY_FLOOR_TABLE, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
+import { customerFacingView, displayFloorOfRow, invoiceIssuedAtSql, packageCancelledColumnSql, DISPLAY_FLOOR_TABLE, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
 
 /**
  * Customer-facing status set by the office (admin migration 055,
@@ -86,6 +86,8 @@ export function viewFor(input: {
   invoiceIssuedAt?: string | null;
   /** The never-backwards floor (customerDisplayFloors); absent = none. */
   displayFloor?: number | null;
+  /** The office cancelled it (PACKAGE_CANCELLED_SQL). */
+  cancelled?: boolean;
   nowMs?: number;
 }): CustomerFacingView {
   return customerFacingView({
@@ -97,6 +99,7 @@ export function viewFor(input: {
     airdrop: input.airdrop ?? null,
     invoiceIssuedAt: input.invoiceIssuedAt ?? null,
     displayFloor: input.displayFloor ?? null,
+    cancelled: !!input.cancelled,
     nowMs: input.nowMs,
   });
 }
@@ -108,6 +111,13 @@ export function viewFor(input: {
  * and the admin read the same fact.
  */
 export const INVOICE_ISSUED_AT_SQL = invoiceIssuedAtSql("p.pk_id");
+
+/**
+ * SQL: 1 when the office cancelled package `p` (admin, 2026-10-28 — picked up in
+ * Miami, never shipped). Read from the admin's audit log through the shared
+ * core; the customer then sees "Cancelled".
+ */
+export const PACKAGE_CANCELLED_SQL = packageCancelledColumnSql("p.pk_id");
 
 /** SQL: 1 when the shipment row aliased `s` has been marked cleared (admin migration 017). */
 export const CLEARED_SQL = "(SELECT COUNT(*) FROM swiftbox_shipment_clearance sc WHERE sc.ship_no = s.ship_no) > 0";

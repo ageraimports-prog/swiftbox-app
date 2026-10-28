@@ -298,7 +298,13 @@ export default function PackageDetailPage() {
             <h2 className="mb-5 text-xs font-semibold uppercase tracking-widest text-muted-dark">
               Delivery status
             </h2>
-            <Stepper shipment={data.shipment} status={st} freight={data.package.freight} />
+            {st?.cancelled ? (
+              <p className="text-sm text-mist">
+                This package was cancelled. It won&apos;t be delivered and nothing is owed for it. Questions? Call (868) 609-3000.
+              </p>
+            ) : (
+              <Stepper shipment={data.shipment} status={st} freight={data.package.freight} />
+            )}
           </section>
         </>
       )}

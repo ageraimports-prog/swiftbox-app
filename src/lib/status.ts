@@ -105,6 +105,9 @@ export const CB_CONSOLIDATING_BADGE = "bg-violet-400/10 text-violet-300 border b
 /** A notice the office set ("Delayed", "On hold — contact us"): highlighted, never a stage. */
 export const NOTICE_BADGE = "bg-amber-400/15 text-amber-200 border border-amber-400/50";
 
+/** Cancelled by the office (picked up in Miami, never shipped): grey, terminal. */
+export const CANCELLED_BADGE = "bg-mist/10 text-muted-dark border border-mist/25 line-through";
+
 /** Step 2 once ready: a Consolidated Billing member's Ready for delivery, or Cleared – Ready to Deliver. */
 const CB_READY_BADGE = "bg-green/10 text-green border border-green/25";
 
@@ -118,6 +121,7 @@ export function packageBadge(
   freight?: number | null
 ): { label: string; badge: string } {
   if (!status) return stageMeta(shipStatus, freight);
+  if (status.cancelled) return { label: status.label, badge: CANCELLED_BADGE };
   if (status.notice) return { label: status.label, badge: NOTICE_BADGE };
   if (status.consolidating) return { label: status.label, badge: CB_CONSOLIDATING_BADGE };
   if (status.ready || (status.cb && !status.group && status.stage === 2)) return { label: status.label, badge: CB_READY_BADGE };

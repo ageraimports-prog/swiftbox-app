@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, PACKAGE_CANCELLED_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -29,6 +29,7 @@ type Row = {
   delivered_date: string | null;
   cleared: number | null;
   invoice_issued_at: string | null;
+  cancelled?: number | string | null;
 };
 
 export async function GET(
@@ -54,7 +55,8 @@ export async function GET(
             s.ship_id, s.ship_no, s.ship_status,
             s.miami_date, s.transit_date, s.awaiting_date,
             s.ofd_date, s.delivered_date, ${CLEARED_SQL} AS cleared,
-            ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at
+            ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at,
+            ${PACKAGE_CANCELLED_SQL} AS cancelled
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
       WHERE p.pk_id = :pkId AND p.user_id = :userId
@@ -79,6 +81,7 @@ export async function GET(
     cb: cb?.membership ?? null,
     airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
     invoiceIssuedAt: r.invoice_issued_at,
+    cancelled: Number(r.cancelled ?? 0) === 1,
     displayFloor: (await customerDisplayFloors(session.id, [Number(r.pk_id)])).get(Number(r.pk_id)) ?? null,
   });
   // A Consolidated Billing member never sends its shipment number, its real

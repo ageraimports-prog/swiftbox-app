@@ -399,15 +399,22 @@ export function inviteLink(code: string, signupBaseUrl?: string): string {
 }
 
 /**
- * The message a customer sends (REFERRAL_FLOW_RESEARCH.md §4.1). It leads with
- * what the FRIEND gets and says "toward your first invoice" because the credit
- * waits for an invoice of at least that much. No prices or rates, and no name —
- * it is sent from the referrer's own phone. The link is alone on the LAST line:
- * WhatsApp previews the first link and autolinks a clean line.
+ * The message a customer sends (Brent's copy, 2026-10-28 — the same three
+ * points as the website's invite preview and /r/ page). It says "toward your
+ * first invoice" because the credit waits for an invoice of at least that much.
+ * Copy rules: the fuel always sits beside the rate (never an all-in figure);
+ * Consolidated Billing says only "one delivery, one bill" (never where, how long
+ * or how many); the tax line is always "at Amazon & most big retailers". No
+ * name — it is sent from the referrer's own phone. The link is alone on the LAST
+ * line: WhatsApp previews the first link and autolinks a clean line.
  */
 export function shareMessage(code: string, signupBaseUrl?: string): string {
   return [
-    `I use Swiftbox to get my online shopping from the US to T&T 📦 Sign up with my link and you'll get TT$${REFERRAL_WELCOME_CREDIT_TTD} credit toward your first Swiftbox invoice.`,
+    "I use Swiftbox to get my online shopping from the US to T&T 📦",
+    "✅ US$1.99/lb + 20% fuel",
+    "✅ Free Consolidated Billing – all your packages come together, one delivery, one bill",
+    "✅ No Florida sales tax at Amazon & most big retailers",
+    `Sign up with my link and you'll get TT$${REFERRAL_WELCOME_CREDIT_TTD} credit toward your first Swiftbox invoice.`,
     inviteLink(code, signupBaseUrl),
   ].join("\n");
 }

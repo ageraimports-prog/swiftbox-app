@@ -141,14 +141,24 @@ describe("whatsappShareUrl", () => {
 });
 
 describe("shareMessage", () => {
-  it("is the research copy: friend's credit toward the first invoice, link alone on the last line", () => {
+  it("is Brent's copy of 2026-10-28, word for word, with the link alone on the last line", () => {
+    expect(shareMessage(CODE)).toBe(
+      [
+        "I use Swiftbox to get my online shopping from the US to T&T 📦",
+        "✅ US$1.99/lb + 20% fuel",
+        "✅ Free Consolidated Billing – all your packages come together, one delivery, one bill",
+        "✅ No Florida sales tax at Amazon & most big retailers",
+        "Sign up with my link and you'll get TT$50 credit toward your first Swiftbox invoice.",
+        CANONICAL_LINK,
+      ].join("\n")
+    );
+  });
+
+  it("keeps the copy rules: fuel beside the rate, qualified tax line, no all-in figure or Blue Sky", () => {
     const msg = shareMessage(CODE);
-    const lines = msg.split("\n");
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain("TT$50 credit toward your first Swiftbox invoice");
-    expect(lines[1]).toBe(CANONICAL_LINK);
-    // No rates or prices in a message sent from a customer's own phone.
-    expect(msg).not.toMatch(/\/lb|US\$|unmatchable/i);
+    expect(msg).toContain("US$1.99/lb + 20% fuel");
+    expect(msg).not.toMatch(/all-in|2\.39|blue\s*sky/i);
+    for (const m of msg.matchAll(/no Florida (?:sales )?tax.*/gi)) expect(m[0]).toContain("at Amazon & most big retailers");
   });
 
   it("the invite link is the website's /r/ page, never the app", () => {

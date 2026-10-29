@@ -10,14 +10,14 @@
  * for them (Brent, 2026-10-26): Full name, Address line 1 = the street,
  * Address line 2 = UNIT G36 SWIFT-####, City, State, ZIP, Country. Printing it
  * in label order (name, UNIT line, street…) made customers type the UNIT line
- * into Address line 1. ZIP is 33015, never ZIP+4.
+ * into Address line 1. ZIP is 33015-4362 — the ZIP+4 on Airdrop's forwarding-agent sales-tax certificate (Brent, 2026-10-28; a RockAuto order went to 33015-4339) — never bare 33015 or another +4.
  */
 
 export const MIAMI_ADDRESS = {
   street: "6175 NW 167th ST STE G36",
   city: "Hialeah",
   state: "FL",
-  zip: "33015",
+  zip: "33015-4362",
   country: "United States",
 } as const;
 

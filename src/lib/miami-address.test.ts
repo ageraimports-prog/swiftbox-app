@@ -12,7 +12,7 @@ describe("Miami address as checkout fields", () => {
       ["Address line 2", "UNIT G36 SWIFT-0018"],
       ["City", "Hialeah"],
       ["State", "FL"],
-      ["ZIP", "33015"],
+      ["ZIP", "33015-4362"],
       ["Country", "United States"],
     ]);
   });
@@ -22,7 +22,7 @@ describe("Miami address as checkout fields", () => {
     expect(addressLine2("\t33843")).toBe("UNIT G36 SWIFT-33843");
   });
 
-  it("copies one labelled field per line; ZIP never ZIP+4", () => {
+  it("copies one labelled field per line; ZIP is 33015-4362, never another +4", () => {
     const text = miamiAddressText("Anika Ramlal", "848");
     expect(text.split("\n")).toEqual([
       "Full name: Anika Ramlal",
@@ -30,10 +30,10 @@ describe("Miami address as checkout fields", () => {
       "Address line 2: UNIT G36 SWIFT-0848",
       "City: Hialeah",
       "State: FL",
-      "ZIP: 33015",
+      "ZIP: 33015-4362",
       "Country: United States",
     ]);
-    expect(text).not.toMatch(/33015-\d{4}/);
+    expect(text).not.toMatch(/33015-(?!4362)\d{4}/);
   });
 
   it("a blank name still gives a Full name field", () => {

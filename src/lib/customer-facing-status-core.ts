@@ -14,6 +14,19 @@
  * the facts (raw ship_status, clearance, the office's override, Consolidated
  * Billing membership, the Airdrop receive time) and asks this.
  *
+ * NO PLACE FOR A CONSOLIDATED PACKAGE (Brent, 2026-10-29, Koren Small SBX-1006 —
+ * the bot told her every package was "In Transit to Piarco"; supersedes the 23 Oct
+ * "Received in Miami" step). A customer is NEVER told where a consolidated package
+ * is: no Miami, Trinidad, Piarco, warehouse or airport in any status a customer
+ * sees. Until the group's last package is in (the group is still collecting:
+ * before Send now / opt-out / a release) every member reads "Consolidated".
+ * After that every member shows the group's status (the status of the LAST
+ * package identified into the group, never backwards) in location-free words: Consolidated, In Transit, Awaiting
+ * Clearance, Cleared – Ready to Deliver, Out for Delivery, Delivered
+ * (CB_GROUP_STEP_LABELS). Every answer with `cb` — and every answer for a
+ * customer whose Consolidated Billing switch is on (`consolidatedCustomer`) —
+ * passes through cbLocationFreeLabel last, so no branch can leak a place.
+ *
  * ORDER
  *  G. CONSOLIDATED BILLING GROUP STATUS (Brent, 2026-10-23) — first, for an
  *     ACTIVE member whose own package is not Out for Delivery / Delivered, when
@@ -26,7 +39,7 @@
  *         still in Miami read as if nothing was being consolidated). The 5 pm
  *         drop never applies to them;
  *       - group released: EVERY member shows the real status of the group's
- *         LEAST-ADVANCED member (cbGroupLeastSql), never below the group's own
+ *         LAST-IDENTIFIED member (cbGroupLastSql; least-advanced until 29 Oct), never below the group's own
  *         floor (cbGroupFloorSql) — the group moves through the stages together
  *         and never backwards. `group` on the answer; `cb` stays true, so no
  *         shipment number, date or customs detail shows.
@@ -91,15 +104,46 @@
 import { CUSTOMER_STAGE_LABELS, cleanNote, customerStageOf, customerStatusStage, customerStatusView, isCustomerStatusKey, isOverrideActive, type CustomerStage, type StoredOverride } from "./customer-status-core";
 import { inTransitLabel, isAutoTransitDue } from "./auto-transit-core";
 
-export const CB_CONSOLIDATING_LABEL = "Consolidating — will be delivered together with your other packages";
+/** Every member of a group still collecting (Brent, 2026-10-29: "Consolidated"). */
+export const CB_CONSOLIDATING_LABEL = "Consolidated";
 export const CB_READY_LABEL = "Ready for delivery";
-/** A Consolidated Billing member checked in at the Miami warehouse and not yet shipped (R1). */
-export const CB_RECEIVED_MIAMI_LABEL = "Received in Miami";
+/**
+ * Kept for old imports: since 2026-10-29 a member that has not left yet reads
+ * "Consolidated" like every other member — never a place.
+ */
+export const CB_RECEIVED_MIAMI_LABEL = CB_CONSOLIDATING_LABEL;
+/** The first step of a member's stepper (location-free). */
+export const CB_RECEIVED_LABEL = "Received";
 
-/** A pre-alert whose package has not been checked in at the Miami warehouse (R4). */
+const CB_PLACE = String.raw`(?:the\s+)?(?:miami(?:\s+warehouse)?|trinidad(?:\s+(?:and|&)\s+tobago)?|tobago|piarco|port\s+of\s+spain|(?:our\s+)?warehouse|airport)`;
+
+/**
+ * A consolidated package's status with every place taken out (Brent, 2026-10-29).
+ * "In Transit to Piarco" → "In Transit"; "In Miami" / "Received in Miami" →
+ * "Consolidated"; "Arrived in Trinidad" → "Arrived"; any other "in / to / at
+ * <place>" is cut. Labels with no place come back unchanged.
+ */
+export function cbLocationFreeLabel(label: string): string {
+  const t = String(label ?? "").trim();
+  if (new RegExp(String.raw`^(?:received\s+)?(?:in|at)\s+${CB_PLACE}$`, "i").test(t)) return CB_CONSOLIDATING_LABEL;
+  const out = t
+    .replace(new RegExp(String.raw`\s*\b(?:to|in|at|from|through|via)\s+${CB_PLACE}\b`, "gi"), "")
+    .replace(new RegExp(String.raw`\b${CB_PLACE}\b\s*`, "gi"), "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:)])/g, "$1")
+    .replace(/(?:[\s,—–-]+|\s+\b(?:with|to|in|at|from|by)\b)+$/i, "")
+    .trim();
+  return out || CB_CONSOLIDATING_LABEL;
+}
+
+/** A pre-alert whose package has not been checked in at the Miami warehouse (R4). Not for a consolidating customer. */
 export const PREALERT_NOT_RECEIVED_LABEL = "Not yet received in Miami";
 /** The same pre-alert once the office has flagged the missing check-in to the warehouse. */
 export const PREALERT_FLAGGED_LABEL = "Flagged — checking with warehouse";
+
+/** The same two states for a customer with Consolidated Billing on — no place (2026-10-29). */
+export const PREALERT_NOT_RECEIVED_CB_LABEL = "Not yet received";
+export const PREALERT_FLAGGED_CB_LABEL = "Flagged — we're tracking it down";
 
 export type PrealertFacingStatus = { label: string; flagged: boolean };
 
@@ -108,13 +152,42 @@ export type PrealertFacingStatus = { label: string; flagged: boolean };
  * count, never a location beyond Miami. `flagged` = an active missing-check-in
  * flag (the admin's swiftbox_prealert_flags row with no cleared_at).
  */
-export function prealertFacingStatus(i: { flagged?: boolean | null }): PrealertFacingStatus {
+export function prealertFacingStatus(i: { flagged?: boolean | null; consolidated?: boolean | null }): PrealertFacingStatus {
   const flagged = !!i.flagged;
+  if (i.consolidated) return { label: flagged ? PREALERT_FLAGGED_CB_LABEL : PREALERT_NOT_RECEIVED_CB_LABEL, flagged };
   return { label: flagged ? PREALERT_FLAGGED_LABEL : PREALERT_NOT_RECEIVED_LABEL, flagged };
 }
 
 /** What a customer sees once the package's invoice is issued (the admin's own chip wording). */
 export const CLEARED_READY_LABEL = "Cleared – Ready to Deliver";
+
+/**
+ * CANCELLED (Brent, 2026-10-28): the office cancelled the package (picked up in
+ * Miami, never shipped). TERMINAL — it beats everything, including the
+ * never-backwards floor. Derived from swiftbox_audit_log: the package's NEWEST
+ * row among PACKAGE_CANCEL_ACTION / PACKAGE_CANCEL_UNDO_ACTION (entity
+ * 'package', entity_id = pk_id) is a cancel. The admin writes those rows
+ * (lib/package-cancel.ts); every surface only reads them.
+ */
+export const CANCELLED_FACING_LABEL = "Cancelled";
+export const PACKAGE_CANCEL_ACTION = "package_cancelled";
+export const PACKAGE_CANCEL_UNDO_ACTION = "package_cancel_undo";
+
+/** TRUE when the package whose id is the SQL expression `idExpr` is cancelled. Literals only. */
+export function packageCancelledByIdSql(idExpr: string): string {
+  return `EXISTS (SELECT 1 FROM swiftbox_audit_log pcx
+            WHERE pcx.entity_type = 'package' AND pcx.entity_id = ${idExpr}
+              AND pcx.action = '${PACKAGE_CANCEL_ACTION}'
+              AND pcx.id = (SELECT MAX(pcy.id) FROM swiftbox_audit_log pcy
+                             WHERE pcy.entity_type = 'package' AND pcy.entity_id = ${idExpr}
+                               AND pcy.action IN ('${PACKAGE_CANCEL_ACTION}', '${PACKAGE_CANCEL_UNDO_ACTION}')))`;
+}
+
+/** Same test for a package id COLUMN such as "p.pk_id" (cast to the audit log's VARCHAR so idx_entity is used). */
+export function packageCancelledColumnSql(pkColumn: string): string {
+  if (!/^([a-z][a-z0-9_]*\.)?[a-z_]+$/i.test(pkColumn)) throw new Error("Invalid SQL column");
+  return packageCancelledByIdSql(`CAST(${pkColumn} AS CHAR)`);
+}
 
 /**
  * SQL: the issued_at of the ISSUED invoice the package `pkExpr` is on, as
@@ -149,9 +222,21 @@ export function isPreIssueOverride(o: StoredOverride, issuedAt: string | null | 
 
 /** A Consolidated Billing member's progress steps, 0–4 (the stepper / timeline). */
 export const CB_STEP_LABELS: readonly string[] = [
-  CB_RECEIVED_MIAMI_LABEL,
-  "Consolidating",
+  CB_RECEIVED_LABEL,
+  CB_CONSOLIDATING_LABEL,
   CB_READY_LABEL,
+  CUSTOMER_STAGE_LABELS[3],
+  CUSTOMER_STAGE_LABELS[4],
+];
+
+/**
+ * A released group's steps (`group` on the answer), location-free: step 2 reads
+ * CLEARED_READY_LABEL when `ready`.
+ */
+export const CB_GROUP_STEP_LABELS: readonly string[] = [
+  CB_CONSOLIDATING_LABEL,
+  "In Transit",
+  CUSTOMER_STAGE_LABELS[2],
   CUSTOMER_STAGE_LABELS[3],
   CUSTOMER_STAGE_LABELS[4],
 ];
@@ -172,8 +257,8 @@ export type CbMembership = {
   offBillReason: string | null;
   /** The group stopped collecting (Send now, opt-out, a release) — read with CB_GROUP_RELEASED_SQL. */
   groupReleased?: boolean;
-  /** The group's least-advanced member (CB_GROUP_CODE), read with cbGroupLeastSql. */
-  groupLeast?: number | null;
+  /** The code (CB_GROUP_CODE) of the group's last-identified member, read with cbGroupLastSql. */
+  groupLast?: number | null;
   /** The group's never-backwards floor (ladder rank 0–4), read with cbGroupFloorSql. */
   groupFloor?: number | null;
 };
@@ -194,26 +279,47 @@ export function isCbHeld(m: CbMembership | null | undefined): boolean {
 }
 
 /**
- * GROUP STATUS (Brent, 2026-10-23). After Send now (or opt-out, or any release)
- * every member of a group shows the real status of its LEAST-ADVANCED member,
- * and the group's shown status only ever moves forward. Codes:
+ * GROUP STATUS (Brent, 2026-10-23; revised 2026-10-29). After Send now (or
+ * opt-out, or any release) every member of a group shows the real status of the
+ * LAST package identified into the group — the newest Miami entry — even when an
+ * earlier member is further along or held back. The group's shown status only
+ * ever moves forward (its floor). Codes:
  */
 export const CB_GROUP_CODE = { MIAMI: 0, TRANSIT: 1, CLEARANCE: 2, READY: 4, OUT_FOR_DELIVERY: 5, DELIVERED: 6 } as const;
 
 /**
- * SQL: the least-advanced code (CB_GROUP_CODE) over the ACTIVE members of the
- * group of membership row `m` — archived members never count. Per member: no
- * shipment line (or raw 0/1) = In Miami; raw 2 = In Transit; on an ISSUED
- * invoice = Ready; raw 3 = Awaiting Clearance; raw 4 = Out for Delivery; raw 5 =
- * Delivered. A package's newest shipment line is the one that counts.
+ * SQL: the code (CB_GROUP_CODE) of the LAST package identified into the group of
+ * membership row `m` (Brent, 2026-10-29; was the least-advanced member until
+ * then). "Last" = the ACTIVE, counted member (archived members never count)
+ * with the latest Miami entry: COALESCE(entered_at, mod_packages.date), newest
+ * first, the higher pk_id on a tie. Its code: no shipment line (or raw 0/1) = In
+ * Miami; raw 2 = In Transit; on an ISSUED invoice = Ready; raw 3 = Awaiting
+ * Clearance; raw 4 = Out for Delivery; raw 5 = Delivered. A package's newest
+ * shipment line is the one that counts.
  */
-export function cbGroupLeastSql(m: string): string {
-  return `(SELECT MIN(CASE WHEN s_gl.ship_id IS NULL THEN 0 WHEN s_gl.ship_status >= 5 THEN 6 WHEN s_gl.ship_status = 4 THEN 5
+export function cbGroupLastSql(m: string): string {
+  return `(SELECT CASE WHEN s_gl.ship_id IS NULL THEN 0 WHEN s_gl.ship_status >= 5 THEN 6 WHEN s_gl.ship_status = 4 THEN 5
       WHEN EXISTS (SELECT 1 FROM swiftbox_invoice_packages ip_gl JOIN swiftbox_invoices i_gl ON i_gl.invoice_id = ip_gl.invoice_id WHERE ip_gl.pk_id = m_gl.pk_id AND i_gl.lifecycle = 'issued') THEN 4
-      WHEN s_gl.ship_status = 3 THEN 2 WHEN s_gl.ship_status = 2 THEN 1 ELSE 0 END)
+      WHEN s_gl.ship_status = 3 THEN 2 WHEN s_gl.ship_status = 2 THEN 1 ELSE 0 END
     FROM swiftbox_cb_group_packages m_gl JOIN mod_packages p_gl ON p_gl.pk_id = m_gl.pk_id
     LEFT JOIN mod_shipment s_gl ON s_gl.ship_id = (SELECT MAX(s2_gl.ship_id) FROM mod_shipment s2_gl WHERE s2_gl.package_id = m_gl.pk_id)
-   WHERE m_gl.group_id = ${m}.group_id AND m_gl.removed_at IS NULL AND NOT (p_gl.archived_at IS NOT NULL AND s_gl.ship_id IS NULL))`;
+   WHERE m_gl.group_id = ${m}.group_id AND m_gl.removed_at IS NULL AND NOT (p_gl.archived_at IS NOT NULL AND s_gl.ship_id IS NULL)
+   ORDER BY COALESCE(m_gl.entered_at, p_gl.date) DESC, m_gl.pk_id DESC LIMIT 1)`;
+}
+
+/**
+ * The last-identified member of a group, from facts already read (pure; the
+ * same order as cbGroupLastSql): the latest Miami entry wins, the higher pk_id on
+ * a tie. Null for no members.
+ */
+export function cbLastIdentified<T extends { pkId: number; enteredAt: string | null }>(members: readonly T[]): T | null {
+  let best: T | null = null;
+  for (const x of members) {
+    if (!best) { best = x; continue; }
+    const a = x.enteredAt ?? "", b = best.enteredAt ?? "";
+    if (a > b || (a === b && x.pkId > best.pkId)) best = x;
+  }
+  return best;
 }
 
 /**
@@ -229,10 +335,10 @@ export function cbGroupFloorSql(m: string): string {
 export const CB_GROUP_RELEASED_SQL = "(g.state = 'released' OR (g.close_reason IN ('customer','turned_off') AND g.state IN ('closed','released')))";
 
 /** SQL for the membership facts of the member row `m` (swiftbox_cb_group_packages) — join `g` = groups, `b` = bills. */
-export const CB_MEMBERSHIP_SELECT = `g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason, (g.close_reason = 'customer' AND g.state IN ('closed','released')) AS cb_shipping_released, ${CB_GROUP_RELEASED_SQL} AS cb_group_released, ${cbGroupLeastSql("m")} AS cb_group_least, ${cbGroupFloorSql("m")} AS cb_group_floor`;
+export const CB_MEMBERSHIP_SELECT = `g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason, (g.close_reason = 'customer' AND g.state IN ('closed','released')) AS cb_shipping_released, ${CB_GROUP_RELEASED_SQL} AS cb_group_released, ${cbGroupLastSql("m")} AS cb_group_last, ${cbGroupFloorSql("m")} AS cb_group_floor`;
 
 /** A row read with CB_MEMBERSHIP_SELECT → CbMembership. */
-export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_shipping_released?: number | string | null; cb_group_released?: number | string | null; cb_group_least?: number | string | null; cb_group_floor?: number | string | null }): CbMembership | null {
+export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_shipping_released?: number | string | null; cb_group_released?: number | string | null; cb_group_last?: number | string | null; cb_group_floor?: number | string | null }): CbMembership | null {
   if (!r.cb_state) return null;
   return {
     state: String(r.cb_state),
@@ -241,20 +347,20 @@ export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: nu
     billLifecycle: r.cb_bill_lifecycle ?? null,
     offBillReason: r.cb_off_bill_reason ? String(r.cb_off_bill_reason) : null,
     groupReleased: !!Number(r.cb_group_released),
-    groupLeast: r.cb_group_least == null || r.cb_group_least === "" ? null : Number(r.cb_group_least),
+    groupLast: r.cb_group_last == null || r.cb_group_last === "" ? null : Number(r.cb_group_last),
     groupFloor: displayFloorOfRow(r.cb_group_floor),
   };
 }
 
-/** A group's least-advanced code → the ladder rank its members show (Out for Delivery / Delivered stay codes 5 / 6). */
+/** A group's code (its last-identified member's) → the ladder rank its members show (Out for Delivery / Delivered stay codes 5 / 6). */
 export function cbGroupRankOfCode(code: number): number {
   return code >= CB_GROUP_CODE.OUT_FOR_DELIVERY ? code : code === CB_GROUP_CODE.READY ? 4 : Math.max(0, Math.min(2, code));
 }
 
-/** The rank a released group shows: its least-advanced member, never below the group's floor. */
-export function cbGroupShownRank(m: Pick<CbMembership, "groupLeast" | "groupFloor">): number | null {
-  if (m.groupLeast == null || !Number.isFinite(m.groupLeast)) return null;
-  const rank = cbGroupRankOfCode(m.groupLeast);
+/** The rank a released group shows: its last-identified member's, never below the group's floor. */
+export function cbGroupShownRank(m: Pick<CbMembership, "groupLast" | "groupFloor">): number | null {
+  if (m.groupLast == null || !Number.isFinite(m.groupLast)) return null;
+  const rank = cbGroupRankOfCode(m.groupLast);
   return rank >= 5 ? rank : Math.max(rank, m.groupFloor ?? 0);
 }
 
@@ -281,6 +387,13 @@ export type CustomerFacingInput = {
    * null / absent = none. Read with displayFloorOfRow.
    */
   displayFloor?: number | null;
+  /** The office cancelled the package (packageCancelledColumnSql). Terminal. */
+  cancelled?: boolean;
+  /**
+   * The customer's Consolidated Billing switch is on (users.consolidated_billing):
+   * the answer's label is made location-free even for a package outside a group.
+   */
+  consolidatedCustomer?: boolean;
   nowMs?: number;
 };
 
@@ -319,10 +432,12 @@ export type CustomerFacingView = {
   ready: boolean;
   /**
    * A released Consolidated Billing member showing its GROUP's status (the
-   * least-advanced member's): the ordinary steps (CUSTOMER_STAGE_LABELS), still
+   * last-identified member's): location-free steps (CB_GROUP_STEP_LABELS), still
    * with no shipment number, date or customs detail (`cb` stays true).
    */
   group?: boolean;
+  /** The office cancelled the package: show CANCELLED_FACING_LABEL and no progress bar. */
+  cancelled?: boolean;
 };
 
 /** The group is still collecting (open, or closed by its window but not sent / released). */
@@ -352,6 +467,16 @@ function cbStepOfStage(stage: CustomerStage): CustomerStage {
 }
 
 export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
+  const v = facingView(i);
+  // Last, for every branch: a consolidated package's status never names a place.
+  return v.cb || (i.consolidatedCustomer && !v.cancelled) ? { ...v, label: cbLocationFreeLabel(v.label) } : v;
+}
+
+function facingView(i: CustomerFacingInput): CustomerFacingView {
+  // C. Cancelled by the office: terminal, before everything (no floor, no CB mask).
+  if (i.cancelled) {
+    return { stage: 0, label: CANCELLED_FACING_LABEL, source: "office", notice: false, note: null, cb: false, consolidating: false, ready: false, cancelled: true };
+  }
   const floor = displayFloorOfRow(i.displayFloor) ?? 0;
   // The floor as a customer stage: In Miami 0, In Transit 1, Awaiting Clearance /
   // Cleared / Ready 2 (Ready = the issued-invoice step).
@@ -365,7 +490,7 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
   const cbRaw = cb ? cbStep(cb, s, cleared, auto) : null;
   // A member already shown "Consolidating" never falls back to In Miami.
   const step: CustomerStage | null = cbRaw === 0 && floorStage >= 1 ? 1 : cbRaw;
-  const word = (stage: CustomerStage) => (stage === 1 ? inTransitLabel(i.pkType ?? 1) : CUSTOMER_STAGE_LABELS[stage]);
+  const word = (stage: CustomerStage) => (cb ? CB_GROUP_STEP_LABELS[stage] : stage === 1 ? inTransitLabel(i.pkType ?? 1) : CUSTOMER_STAGE_LABELS[stage]);
 
   // CB. Consolidated Billing group status (Brent, 2026-10-23) — before everything
   //     but the package's own Out for Delivery / Delivered.
@@ -377,14 +502,14 @@ export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
         : null;
     };
     if (!cb.groupReleased) {
-      // Until Send now / opt-out: "Consolidating" for every member, wherever it
-      // is (2026-10-26). No location, no 5 pm drop.
+      // Until Send now / opt-out: "Consolidated" for every member, wherever it
+      // is (2026-10-26 / 2026-10-29). No location, no 5 pm drop.
       const consolidating = { cb: true, consolidating: true, ready: false, group: false };
       return notice(1, consolidating) ?? { ...consolidating, stage: 1, label: CB_CONSOLIDATING_LABEL, source: "consolidated", notice: false, note: null };
     }
     const rank = cbGroupShownRank(cb);
     if (rank != null) {
-      // After Send now: the least-advanced member's real status, never backwards.
+      // After Send now: the last-identified member's real status, never backwards.
       const stage: CustomerStage = rank >= 6 ? 4 : rank === 5 ? 3 : rank >= 2 ? 2 : (rank as CustomerStage);
       const ready = rank === 4;
       const extra = { cb: true, consolidating: false, ready, group: true };

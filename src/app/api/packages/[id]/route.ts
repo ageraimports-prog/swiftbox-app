@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, consolidatedCustomerOn, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -80,6 +80,7 @@ export async function GET(
     airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
     invoiceIssuedAt: r.invoice_issued_at,
     displayFloor: (await customerDisplayFloors(session.id, [Number(r.pk_id)])).get(Number(r.pk_id)) ?? null,
+    consolidatedCustomer: await consolidatedCustomerOn(session.id),
   });
   // A Consolidated Billing member never sends its shipment number, its real
   // stage, or a transit / clearance date: where it is and when it moves is

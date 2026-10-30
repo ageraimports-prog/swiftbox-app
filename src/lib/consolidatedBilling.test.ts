@@ -25,7 +25,7 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
   });
   it("uses the exact brief wording", () => {
     expect(copy.CB_OFF_CONFIRM).toBe("Turning this off sends out what's ready now.");
-    expect(copy.CB_WAITING_LABEL).toBe("Consolidating — will be delivered together with your other packages");
+    expect(copy.CB_WAITING_LABEL).toBe("Consolidated");
     expect(copy.CB_TOGETHER_LINE).toBe(
       "With Consolidated Billing we consolidate your packages and deliver them together: one delivery, one bill."
     );

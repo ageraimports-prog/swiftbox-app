@@ -53,18 +53,29 @@ describe("Consolidated Billing masking", () => {
     expect(customerFacingView({shipStatus:null,pkType:1,airdrop:{receivedAt:MON,mode:'air'},nowMs:TUE5}).label).toBe("In Transit to Piarco");
     expect(customerFacingView({shipStatus:2,cb:CLOSED}).label).toBe(CB_CONSOLIDATING_LABEL);
   });
-  it("with group facts: ONE label before Send now (Consolidating); after Send now the least-advanced member's status", () => {
-    const collecting: CbMembership = { ...OPEN, groupReleased: false, groupLeast: 0, groupFloor: null };
+  it("with group facts: ONE label before Send now (Consolidated); after Send now the last-identified member's status, no place", () => {
+    const collecting: CbMembership = { ...OPEN, groupReleased: false, groupLast: 0, groupFloor: null };
     const labels = new Set([null, 0, 1, 2, 3].map((s) => customerFacingView({ shipStatus: s, cb: collecting, cleared: s === 3 }).label));
     expect([...labels]).toEqual([CB_CONSOLIDATING_LABEL]);
     expect(customerFacingView({ shipStatus: null, cb: collecting, displayFloor: 1 }).label).toBe(CB_CONSOLIDATING_LABEL);
-    expect(customerFacingView({ shipStatus: 3, cb: { ...collecting, state: "released", groupReleased: true, groupLeast: 0 } }).label).toBe("In Miami");
-    expect(stepLabels(customerFacingView({ shipStatus: null, cb: collecting }))[0]).toBe(CB_RECEIVED_MIAMI_LABEL);
+    expect(customerFacingView({ shipStatus: 3, cb: { ...collecting, state: "released", groupReleased: true, groupLast: 0 } }).label).toBe("Consolidated");
+    // Brent, 2026-10-29: the LAST package identified decides — an earlier one held back in Miami
+    // reads "In Transit" with the rest once the last one has shipped. Never "to Piarco".
+    const released = { ...collecting, state: "released", groupReleased: true, groupLast: 1 };
+    expect(customerFacingView({ shipStatus: null, cb: released }).label).toBe("In Transit");
+    expect(customerFacingView({ shipStatus: 3, cleared: true, cb: released, pkType: 1 }).label).toBe("In Transit");
+    const groupSteps = stepLabels(customerFacingView({ shipStatus: 2, cb: released }), 1);
+    expect(groupSteps.join(" ")).not.toMatch(/miami|piarco|trinidad|warehouse|airport/i);
+    expect(stepLabels(customerFacingView({ shipStatus: null, cb: collecting })).join(" ")).not.toMatch(/miami|piarco|trinidad|warehouse/i);
+    // Not consolidated: unchanged.
+    expect(customerFacingView({ shipStatus: 2, pkType: 1 }).label).toBe("In Transit to Piarco");
+    expect(stepLabels(customerFacingView({ shipStatus: 2, pkType: 1 }), 1)).toContain("In Transit to Piarco");
   });
   it("R4: a pre-alert with no package yet", () => {
     expect(prealertFacingStatus({}).label).toBe(PREALERT_NOT_RECEIVED_LABEL);
     expect(prealertFacingStatus({ flagged: true }).label).toBe(PREALERT_FLAGGED_LABEL);
     for (const l of [PREALERT_NOT_RECEIVED_LABEL, PREALERT_FLAGGED_LABEL, CB_RECEIVED_MIAMI_LABEL]) expect(l).not.toMatch(/trinidad|chaguanas|held|hialeah|[0-9]/i);
+    for (const flagged of [false, true]) expect(prealertFacingStatus({ flagged, consolidated: true }).label).not.toMatch(/miami|warehouse/i);
   });
   it("once the bill is issued: Ready for delivery → Out for Delivery → Delivered", () => {
     expect(customerFacingView({ shipStatus: 3, cleared: true, cb: REL_ISSUED }).label).toBe(CB_READY_LABEL);

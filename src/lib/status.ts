@@ -18,7 +18,7 @@
  */
 
 import { inTransitLabel } from "./auto-transit-core";
-import { CB_STEP_LABELS, CLEARED_READY_LABEL, type CustomerFacingView } from "./customer-facing-status-core";
+import { CB_GROUP_STEP_LABELS, CB_STEP_LABELS, CLEARED_READY_LABEL, type CustomerFacingView } from "./customer-facing-status-core";
 
 export type Stage = 0 | 1 | 2 | 3 | 4;
 
@@ -126,8 +126,9 @@ export function packageBadge(
 
 /** The stepper's labels: a Consolidated Billing member has its own steps (no transit, no clearance). */
 export function stepLabels(status: ShownStatus | null | undefined, freight?: number | null): string[] {
-  // After Send now a member shows its GROUP's real status (Brent, 2026-10-23): the ordinary steps.
-  const labels = status?.cb && !status.group ? [...CB_STEP_LABELS] : STAGES.map((_, i) => stageLabel(i as Stage, freight));
+  // After Send now a member shows its GROUP's real status (Brent, 2026-10-23) on
+  // location-free steps: never Miami or Piarco for a consolidated package (2026-10-29).
+  const labels = status?.cb ? [...(status.group ? CB_GROUP_STEP_LABELS : CB_STEP_LABELS)] : STAGES.map((_, i) => stageLabel(i as Stage, freight));
   // Invoice issued (Brent, 2026-10-19): step 2 is "Cleared – Ready to Deliver".
   if (status?.ready) labels[2] = CLEARED_READY_LABEL;
   return labels;

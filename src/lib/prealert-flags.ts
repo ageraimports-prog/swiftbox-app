@@ -42,7 +42,7 @@ export async function activePrealertFlags(userId: number): Promise<Map<number, {
 }
 
 /** The customer's pre-alerts (app table) that have no package yet, with the R4 status. Never throws. */
-export async function openPrealertRows(userId: number): Promise<PrealertRowOut[]> {
+export async function openPrealertRows(userId: number, consolidated = false): Promise<PrealertRowOut[]> {
   try {
     const [rows, flags] = await Promise.all([
       query<{ prealert_id: number; tracking_number: string; store_name: string; description: string | null; created_at: string }>(
@@ -60,7 +60,8 @@ export async function openPrealertRows(userId: number): Promise<PrealertRowOut[]
       storeName: String(r.store_name ?? "").trim(),
       description: String(r.description ?? "").trim(),
       createdAt: String(r.created_at),
-      status: prealertFacingStatus({ flagged: flags.has(Number(r.prealert_id)) }),
+      // A consolidating customer's pre-alert names no place (Brent, 2026-10-29).
+      status: prealertFacingStatus({ flagged: flags.has(Number(r.prealert_id)), consolidated }),
     }));
   } catch {
     return [];

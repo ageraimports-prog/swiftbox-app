@@ -21,7 +21,7 @@ describe("canonical Swiftbox shipment progress",()=>{
 describe("packageBadge (Consolidated Billing)", () => {
   const OPEN = { state: "open", billId: null, billLifecycle: null, offBillReason: null };
   it("shows 'Consolidating' while a package waits (never where it is)", () => {
-    expect(packageBadge(customerFacingView({ shipStatus: 3, cb: OPEN })).label).toBe("Consolidating — will be delivered together with your other packages");
+    expect(packageBadge(customerFacingView({ shipStatus: 3, cb: OPEN })).label).toBe("Consolidated");
     expect(packageBadge(customerFacingView({ shipStatus: 2, cb: OPEN })).label).not.toMatch(/trinidad|clearance|arriv|transit|piarco/i);
   });
   it("falls back to the real stage when not a member", () => {

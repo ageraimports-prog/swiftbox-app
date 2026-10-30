@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, consolidatedCustomerOn, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 import { openPrealertRows } from "@/lib/prealert-flags";
 
 type Row = {
@@ -51,7 +51,8 @@ export async function GET() {
   // R4 (Brent, 2026-10-23): the customer's pre-alerts with no package yet —
   // "Not yet received in Miami", or "Flagged — checking with warehouse" once the
   // office flagged the missing check-in. Read on its own, never fatal.
-  const prealerts = await openPrealertRows(session.id);
+  const cbOn = await consolidatedCustomerOn(session.id);
+  const prealerts = await openPrealertRows(session.id, cbOn || cb.size > 0);
   const overrides = await customerStatusOverrides(session.id, rows.map((r) => Number(r.pk_id)));
   const floors = await customerDisplayFloors(session.id, rows.map((r) => Number(r.pk_id)));
   const now = Date.now();
@@ -70,6 +71,7 @@ export async function GET() {
       airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },
       invoiceIssuedAt: r.invoice_issued_at,
       displayFloor: floors.get(Number(r.pk_id)) ?? null,
+      consolidatedCustomer: cbOn,
       nowMs: now,
     });
     return {

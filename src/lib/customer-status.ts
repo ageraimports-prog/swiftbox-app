@@ -86,6 +86,8 @@ export function viewFor(input: {
   invoiceIssuedAt?: string | null;
   /** The never-backwards floor (customerDisplayFloors); absent = none. */
   displayFloor?: number | null;
+  /** The customer's Consolidated Billing switch is on (consolidatedCustomerOn): no place in any label. */
+  consolidatedCustomer?: boolean;
   nowMs?: number;
 }): CustomerFacingView {
   return customerFacingView({
@@ -97,8 +99,23 @@ export function viewFor(input: {
     airdrop: input.airdrop ?? null,
     invoiceIssuedAt: input.invoiceIssuedAt ?? null,
     displayFloor: input.displayFloor ?? null,
+    consolidatedCustomer: !!input.consolidatedCustomer,
     nowMs: input.nowMs,
   });
+}
+
+/**
+ * Is the customer's Consolidated Billing switch on (users.consolidated_billing)?
+ * Then no status they see names a place (Brent, 2026-10-29). Never throws:
+ * a failed read answers false and group members are still covered by `cb`.
+ */
+export async function consolidatedCustomerOn(userId: number): Promise<boolean> {
+  try {
+    const [u] = await query<{ cb: number | string | null }>("SELECT consolidated_billing AS cb FROM users WHERE id = :userId LIMIT 1", { userId });
+    return Number(u?.cb ?? 0) === 1;
+  } catch {
+    return false;
+  }
 }
 
 /**

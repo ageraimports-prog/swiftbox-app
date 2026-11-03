@@ -12,6 +12,9 @@ const LABEL: Record<string, string> = {
   wire: "Wire",
   cheque: "Cheque",
   other: "Other",
+  paypal: "PayPal",
+  // Online card payment through Stripe (admin STRIPE_PAYMENTS_PLAN.md, 2026-11-02).
+  stripe: "Card (online)",
   // System-only (never picked by staff): the landed invoice of a Buy For Me
   // package, settled from the all-in amount the customer paid upfront.
   bfm_prepaid: "Paid in advance (Buy For Me)",

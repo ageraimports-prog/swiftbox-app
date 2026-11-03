@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^7.0.1",
+    "@stripe/stripe-js": "^10.2.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/nodemailer": "^8.0.1",
     "@vercel/blob": "^2.4.0",

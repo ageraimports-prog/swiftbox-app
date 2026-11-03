@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { paymentLabel } from "@/lib/payment-label";
+import PayNow from "./PayNow";
 import { discountRowLabel } from "@/lib/invoice-money-core";
 import {
   STATUS_BADGE,
@@ -230,6 +231,18 @@ export default function InvoiceDetailPage() {
   const { invoiceNo } = useParams<{ invoiceNo: string }>();
   const [invoice, setInvoice] = React.useState<Invoice | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // Bumped after a card payment goes through so the balance and payments re-read.
+  const [reloads, setReloads] = React.useState(0);
+  // ?pay=1 (the invoice email's "Pay online" button) opens the Pay now panel at once.
+  const [autoPay, setAutoPay] = React.useState(false);
+  React.useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("pay") === "1") {
+      setAutoPay(true);
+      url.searchParams.delete("pay");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -253,7 +266,7 @@ export default function InvoiceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [invoiceNo]);
+  }, [invoiceNo, reloads]);
 
   const badge = invoice
     ? STATUS_BADGE[invoice.status] ?? STATUS_BADGE.unpaid
@@ -322,6 +335,11 @@ export default function InvoiceDetailPage() {
               {" "}· Paid {formatTtd(invoice.amountPaid)}
             </p>
           </section>
+
+          {/* Pay online by card (Stripe) — shown only when the admin says this invoice can be paid. */}
+          {!invoice.houseAccount && (
+            <PayNow invoiceNo={invoice.invoiceNo} balance={invoice.balance} autoOpen={autoPay} onPaid={() => setReloads((n) => n + 1)} />
+          )}
 
           {invoice.consolidatedBillNo && (
             <Link

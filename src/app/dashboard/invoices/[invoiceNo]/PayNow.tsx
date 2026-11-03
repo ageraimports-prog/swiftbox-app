@@ -7,9 +7,12 @@ import { formatTtd } from "@/lib/invoice-line";
 
 /**
  * "Pay now" on an issued invoice (SwiftboxAdmin STRIPE_PAYMENTS_PLAN.md).
+ * Revision b: the card is charged in US DOLLARS. The admin works out the US$
+ * figure from the TT$ balance at Brent's rate (rounded up) and locks it on the
+ * payment; this screen shows both ("TT$680.00 = US$100.00 at 6.80") and the
+ * foreign-transaction-fee note, and never computes a figure itself.
  *
- *   1. ask /api/invoices/<no>/pay?offer=1 — the admin says whether this invoice
- *      can be paid and for how much (never computed here);
+ *   1. ask /api/invoices/<no>/pay?offer=1 — can it be paid, TT$ / US$ / rate;
  *   2. the customer ticks "I agree to the Terms and Refund Policy";
  *   3. POST …/pay → a PaymentIntent (client secret + publishable key — no Stripe
  *      key lives in this app);
@@ -18,7 +21,7 @@ import { formatTtd } from "@/lib/invoice-line";
  *      `return_url` (?payment=return&payment_intent=…);
  *   5. …/pay?paymentIntentId= — the admin reads Stripe and records the payment
  *      once, so "Paid" shows even before the webhook lands; `onPaid` reloads
- *      the invoice.
+ *      the invoice. A decline shows the fixed US$ wording from the admin.
  */
 
 type Offer = {
@@ -26,15 +29,23 @@ type Offer = {
   reason: string | null;
   code: string | null;
   amountTtd: number | null;
+  amountUsd: number | null;
+  usdRate: number | null;
+  fxLine: string | null;
+  fxNote: string;
   termsVersion: string;
   termsUrl: string;
   refundPolicyUrl: string;
-  paidByCard: { amountTtd: number; at: string; last4: string | null; brand: string | null } | null;
+  paidByCard: { amountTtd: number; amountUsd: number; usdRate: number; at: string; last4: string | null; brand: string | null } | null;
   processing: boolean;
+  lastFailure: string | null;
   mode: "test" | "live" | "none";
 };
 
-type Intent = { clientSecret: string; publishableKey: string; paymentIntentId: string; amountTtd: number };
+type Intent = { clientSecret: string; publishableKey: string; paymentIntentId: string; amountTtd: number; amountUsd: number; fxLine: string; fxNote: string };
+
+const DECLINED = "Your bank declined a US$ charge — contact your bank or pay another way.";
+const usd = (n: number) => `US$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const stripeCache = new Map<string, Promise<Stripe | null>>();
 function stripeFor(pk: string): Promise<Stripe | null> {
@@ -76,7 +87,10 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
     fetch(`/api/invoices/${encodeURIComponent(invoiceNo)}/pay?offer=1`)
       .then((r) => (r.ok ? r.json() : null))
       .then((o: Offer | null) => {
-        if (!cancelled && o) setOffer(o);
+        if (!cancelled && o) {
+          setOffer(o);
+          if (o.lastFailure && !o.paidByCard) setError(o.lastFailure);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -101,8 +115,8 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
         setIntent(null);
         return true;
       }
-      if (st && (st.status === "failed" || st.status === "canceled")) {
-        setError(st.error || "The payment did not go through. Please try again.");
+      if (st && (st.status === "failed" || st.status === "canceled" || (st.status === "created" && st.error))) {
+        setError(st.error || DECLINED);
         setIntent(null);
         return false;
       }
@@ -133,7 +147,15 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
         setError(data.error || "Couldn't start the card payment. Please try again.");
         return;
       }
-      setIntent({ clientSecret: data.clientSecret, publishableKey: data.publishableKey, paymentIntentId: data.paymentIntentId!, amountTtd: data.amountTtd ?? offer.amountTtd ?? balance });
+      setIntent({
+        clientSecret: data.clientSecret,
+        publishableKey: data.publishableKey,
+        paymentIntentId: data.paymentIntentId!,
+        amountTtd: data.amountTtd ?? offer.amountTtd ?? balance,
+        amountUsd: data.amountUsd ?? offer.amountUsd ?? 0,
+        fxLine: data.fxLine ?? offer.fxLine ?? "",
+        fxNote: data.fxNote ?? offer.fxNote,
+      });
     } catch {
       setError("Couldn't start the card payment. Please try again.");
     } finally {
@@ -162,27 +184,39 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
   }
   if (offer.paidByCard) return null;
   if (!offer.available) {
-    // Quiet unless the reason is one the customer can act on.
+    // Quiet unless the reason is one the customer can act on. No rate set → nothing at all (rule b7).
     if (offer.code === "cb_held") return <p className="text-xs text-muted-dark">{offer.reason}</p>;
     return null;
   }
+
+  const usdAmount = intent?.amountUsd ?? offer.amountUsd ?? 0;
+  const line = intent?.fxLine ?? offer.fxLine ?? "";
+  const note = intent?.fxNote ?? offer.fxNote;
 
   return (
     <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Pay online</p>
-          <p className="mt-1 text-sm text-muted">
-            Card, Apple Pay or Google Pay — {formatTtd(offer.amountTtd ?? balance)}. Or pay the driver in cash or LINX on delivery.
-          </p>
+          <p className="mt-1 text-sm text-muted">Card, Apple Pay or Google Pay. Or pay the driver in cash or LINX on delivery.</p>
+          {/* Rule b2: both figures and the rate, then the foreign-transaction-fee note. */}
+          <p className="mt-2 text-base font-bold text-mist">{line}</p>
+          <p className="mt-1 text-xs text-muted-dark">{note}</p>
           {offer.mode === "test" && <p className="mt-1 text-[11px] font-bold uppercase text-amber-300">Test mode — no real money moves</p>}
         </div>
       </div>
 
       {!open && (
-        <button type="button" onClick={() => setOpen(true)} className="mt-4 w-full rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep">
-          Pay now — {formatTtd(offer.amountTtd ?? balance)}
-        </button>
+        <>
+          {error && (
+            <div role="alert" className="mt-3 rounded-md bg-red-400/10 px-4 py-3 text-sm text-red-300">
+              {error}
+            </div>
+          )}
+          <button type="button" onClick={() => setOpen(true)} className="mt-4 w-full rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep">
+            Pay now — {usd(usdAmount)}
+          </button>
+        </>
       )}
 
       {open && !intent && (
@@ -212,7 +246,7 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
             onClick={start}
             className="mt-4 w-full rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep disabled:opacity-60"
           >
-            {busy ? "One moment…" : `Continue to payment — ${formatTtd(offer.amountTtd ?? balance)}`}
+            {busy ? "One moment…" : `Continue to payment — ${usd(usdAmount)}`}
           </button>
         </div>
       )}
@@ -230,6 +264,7 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
         >
           <CheckoutForm
             invoiceNo={invoiceNo}
+            amountUsd={intent.amountUsd}
             amountTtd={intent.amountTtd}
             paymentIntentId={intent.paymentIntentId}
             onConfirmed={checkStatus}
@@ -245,6 +280,7 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
 
 function CheckoutForm({
   invoiceNo,
+  amountUsd,
   amountTtd,
   paymentIntentId,
   onConfirmed,
@@ -253,6 +289,7 @@ function CheckoutForm({
   setError,
 }: {
   invoiceNo: string;
+  amountUsd: number;
   amountTtd: number;
   paymentIntentId: string;
   onConfirmed: (pi: string) => Promise<boolean>;
@@ -277,7 +314,8 @@ function CheckoutForm({
       redirect: "if_required",
     });
     if (err) {
-      setError(err.message || "The payment did not go through. Please try again.");
+      // A card/bank refusal gets Brent's fixed wording (rule b6); a form slip keeps Stripe's own hint.
+      setError(err.type === "card_error" ? DECLINED : err.message || "The payment did not go through. Please try again.");
       setBusy(false);
       return;
     }
@@ -294,12 +332,12 @@ function CheckoutForm({
         </div>
       )}
       <button type="submit" disabled={!stripe || !elements || !ready || busy} className="mt-4 w-full rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep disabled:opacity-60">
-        {busy ? "Confirming…" : `Pay ${formatTtd(amountTtd)}`}
+        {busy ? "Confirming…" : `Pay ${usd(amountUsd)} (${formatTtd(amountTtd)})`}
       </button>
       <button type="button" onClick={onCancel} disabled={busy} className="mt-2 w-full rounded-lg border border-mist/20 bg-ink px-4 py-3 text-sm font-semibold text-muted transition-colors hover:border-mist/40">
         Cancel
       </button>
-      <p className="mt-3 text-center text-[11px] text-muted-dark">Secured by Stripe. Your card details never reach Swiftbox.</p>
+      <p className="mt-3 text-center text-[11px] text-muted-dark">Charged in US dollars. Secured by Stripe; your card details never reach Swiftbox.</p>
     </form>
   );
 }

@@ -13,18 +13,25 @@ export type PayOffer = {
   available: boolean;
   reason: string | null;
   code: string | null;
+  /** The TT$ balance owed, what the card is charged in US$ at the owner's rate, the rate, and the one line + note the checkout shows. */
   amountTtd: number | null;
+  amountUsd: number | null;
+  usdRate: number | null;
+  fxLine: string | null;
+  fxNote: string;
   currency: string;
   termsVersion: string;
   termsUrl: string;
   refundPolicyUrl: string;
-  paidByCard: { amountTtd: number; at: string; last4: string | null; brand: string | null } | null;
+  paidByCard: { amountTtd: number; amountUsd: number; usdRate: number; at: string; last4: string | null; brand: string | null } | null;
   processing: boolean;
+  /** The newest attempt's failure in the customer's words (a declined US$ charge). */
+  lastFailure: string | null;
   mode: "test" | "live" | "none";
 };
 
 export type IntentAnswer =
-  | { ok: true; clientSecret: string; publishableKey: string; paymentIntentId: string; amountTtd: number; currency: string; reused: boolean }
+  | { ok: true; clientSecret: string; publishableKey: string; paymentIntentId: string; amountTtd: number; amountUsd: number; usdRate: number; fxLine: string; fxNote: string; currency: string; reused: boolean }
   | { ok: false; error: string; code: string };
 
 export type PayStatus = { status: string; paid: boolean; error: string | null };
@@ -41,12 +48,17 @@ const UNAVAILABLE: PayOffer = {
   reason: "Card payments are not available right now.",
   code: "not_configured",
   amountTtd: null,
-  currency: "TTD",
+  amountUsd: null,
+  usdRate: null,
+  fxLine: null,
+  fxNote: "",
+  currency: "USD",
   termsVersion: "",
   termsUrl: "https://swiftboxtt.com/terms",
   refundPolicyUrl: "https://swiftboxtt.com/refund-policy",
   paidByCard: null,
   processing: false,
+  lastFailure: null,
   mode: "none",
 };
 

@@ -24,6 +24,10 @@
  *     'carried credit' — "Credit from INV-…", what the customer had paid on an
  *     invoice voided because a package did not arrive. Listed like an owner
  *     credit, under its own description, never as "Referral credit".
+ *   - ACCOUNT CREDIT (2026-11-04): line_type 'other' marked basis 'account credit'
+ *     — "Account credit – <reason>", what the owner credited the customer's account,
+ *     taken off when the invoice is issued. Listed under its own description, never
+ *     as "Referral credit". It is not a payment and not a change to any charge.
  *   - STATUS is derived from total and paid, like the stored enum, but nothing
  *     owed (a total of 0 or less) is Paid even with no payment — an invoice
  *     discounted to 0 must never read as owing.
@@ -37,6 +41,8 @@ export const DISCOUNT_BASIS = "invoice discount";
 export const OWNER_LINE_BASIS = "added by owner";
 /** The marker of a credit carried from a voided invoice (missed flight). */
 export const CARRIED_CREDIT_LINE_BASIS = "carried credit";
+/** The marker of an owner-entered account credit, applied when an invoice is issued (migration 104). */
+export const ACCOUNT_CREDIT_LINE_BASIS = "account credit";
 
 export type MoneyLine = { lineType: string; description: string; amountTtd: number; basis: string | null };
 
@@ -50,6 +56,10 @@ export function isOwnerLine(l: { lineType: string; basis: string | null }): bool
 
 export function isCarriedCreditLine(l: { lineType: string; basis: string | null }): boolean {
   return l.lineType === "other" && (l.basis ?? "").trim() === CARRIED_CREDIT_LINE_BASIS;
+}
+
+export function isAccountCreditLine(l: { lineType: string; basis: string | null }): boolean {
+  return l.lineType === "other" && (l.basis ?? "").trim() === ACCOUNT_CREDIT_LINE_BASIS;
 }
 
 /**
@@ -90,7 +100,7 @@ export type InvoiceMoney<L extends MoneyLine> = {
   discount: { amountTtd: number; reason: string } | null;
   /** ≤ 0 — referral / welcome credit (already inside totalTtd). Owner credits are NOT in it. */
   referralCreditTtd: number;
-  /** The owner's added CREDIT lines and carried credits (amountTtd < 0), each under its own description. */
+  /** The owner's added CREDIT lines, carried credits and account credits (amountTtd < 0), each under its own description. */
   ownerCredits: { description: string; amountTtd: number }[];
   /** What was charged before the discount: totalTtd + discount. */
   chargesTotalTtd: number;
@@ -104,10 +114,10 @@ export function invoiceMoney<L extends MoneyLine>(lines: L[], totalTtd: number, 
   const chargeLines = lines.filter((l) => !isDiscountLine(l));
   const discountTtd = r2(-discountLines.reduce((a, l) => a + Number(l.amountTtd), 0));
   const referralCreditTtd = r2(
-    chargeLines.reduce((a, l) => (l.lineType === "adjustment" || isOwnerLine(l) || isCarriedCreditLine(l) ? a : a + Math.min(0, Number(l.amountTtd))), 0)
+    chargeLines.reduce((a, l) => (l.lineType === "adjustment" || isOwnerLine(l) || isCarriedCreditLine(l) || isAccountCreditLine(l) ? a : a + Math.min(0, Number(l.amountTtd))), 0)
   );
   const ownerCredits = chargeLines
-    .filter((l) => (isOwnerLine(l) || isCarriedCreditLine(l)) && Number(l.amountTtd) < 0)
+    .filter((l) => (isOwnerLine(l) || isCarriedCreditLine(l) || isAccountCreditLine(l)) && Number(l.amountTtd) < 0)
     .map((l) => ({ description: l.description, amountTtd: r2(Number(l.amountTtd)) }));
   return {
     chargeLines,

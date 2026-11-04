@@ -13,7 +13,7 @@ describe("Miami address as checkout fields", () => {
       ["City", "Hialeah"],
       ["State", "FL"],
       ["ZIP", "33015-4362"],
-      ["Country", "United States"],
+      ["Country", "USA"],
     ]);
   });
 
@@ -31,7 +31,7 @@ describe("Miami address as checkout fields", () => {
       "City: Hialeah",
       "State: FL",
       "ZIP: 33015-4362",
-      "Country: United States",
+      "Country: USA",
     ]);
     expect(text).not.toMatch(/33015-(?!4362)\d{4}/);
   });

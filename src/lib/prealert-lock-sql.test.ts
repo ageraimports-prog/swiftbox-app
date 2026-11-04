@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { packageClearedSql, packageInvoicedSql, prealertLockedSql, prealertMatchedSql } from "./prealert-lock-sql";
+import { trackingMatchSql } from "./tracking";
 
 const read = (p: string) => readFileSync(join(__dirname, p), "utf8").replace(/\r\n/g, "\n");
 
@@ -19,12 +20,11 @@ describe("prealert-lock-sql — the customer's lock (cleared OR invoiced)", () =
     expect((sql.match(/JOIN swiftbox_invoices/g) ?? []).length).toBe(3);
   });
 
-  it("the link is the usual one: same user_id, TRIM'd non-blank tracking", () => {
-    for (const sql of [prealertLockedSql("sp"), prealertMatchedSql("sp")]) {
-      expect(sql).toMatch(/\.user_id = sp\.user_id/);
-      expect(sql).toMatch(/LENGTH\(TRIM\(sp\.tracking_number\)\) > 0/);
-      expect(sql).toMatch(/TRIM\(l[lm]p\.tracking\) = TRIM\(sp\.tracking_number\)/);
-    }
+  it("the link is the usual one: same user_id, same parcel (tracking.ts)", () => {
+    expect(prealertLockedSql("sp")).toMatch(/llp\.user_id = sp\.user_id/);
+    expect(prealertLockedSql("sp")).toContain(trackingMatchSql("llp.tracking", "sp.tracking_number"));
+    expect(prealertMatchedSql("sp")).toMatch(/lmp\.user_id = sp\.user_id/);
+    expect(prealertMatchedSql("sp")).toContain(trackingMatchSql("lmp.tracking", "sp.tracking_number"));
   });
 
   it("refuses an unsafe alias", () => {

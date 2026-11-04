@@ -17,6 +17,8 @@
  * only, no bound parameters. Pure, so vitest can import it. MySQL 5.6.
  */
 
+import { trackingMatchSql } from "./tracking";
+
 /** Packages received before this date were handled in the legacy system. */
 export const PREALERT_SINCE = "2026-06-01";
 
@@ -30,12 +32,10 @@ export function hasPrealertSql(alias = "p"): string {
   const a = safeAlias(alias);
   return `(EXISTS (SELECT 1 FROM mod_prealert npa
                      WHERE npa.user_id = ${a}.user_id
-                       AND LENGTH(TRIM(npa.tracking_number)) > 0
-                       AND TRIM(npa.tracking_number) = TRIM(${a}.tracking))
+                       AND ${trackingMatchSql("npa.tracking_number", `${a}.tracking`)})
         OR EXISTS (SELECT 1 FROM swiftbox_prealerts nsp
                      WHERE nsp.user_id = ${a}.user_id
-                       AND LENGTH(TRIM(nsp.tracking_number)) > 0
-                       AND TRIM(nsp.tracking_number) = TRIM(${a}.tracking)))`;
+                       AND ${trackingMatchSql("nsp.tracking_number", `${a}.tracking`)}))`;
 }
 
 /**
@@ -48,8 +48,7 @@ export function prealertLinkOn(pr: string, p: string): string {
   const a = safeAlias(pr);
   const b = safeAlias(p);
   return `(${a}.user_id = ${b}.user_id
-       AND LENGTH(TRIM(${a}.tracking_number)) > 0
-       AND TRIM(${a}.tracking_number) = TRIM(${b}.tracking))`;
+       AND ${trackingMatchSql(`${a}.tracking_number`, `${b}.tracking`)})`;
 }
 
 /** TRUE when the package needs a pre-alert from its customer. */

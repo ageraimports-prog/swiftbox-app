@@ -17,6 +17,8 @@ import { packageIdentity } from "@/lib/packageDisplay";
 import { customerChargeLabel } from "@/lib/tobago-delivery";
 import { RefText, TrackingLine } from "@/components/PackageCard";
 import type { InvoiceBreakdown } from "@/lib/consolidated-billing";
+import type { BillToView } from "@/lib/invoice-bill-to-core";
+import { BillToCard } from "@/components/BillToCard";
 
 type Line = {
   lineType: string;
@@ -78,6 +80,8 @@ type Invoice = {
   packages: Pkg[];
   /** Several packages: shipping once, government charges per package (admin rows). Optional/null → plain list. */
   breakdown?: InvoiceBreakdown | null;
+  /** The "Bill to" block. Optional/null → no card. */
+  billTo?: BillToView | null;
 };
 
 const num = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -331,6 +335,8 @@ export default function InvoiceDetailPage() {
               Part of Consolidated Bill <span className="font-bold text-green">{invoice.consolidatedBillNo}</span> {invoice.houseAccount ? "— No charge — covered by Swiftbox" : "— pay the whole bill at once."}
             </Link>
           )}
+
+          <BillToCard billTo={invoice.billTo} />
 
           {/* Invoice details */}
           <section className="rounded-lg border border-mist/10 bg-ink-2 px-4 py-1">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { fetchCbBillAdmin, getCbBill } from "@/lib/consolidated-billing";
+import { billToForUser } from "@/lib/invoice-bill-to";
 
 /** GET — one of the customer's issued Consolidated Bills, per package and per item. */
 export async function GET(_req: Request, { params }: { params: Promise<{ billNo: string }> }) {
@@ -16,5 +17,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ billNo:
   // bill 404s rather than leaking that it exists.
   const bill = await getCbBill(session.id, no, admin.customs);
   if (!bill) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ bill, weights: admin.weights });
+  return NextResponse.json({ bill, weights: admin.weights, billTo: await billToForUser(session.id) });
 }

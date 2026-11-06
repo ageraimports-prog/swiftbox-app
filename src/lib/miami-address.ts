@@ -18,7 +18,7 @@ export const MIAMI_ADDRESS = {
   city: "Hialeah",
   state: "FL",
   zip: "33015-4362",
-  country: "United States",
+  country: "USA",
 } as const;
 
 /**

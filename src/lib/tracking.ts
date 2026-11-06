@@ -18,6 +18,10 @@
  *      never both qualify: they differ by 4 digits and the window is 3 wide.
  *   2. Fallback: one value ends with the other and the shorter is 18+ characters.
  *      This is what links USPS's 26-digit 92… numbers, which rule 1 leaves whole.
+ *   3. FedEx (Brent, 2026-11-06): the warehouse stores a FedEx parcel as its 34-digit
+ *      barcode, 96…, whose LAST 12 DIGITS are the number the customer sees (Petal Sawh
+ *      #1193: 879520152332 vs WR1632 9622080430005261840700879520152332). Exactly
+ *      that shape only: a 12-digit tail of anything else is too short to trust.
  *
  * Nothing is stored: there is no key column, so the link stays computed at read
  * time, in JS by `trackingsMatch` and in SQL by `trackingMatchSql`. The two MUST
@@ -26,6 +30,11 @@
 
 /** Below this a shared ending could be chance (a 12-digit FedEx number etc.). */
 export const TRACKING_SUFFIX_MIN = 18;
+
+/** The FedEx rule's two shapes: the 34-digit barcode and the customer's 12-digit number. */
+const FEDEX_BARCODE = /^96\d{32}$/;
+const FEDEX_NUMBER = /^\d{12}$/;
+const FEDEX_NUMBER_LENGTH = 12;
 
 /** Upper-case, every space and dash removed. Blank stays blank. */
 export function normalizeTracking(raw: unknown): string {
@@ -47,12 +56,18 @@ export function trackingKey(raw: unknown): string {
   return stripImpbPrefix(normalizeTracking(raw));
 }
 
-/** The same parcel? Rule 1 or the fallback. Blank never matches. */
+/** Rule 3: one value is a FedEx barcode, the other the 12-digit number it ends with. */
+function fedexBarcodeMatches(barcode: string, number: string): boolean {
+  return FEDEX_BARCODE.test(barcode) && FEDEX_NUMBER.test(number) && barcode.endsWith(number);
+}
+
+/** The same parcel? Rule 1, the fallback or the FedEx rule. Blank never matches. */
 export function trackingsMatch(a: unknown, b: unknown): boolean {
   const x = normalizeTracking(a);
   const y = normalizeTracking(b);
   if (!x || !y) return false;
   if (x === y || stripImpbPrefix(x) === stripImpbPrefix(y)) return true;
+  if (fedexBarcodeMatches(x, y) || fedexBarcodeMatches(y, x)) return true;
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
   return short.length >= TRACKING_SUFFIX_MIN && long.endsWith(short);
 }
@@ -96,16 +111,21 @@ function keySql(n: string): string {
  * `trackingsMatch` as a SQL condition between two columns (or a column and a
  * :named parameter). Blank never matches. The CALLER scopes it to one customer
  * (user_id = user_id); nothing here may be used across customers. A plain value
- * against a barcode is the suffix branch; the last branch is two barcodes of one
- * parcel with different ZIP forms. MySQL 5.6-safe: no CTEs, one correlated row.
+ * against a barcode is the suffix branch; then two barcodes of one parcel with
+ * different ZIP forms; the last two are the FedEx rule, each way round. MySQL
+ * 5.6-safe: no CTEs, one correlated row.
  */
 export function trackingMatchSql(a: string, b: string): string {
   const A = cleanedSql(operand(a));
   const B = cleanedSql(operand(b));
   const m = TRACKING_SUFFIX_MIN;
+  const fedex = (barcode: string, number: string) =>
+    `(${barcode} REGEXP '^96[0-9]{32}$' AND ${number} REGEXP '^[0-9]{${FEDEX_NUMBER_LENGTH}}$' AND RIGHT(${barcode}, ${FEDEX_NUMBER_LENGTH}) = ${number})`;
   return `(LENGTH(${A}) > 0 AND LENGTH(${B}) > 0 AND (
          ${A} = ${B}
       OR (LENGTH(${A}) >= ${m} AND LENGTH(${B}) > LENGTH(${A}) AND RIGHT(${B}, LENGTH(${A})) = ${A})
       OR (LENGTH(${B}) >= ${m} AND LENGTH(${A}) > LENGTH(${B}) AND RIGHT(${A}, LENGTH(${B})) = ${B})
-      OR (${A} LIKE '420%' AND ${B} LIKE '420%' AND (${keySql(A)}) = (${keySql(B)}))))`;
+      OR (${A} LIKE '420%' AND ${B} LIKE '420%' AND (${keySql(A)}) = (${keySql(B)}))
+      OR ${fedex(A, B)}
+      OR ${fedex(B, A)}))`;
 }

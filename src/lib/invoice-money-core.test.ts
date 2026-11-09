@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DISCOUNT_BASIS, OWNER_LINE_BASIS, discountRowLabel, invoiceMoney, invoicePaymentStatus } from "./invoice-money-core";
+import { ACCOUNT_CREDIT_LINE_BASIS, DISCOUNT_BASIS, OWNER_LINE_BASIS, discountRowLabel, invoiceMoney, invoicePaymentStatus } from "./invoice-money-core";
 
 // invoice-money-core.ts is CODE-IDENTICAL to the admin's lib/invoice-money-core.ts
 // (tested there by scripts/test-invoice-discount.ts). These cases are the same.
@@ -53,6 +53,23 @@ describe("invoiceMoney", () => {
     expect(m.referralCreditTtd).toBe(-50);
     expect(m.ownerCredits).toEqual([{ description: "Goodwill credit", amountTtd: -10 }]);
     expect(m.chargeLines).toHaveLength(5);
+  });
+
+  it("an account credit shows under its own words, never as Referral credit", () => {
+    const credit = [
+      { lineType: "freight", description: "Freight", amountTtd: 100, basis: null },
+      { lineType: "other", description: "Account credit – Overcharge", amountTtd: -29.85, basis: ACCOUNT_CREDIT_LINE_BASIS },
+    ];
+    const m = invoiceMoney(credit, 70.15, 0);
+    expect(m.referralCreditTtd).toBe(0);
+    expect(m.ownerCredits).toEqual([{ description: "Account credit – Overcharge", amountTtd: -29.85 }]);
+    expect(m.balance).toBe(70.15);
+  });
+
+  it("an invoice fully covered by an account credit reads Paid", () => {
+    const m = invoiceMoney([{ lineType: "other", description: "Account credit – x", amountTtd: -10, basis: ACCOUNT_CREDIT_LINE_BASIS }], 0, 0);
+    expect(m.balance).toBe(0);
+    expect(m.status).toBe("paid");
   });
 
   it("the discount row shows its label once", () => {

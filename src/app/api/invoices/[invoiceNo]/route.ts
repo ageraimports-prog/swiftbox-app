@@ -5,6 +5,7 @@ import { getSession } from "@/lib/session";
 import { billingModeOf } from "@/lib/invoice-line";
 import { cbHiddenInvoiceIds, cbBillForInvoice, fetchInvoiceBreakdown } from "@/lib/consolidated-billing";
 import { invoiceMoney } from "@/lib/invoice-money-core";
+import { billToForUser } from "@/lib/invoice-bill-to";
 
 type HeaderRow = {
   house_account: number;
@@ -150,6 +151,8 @@ export async function GET(
 
   return NextResponse.json({
     invoice: {
+      // The customer's own name, SWIFT code, primary address and phones, read now.
+      billTo: await billToForUser(session.id),
       invoiceNo: h.invoice_no,
       scope: h.scope,
       shipNo: h.ship_no,

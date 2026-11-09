@@ -7,6 +7,8 @@ import { STATUS_BADGE, formatDate, formatTtd, type InvoiceStatus } from "@/lib/i
 import type { CbBillDetail, CbBillWeights } from "@/lib/consolidated-billing";
 import { formatExactLb } from "@/lib/consolidatedBilling";
 import { CbWeightsPanel } from "@/components/CbWeightsPanel";
+import { BillToCard } from "@/components/BillToCard";
+import type { BillToView } from "@/lib/invoice-bill-to-core";
 import { formatDescription, packagesSummary, shortRef, trackingNumbers } from "@/lib/packageDisplay";
 import { RefText, TrackingLine } from "@/components/PackageCard";
 
@@ -24,6 +26,7 @@ export default function BillPage() {
   const { billNo } = useParams<{ billNo: string }>();
   const [bill, setBill] = React.useState<CbBillDetail | null>(null);
   const [weights, setWeights] = React.useState<CbBillWeights | null>(null);
+  const [billTo, setBillTo] = React.useState<BillToView | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -34,7 +37,7 @@ export default function BillPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((d) => { if (!cancelled) { setBill(d.bill); setWeights(d.weights ?? null); } })
+      .then((d) => { if (!cancelled) { setBill(d.bill); setWeights(d.weights ?? null); setBillTo(d.billTo ?? null); } })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error && e.message === "notfound" ? "We couldn't find that bill." : "Couldn't load this bill. Please try again.");
       });
@@ -85,6 +88,8 @@ export default function BillPage() {
           >
             Download PDF
           </a>
+
+          <BillToCard billTo={billTo} />
 
           {bill.packages.map((p) => {
             const s = p.section;

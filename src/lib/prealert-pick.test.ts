@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hasPrealertSql, needsPrealertSql, PREALERT_SINCE } from "./prealert-needs";
+import { trackingMatchSql } from "./tracking";
 import {
   arrivalDateLabel,
   carrierLabel,
@@ -28,12 +29,12 @@ describe("needsPrealertSql", () => {
     ]) expect(s).toContain(piece);
     expect(s).toContain(`NOT ${flat(hasPrealertSql("p"))}`);
   });
-  it("links pre-alerts the admin's way: same customer, TRIM'd non-blank tracking, both tables", () => {
+  it("links pre-alerts the admin's way: same customer, same parcel (tracking.ts), both tables", () => {
     const s = flat(hasPrealertSql("p"));
     expect(s).toContain("FROM mod_prealert npa WHERE npa.user_id = p.user_id");
     expect(s).toContain("FROM swiftbox_prealerts nsp WHERE nsp.user_id = p.user_id");
-    expect(s).toContain("TRIM(nsp.tracking_number) = TRIM(p.tracking)");
-    expect(s).toContain("LENGTH(TRIM(nsp.tracking_number)) > 0");
+    expect(s).toContain(flat(trackingMatchSql("nsp.tracking_number", "p.tracking")));
+    expect(s).toContain(flat(trackingMatchSql("npa.tracking_number", "p.tracking")));
   });
   it("refuses an unsafe alias", () => {
     expect(() => needsPrealertSql("p;--")).toThrow();

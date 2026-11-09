@@ -11,10 +11,12 @@
  *     that ship_no.
  * Change it there and here together.
  *
- * The pre-alert ↔ package link is the usual one (prealert-needs.ts): same
- * user_id, TRIM'd non-blank tracking. Literals only, no bound parameters.
+ * The pre-alert ↔ package link is the usual one (tracking.ts): same user_id, same
+ * parcel, USPS's 420+ZIP barcode included. Literals only, no bound parameters.
  * Pure, so vitest can import it. MySQL 5.6: correlated subqueries only.
  */
+
+import { trackingMatchSql } from "./tracking";
 
 function safeAlias(alias: string): string {
   if (!/^[a-z][a-z0-9_]*$/i.test(alias)) throw new Error("Invalid SQL alias");
@@ -48,8 +50,7 @@ export function packageInvoicedSql(pk: string): string {
 /** The link from pre-alert `sp` to package `pk`. */
 function linkOn(sp: string, pk: string): string {
   return `(${pk}.user_id = ${sp}.user_id
-       AND LENGTH(TRIM(${sp}.tracking_number)) > 0
-       AND TRIM(${pk}.tracking) = TRIM(${sp}.tracking_number))`;
+       AND ${trackingMatchSql(`${pk}.tracking`, `${sp}.tracking_number`)})`;
 }
 
 /** TRUE when pre-alert `sp` matches at least one package. */

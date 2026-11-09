@@ -4,6 +4,7 @@ import { execute, query } from "@/lib/db";
 import type { SessionUser } from "@/lib/session";
 import { PLAY_DEMO_EMAIL, PLAY_DEMO_TRACKING_PREFIX } from "@/lib/prealert-pick";
 import { packageClearedSql, packageInvoicedSql, prealertLockedSql } from "@/lib/prealert-lock-sql";
+import { trackingMatchSql } from "@/lib/tracking";
 import {
   cancelAuditChanges,
   canonicalFromRow,
@@ -95,7 +96,7 @@ export async function linkedPackagesFor(userId: number, tracking: string): Promi
             ${packageClearedSql("pk")} AS cleared,
             ${packageInvoicedSql("pk")} AS invoiced
        FROM mod_packages pk
-      WHERE pk.user_id = :userId AND TRIM(pk.tracking) = :t
+      WHERE pk.user_id = :userId AND ${trackingMatchSql("pk.tracking", ":t")}
       ORDER BY pk.pk_id DESC`,
     { userId, t }
   );

@@ -357,11 +357,18 @@ export function cbGroupRankOfCode(code: number): number {
   return code >= CB_GROUP_CODE.OUT_FOR_DELIVERY ? code : code === CB_GROUP_CODE.READY ? 4 : Math.max(0, Math.min(2, code));
 }
 
-/** The rank a released group shows: its last-identified member's, never below the group's floor. */
+/**
+ * The rank a released group shows: its last-identified member's, never below the
+ * group's floor — but the floor can only hold a group at a stage it really
+ * reached BEFORE customs (In Transit / Awaiting Clearance). "Cleared – Ready to
+ * Deliver" shows only while the last-identified member really is Ready (on an
+ * issued invoice); a stored Ready floor alone never shows it (2026-11-07: group
+ * #62 read Cleared while every member was Awaiting Clearance).
+ */
 export function cbGroupShownRank(m: Pick<CbMembership, "groupLast" | "groupFloor">): number | null {
   if (m.groupLast == null || !Number.isFinite(m.groupLast)) return null;
   const rank = cbGroupRankOfCode(m.groupLast);
-  return rank >= 5 ? rank : Math.max(rank, m.groupFloor ?? 0);
+  return rank >= 4 ? rank : Math.max(rank, Math.min(m.groupFloor ?? 0, 2));
 }
 
 export type CustomerFacingInput = {

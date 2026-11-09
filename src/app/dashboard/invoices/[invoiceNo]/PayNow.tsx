@@ -22,6 +22,13 @@ import { formatTtd } from "@/lib/invoice-line";
  *   5. …/pay?paymentIntentId= — the admin reads Stripe and records the payment
  *      once, so "Paid" shows even before the webhook lands; `onPaid` reloads
  *      the invoice. A decline shows the fixed US$ wording from the admin.
+ *
+ * PayPal (admin PAYPAL_PAYMENTS_PLAN.md): when the admin's offer carries
+ * `paypal.available`, a "Pay with PayPal" button sits beside the card one (or
+ * alone when card payments are off) after the SAME terms tick. It is a full-page
+ * redirect to PayPal (no popup — the installed app and the TWA block popups);
+ * PayPal sends the customer back to /pay/paypal/return, which captures on the
+ * server and says what happened.
  */
 
 type Offer = {
@@ -40,6 +47,24 @@ type Offer = {
   processing: boolean;
   lastFailure: string | null;
   mode: "test" | "live" | "none";
+  /** PayPal (admin PAYPAL_PAYMENTS_PLAN.md) — its own switch, same rate, same terms. */
+  paypal?: PayPalOffer;
+};
+
+type PayPalOffer = {
+  available: boolean;
+  reason: string | null;
+  code: string | null;
+  amountTtd: number | null;
+  amountUsd: number | null;
+  usdRate: number | null;
+  fxLine: string | null;
+  fxNote: string;
+  termsVersion: string;
+  paid: { amountTtd: number; amountUsd: number } | null;
+  pending: boolean;
+  lastFailure: string | null;
+  mode: "sandbox" | "live" | "none";
 };
 
 type Intent = { clientSecret: string; publishableKey: string; paymentIntentId: string; amountTtd: number; amountUsd: number; fxLine: string; fxNote: string };
@@ -65,6 +90,16 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
   const [error, setError] = React.useState<string | null>(null);
   const [done, setDone] = React.useState<"paid" | "processing" | null>(null);
   const [open, setOpen] = React.useState(autoOpen);
+  const [ppBusy, setPpBusy] = React.useState(false);
+
+  // Back-button from PayPal restores this page from the bfcache with the spinner on — clear it.
+  React.useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPpBusy(false);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
 
   // 1. The offer. Also the return leg of a 3-D Secure redirect.
   React.useEffect(() => {
@@ -90,6 +125,7 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
         if (!cancelled && o) {
           setOffer(o);
           if (o.lastFailure && !o.paidByCard) setError(o.lastFailure);
+          else if (o.paypal?.lastFailure && !o.paypal.paid) setError(o.paypal.lastFailure);
         }
       })
       .catch(() => undefined);
@@ -130,6 +166,30 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
     }
     setError("We're still confirming your payment. Please check back in a minute — don't pay twice.");
     return false;
+  }
+
+  /** PayPal: the admin makes the order; we leave for PayPal's page (full redirect). */
+  async function startPayPal() {
+    if (!offer?.paypal?.available || !agreed) return;
+    setPpBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceNo)}/pay/paypal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ terms: { version: offer.paypal.termsVersion, accepted: true } }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; approveUrl?: string; error?: string };
+      if (!res.ok || !data.ok || !data.approveUrl) {
+        setError(data.error || "Couldn't start the PayPal payment. Please try again.");
+        setPpBusy(false);
+        return;
+      }
+      window.location.assign(data.approveUrl);
+    } catch {
+      setError("Couldn't start the PayPal payment. Please try again.");
+      setPpBusy(false);
+    }
   }
 
   async function start() {
@@ -182,27 +242,42 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
       </section>
     );
   }
-  if (offer.paidByCard) return null;
-  if (!offer.available) {
+  const pp = offer.paypal;
+  if (pp?.pending) {
+    return (
+      <section className="rounded-lg border border-amber-300/30 bg-amber-300/10 p-5 text-sm text-mist">
+        <p className="font-bold text-amber-300">Payment pending</p>
+        <p className="mt-1 text-muted">PayPal is still processing your payment. We&rsquo;ll mark the invoice paid as soon as it clears &mdash; please don&rsquo;t pay again.</p>
+      </section>
+    );
+  }
+  if (offer.paidByCard || pp?.paid) return null;
+  const cardOn = offer.available;
+  const ppOn = !!pp?.available;
+  if (!cardOn && !ppOn) {
     // Quiet unless the reason is one the customer can act on. No rate set → nothing at all (rule b7).
     if (offer.code === "cb_held") return <p className="text-xs text-muted-dark">{offer.reason}</p>;
+    if (pp?.code === "cb_held") return <p className="text-xs text-muted-dark">{pp.reason}</p>;
     return null;
   }
 
-  const usdAmount = intent?.amountUsd ?? offer.amountUsd ?? 0;
-  const line = intent?.fxLine ?? offer.fxLine ?? "";
-  const note = intent?.fxNote ?? offer.fxNote;
+  const usdAmount = intent?.amountUsd ?? (cardOn ? offer.amountUsd : pp?.amountUsd) ?? 0;
+  const line = intent?.fxLine ?? (cardOn ? offer.fxLine : pp?.fxLine) ?? "";
+  // With PayPal on, the note speaks of "you", not "your card" (it covers both).
+  const note = intent?.fxNote ?? (ppOn ? pp!.fxNote : offer.fxNote);
+  const ways = cardOn && ppOn ? "Card, Apple Pay, Google Pay or PayPal." : cardOn ? "Card, Apple Pay or Google Pay." : "PayPal.";
+  const testMode = (cardOn && offer.mode === "test") || (ppOn && pp!.mode === "sandbox");
 
   return (
     <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Pay online</p>
-          <p className="mt-1 text-sm text-muted">Card, Apple Pay or Google Pay. Or pay the driver in cash or LINX on delivery.</p>
+          <p className="mt-1 text-sm text-muted">{ways} Or pay the driver in cash or LINX on delivery.</p>
           {/* Rule b2: both figures and the rate, then the foreign-transaction-fee note. */}
           <p className="mt-2 text-base font-bold text-mist">{line}</p>
           <p className="mt-1 text-xs text-muted-dark">{note}</p>
-          {offer.mode === "test" && <p className="mt-1 text-[11px] font-bold uppercase text-amber-300">Test mode — no real money moves</p>}
+          {testMode && <p className="mt-1 text-[11px] font-bold uppercase text-amber-300">Test mode — no real money moves</p>}
         </div>
       </div>
 
@@ -240,14 +315,29 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
               {error}
             </div>
           )}
-          <button
-            type="button"
-            disabled={!agreed || busy}
-            onClick={start}
-            className="mt-4 w-full rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep disabled:opacity-60"
-          >
-            {busy ? "One moment…" : `Continue to payment — ${usd(usdAmount)}`}
-          </button>
+          {cardOn && (
+            <button
+              type="button"
+              disabled={!agreed || busy || ppBusy}
+              onClick={start}
+              className="mt-4 w-full rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-green-deep disabled:opacity-60"
+            >
+              {busy ? "One moment…" : ppOn ? `Pay by card — ${usd(usdAmount)}` : `Continue to payment — ${usd(usdAmount)}`}
+            </button>
+          )}
+          {ppOn && (
+            <>
+              <button
+                type="button"
+                disabled={!agreed || busy || ppBusy}
+                onClick={startPayPal}
+                className={`${cardOn ? "mt-2" : "mt-4"} w-full rounded-lg bg-[#FFC439] px-4 py-3 text-sm font-bold text-[#003087] transition-colors hover:bg-[#f2b72f] disabled:opacity-60`}
+              >
+                {ppBusy ? "Taking you to PayPal…" : `Pay with PayPal — ${usd(pp!.amountUsd ?? usdAmount)}`}
+              </button>
+              <p className="mt-2 text-center text-[11px] text-muted-dark">You&rsquo;ll go to PayPal to pay, then come straight back here.</p>
+            </>
+          )}
         </div>
       )}
 

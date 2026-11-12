@@ -273,7 +273,7 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Pay online</p>
-          <p className="mt-1 text-sm text-muted">{ways} Or pay the driver in cash or LINX on delivery.</p>
+          <p className="mt-1 text-sm text-muted">{ways} Or pay the driver in cash on delivery.</p>
           {/* Rule b2: both figures and the rate, then the foreign-transaction-fee note. */}
           <p className="mt-2 text-base font-bold text-mist">{line}</p>
           <p className="mt-1 text-xs text-muted-dark">{note}</p>

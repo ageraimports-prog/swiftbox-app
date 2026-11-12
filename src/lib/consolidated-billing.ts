@@ -46,6 +46,20 @@ const G = "swiftbox_cb_groups";
 const M = "swiftbox_cb_group_packages";
 const B = "swiftbox_cb_bills";
 const BI = "swiftbox_cb_bill_invoices";
+
+/**
+ * ISSUE = VISIBLE AND PAYABLE (Brent, 2026-11-12). A bill IS issued once every
+ * invoice on it is issued, even if its stored row has not caught up yet — the same
+ * derivation as the admin's effectiveBillLifecycleSql (lib/consolidated-billing-claims.ts
+ * there). A combined invoice the customer was sent can never be hidden or held by a
+ * lagging bill row (INV-000213 / CB-000040, 12 Nov 2026).
+ */
+export function billIssuedSql(b: string): string {
+  return `(${b}.lifecycle = 'issued' OR (${b}.lifecycle = 'draft'
+      AND EXISTS (SELECT 1 FROM ${BI} ebi WHERE ebi.bill_id = ${b}.bill_id)
+      AND NOT EXISTS (SELECT 1 FROM ${BI} ebi JOIN swiftbox_invoices ei ON ei.invoice_id = ebi.invoice_id
+                       WHERE ebi.bill_id = ${b}.bill_id AND ei.lifecycle <> 'issued')))`;
+}
 /**
  * Buy For Me is completely separate (Brent, 27 Sep 2026): a package bought for
  * the customer is never shown as waiting for a group, even in the moment between
@@ -323,16 +337,20 @@ export async function cbPackageFacts(userId: number): Promise<Map<number, CbPack
  * to see until the group's bill is issued).
  */
 export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
+  // Only a LEGACY bill holding several invoices is shown as the bill instead of its
+  // invoices. A bill of ONE invoice (every bill since 2026-10-22) IS that invoice:
+  // it is listed, opened and paid like any other (Brent, 2026-11-12).
   const onBill = await safe(
     () => query<{ invoice_id: number }>(
-      `SELECT bi.invoice_id FROM ${BI} bi JOIN ${B} b ON b.bill_id = bi.bill_id WHERE b.user_id = :userId`,
+      `SELECT bi.invoice_id FROM ${BI} bi JOIN ${B} b ON b.bill_id = bi.bill_id
+        WHERE b.user_id = :userId AND (SELECT COUNT(*) FROM ${BI} x WHERE x.bill_id = b.bill_id) > 1`,
       { userId }
     ),
     []
   );
   const rows = await safe(
-    () => excludingBfm("m.pk_id", (notBfm) => query<{ invoice_id: number; cb_state: string | null; cb_bill_id: number | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null }>(
-      `SELECT ip.invoice_id, ${CB_MEMBERSHIP_SELECT}
+    () => excludingBfm("m.pk_id", (notBfm) => query<{ invoice_id: number; cb_state: string | null; cb_bill_id: number | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_bill_effective_issued: number | null }>(
+      `SELECT ip.invoice_id, ${CB_MEMBERSHIP_SELECT}, ${billIssuedSql("b")} AS cb_bill_effective_issued
          FROM swiftbox_invoice_packages ip
          JOIN swiftbox_invoices i ON i.invoice_id = ip.invoice_id AND i.user_id = :userId
          LEFT JOIN ${M} m ON m.pk_id = ip.pk_id AND m.removed_at IS NULL${notBfm}
@@ -345,7 +363,9 @@ export async function cbHiddenInvoiceIds(userId: number): Promise<Set<number>> {
   const allHeld = new Map<number, boolean>();
   for (const r of rows) {
     const id = Number(r.invoice_id);
-    allHeld.set(id, (allHeld.get(id) ?? true) && isCbHeld(cbMembershipFromRow(r)));
+    // A bill whose every invoice is issued reads issued, whatever its stored row says.
+    const row = Number(r.cb_bill_effective_issued) === 1 ? { ...r, cb_bill_lifecycle: "issued" } : r;
+    allHeld.set(id, (allHeld.get(id) ?? true) && isCbHeld(cbMembershipFromRow(row)));
   }
   const held = [...allHeld].filter(([, h]) => h).map(([id]) => id);
   return new Set([...onBill.map((r) => Number(r.invoice_id)), ...held]);
@@ -397,7 +417,17 @@ function displayLines(k: ChildRow, lines: BillLine[]): ChildLine[] {
 /** One package on a bill, for the list card's headline ("Shoes + 4 more") and tracking line. */
 export type CbBillListPackage = { wr: string; tracking: string; commodities: string };
 
-export type CbBillSummary = { billNo: string; date: string; packages: CbBillListPackage[]; totals: BillTotals };
+/** An invoice on a bill, with what is still owed on it (house = 0) — the bill page's Pay buttons. */
+export type CbBillInvoice = { invoiceNo: string; balance: number; houseAccount: boolean };
+
+export type CbBillSummary = { billNo: string; date: string; packages: CbBillListPackage[]; totals: BillTotals; invoices: CbBillInvoice[] };
+
+function billInvoices(kids: ChildRow[]): CbBillInvoice[] {
+  return kids.map((k) => {
+    const house = Number(k.house_account) === 1;
+    return { invoiceNo: k.invoice_no, houseAccount: house, balance: house ? 0 : Math.max(0, Math.round((Number(k.total_ttd) - Number(k.amount_paid)) * 100) / 100) };
+  });
+}
 
 /** The packages each bill's invoices cover, reached only through the bill's own links. */
 async function billPackages(billIds: number[]): Promise<Map<number, CbBillListPackage[]>> {
@@ -424,7 +454,7 @@ export async function listCbBills(userId: number): Promise<CbBillSummary[]> {
   const bills = await safe(
     () => query<{ bill_id: number; bill_no: string; issued_at: string | null; created_at: string | null }>(
       `SELECT bill_id, bill_no, issued_at, created_at FROM ${B}
-        WHERE user_id = :userId AND lifecycle = 'issued' ORDER BY bill_id DESC`,
+        WHERE user_id = :userId AND ${billIssuedSql(B)} ORDER BY bill_id DESC`,
       { userId }
     ),
     []
@@ -441,6 +471,7 @@ export async function listCbBills(userId: number): Promise<CbBillSummary[]> {
       totals: billTotals(kids.map((k) => ({
         houseAccount: Number(k.house_account) === 1, totalTtd: Number(k.total_ttd), amountPaid: Number(k.amount_paid), lines: lines.get(Number(k.invoice_id)) ?? [],
       }))),
+      invoices: billInvoices(kids),
     });
   }
   return out;
@@ -456,7 +487,7 @@ export type CbBillPackage = {
   section: PackageSection;
 };
 
-export type CbBillDetail = { billNo: string; date: string; packages: CbBillPackage[]; totals: BillTotals };
+export type CbBillDetail = { billNo: string; date: string; packages: CbBillPackage[]; totals: BillTotals; invoices: CbBillInvoice[] };
 
 /**
  * One ISSUED bill of this customer's, computed live from its invoices. Null = not
@@ -472,7 +503,7 @@ export async function getCbBill(
   if (!/^CB-\d{6,}$/.test(billNo)) return null;
   const b = (await safe(
     () => query<{ bill_id: number; bill_no: string; issued_at: string | null }>(
-      `SELECT bill_id, bill_no, issued_at FROM ${B} WHERE bill_no = :no AND user_id = :userId AND lifecycle = 'issued' LIMIT 1`,
+      `SELECT bill_id, bill_no, issued_at FROM ${B} WHERE bill_no = :no AND user_id = :userId AND ${billIssuedSql(B)} LIMIT 1`,
       { no: billNo, userId }
     ),
     []
@@ -538,6 +569,7 @@ export async function getCbBill(
     totals: billTotals(kids.map((k) => ({
       houseAccount: Number(k.house_account) === 1, totalTtd: Number(k.total_ttd), amountPaid: Number(k.amount_paid), lines: lines.get(Number(k.invoice_id)) ?? [],
     }))),
+    invoices: billInvoices(kids),
   };
 }
 
@@ -645,7 +677,7 @@ export async function fetchCbBillWeights(userId: number, billNo: string): Promis
 export async function cbBillForInvoice(invoiceId: number): Promise<{ billNo: string; issued: boolean } | null> {
   const r = await safe(
     () => query<{ bill_no: string; lifecycle: string | null }>(
-      `SELECT b.bill_no, b.lifecycle FROM ${BI} bi JOIN ${B} b ON b.bill_id = bi.bill_id WHERE bi.invoice_id = :id LIMIT 1`,
+      `SELECT b.bill_no, IF(${billIssuedSql("b")}, 'issued', b.lifecycle) AS lifecycle FROM ${BI} bi JOIN ${B} b ON b.bill_id = bi.bill_id WHERE bi.invoice_id = :id LIMIT 1`,
       { id: invoiceId }
     ),
     []

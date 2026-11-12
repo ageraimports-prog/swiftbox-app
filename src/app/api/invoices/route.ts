@@ -49,7 +49,9 @@ export async function GET() {
     { userId: session.id }
   );
 
-  // Consolidated Billing: a bill's invoices are shown AS the bill, and an
+  // Consolidated Billing (Issue = visible and payable, Brent 2026-11-12): a combined
+  // invoice IS an invoice — listed, opened and paid like any other once issued. Only a
+  // LEGACY bill holding several invoices is shown as the bill instead of them, and an
   // invoice whose packages are still waiting for their group is not shown yet.
   const hidden = await cbHiddenInvoiceIds(session.id).catch(() => new Set<number>());
   const bills = await listCbBills(session.id).catch(() => []);
@@ -101,7 +103,7 @@ export async function GET() {
   return NextResponse.json({
     invoices,
     credits,
-    bills: bills.map((b) => ({
+    bills: bills.filter((b) => b.invoices.length > 1).map((b) => ({
       billNo: b.billNo,
       date: b.date,
       packageCount: b.packages.length,

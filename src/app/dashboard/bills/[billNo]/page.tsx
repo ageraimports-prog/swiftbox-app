@@ -89,6 +89,18 @@ export default function BillPage() {
             Download PDF
           </a>
 
+          {/* Issue = visible and payable (Brent, 2026-11-12): each invoice on the bill opens with Pay now. */}
+          {(bill.invoices ?? []).filter((i) => !i.houseAccount && i.balance > 0).map((i) => (
+            <Link
+              key={i.invoiceNo}
+              href={`/dashboard/invoices/${encodeURIComponent(i.invoiceNo)}?pay=1`}
+              className="flex items-center justify-between gap-3 rounded-lg bg-green px-4 py-3 text-sm font-bold text-ink"
+            >
+              <span>Pay invoice {i.invoiceNo}</span>
+              <span>{formatTtd(i.balance)}</span>
+            </Link>
+          ))}
+
           <BillToCard billTo={billTo} />
 
           {bill.packages.map((p) => {

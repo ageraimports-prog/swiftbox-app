@@ -66,7 +66,7 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
       "Saved with Consolidated Billing: US$17.57 (TT$119.48) — 4 lb of freight + US$8.00 of insurance"
     );
     expect(copy.cbSavingLine(0, 1, 6.8, 1)).toBe("Saved with Consolidated Billing: US$1.00 (TT$6.80) — US$1.00 of insurance");
-    expect(copy.cbGroupInsuranceLabel(90)).toBe("Insurance (group, combined value US$90.00)");
+    expect(copy.cbGroupInsuranceLabel()).toBe("Insurance (one charge for all packages)");
     expect(copy.cbSavingLine(0, 0, 0)).toBeNull();
     expect(copy.formatExactLb(0.5)).toBe("0.5 lb");
     expect(copy.formatExactLb(1.25)).toBe("1.25 lb");
@@ -133,7 +133,7 @@ const SAMPLES: Record<string, unknown[][]> = {
   cbWhatsAppUrl: [["SWIFT-0406"]],
   formatExactLb: [[0.5]],
   cbSavingLine: [[4, 17.57, 119.48, 8]],
-  cbGroupInsuranceLabel: [[90]],
+  cbGroupInsuranceLabel: [[]],
   cbLifetimeSavingLine: [[123.4], [0]],
   cbInvoiceSavingLine: [[36.65], [0]],
 };

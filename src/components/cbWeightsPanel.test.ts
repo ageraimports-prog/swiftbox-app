@@ -43,7 +43,10 @@ describe("Consolidated Bill combined-weight panel", () => {
     expect(html).toContain("16 lb");
     expect(html).toContain("Billed separately (each package rounded up)");
     expect(html).toContain("18 lb");
-    expect(html).toContain("Insurance (group, combined value US$155.26)");
+    // Even with the value in the payload, customers never see the combined declared value.
+    expect(html).toContain("Insurance (one charge for all packages)");
+    expect(html).not.toContain("155.26");
+    expect(html).not.toMatch(/combined (declared )?value/i);
     expect(html).toContain("Insurance billed separately (per package)");
     expect(html).toContain("Saved with Consolidated Billing: US$18.79 (TT$127.77) — 2 lb of freight + US$14.00 of insurance");
   });
@@ -53,7 +56,7 @@ describe("Consolidated Bill combined-weight panel", () => {
     expect(html).toContain("data-cb-weights-panel");
     expect(html).toContain("15.5 lb");
     expect(html).toContain("16 lb");
-    expect(html).toContain("Insurance (group)");
+    expect(html).toContain("Insurance (one charge for all packages)");
     expect(html).toContain("Each package is still covered on its own, up to US$500.");
     expect(html).toContain("Saved with Consolidated Billing: US$18.79 (TT$127.77) — 2 lb of freight");
     // Absent figures drop their own rows rather than printing "undefined".

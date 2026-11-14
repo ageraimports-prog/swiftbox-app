@@ -39,11 +39,11 @@ export function cbWeightsPanelView(w: unknown): CbWeightsPanelView | null {
 
   const ins = o.insurance && typeof o.insurance === "object" ? (o.insurance as Record<string, unknown>) : null;
   const charged = num(ins?.chargedUsd);
-  const combined = num(ins?.combinedValueUsd);
   const insSaving = num(ins?.savingUsd) ?? 0;
   const insSeparate = num(ins?.separateUsd);
   if (charged != null) {
-    rows.push({ label: combined != null ? cbGroupInsuranceLabel(combined) : "Insurance (group)", value: `US$${charged.toFixed(2)}`, strong: true });
+    // The charge only — never the combined declared value, even if a payload carries it (Brent, 2026-11-14).
+    rows.push({ label: cbGroupInsuranceLabel(), value: `US$${charged.toFixed(2)}`, strong: true });
     if (insSaving > 0 && insSeparate != null) rows.push({ label: "Insurance billed separately (per package)", value: `US$${insSeparate.toFixed(2)}` });
   }
   const cap = num(ins?.coverCapUsd);

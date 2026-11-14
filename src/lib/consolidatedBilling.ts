@@ -192,9 +192,13 @@ export function cbSavingLine(savingLb: number, savingUsd: number, savingTtd: num
   return `Saved with Consolidated Billing: US$${savingUsd.toFixed(2)} (TT$${savingTtd.toFixed(2)})${parts.length ? ` — ${parts.join(" + ")}` : ""}`;
 }
 
-/** "Insurance (group, combined value US$90.00)" — the admin's groupInsuranceLabel, word for word. */
-export function cbGroupInsuranceLabel(combinedValueUsd: number): string {
-  return `Insurance (group, combined value US$${combinedValueUsd.toFixed(2)})`;
+/**
+ * The group insurance row's label. Customers NEVER see the combined declared value
+ * (Brent, 2026-11-14) — the row shows the charge only, beside this label. (The
+ * admin's staff-only bill screen keeps groupInsuranceLabel with the value.)
+ */
+export function cbGroupInsuranceLabel(): string {
+  return "Insurance (one charge for all packages)";
 }
 
 /* ── Dashboard card + savings counter (Brent, 2026-11-13). No count, place, timing or declared value. ── */

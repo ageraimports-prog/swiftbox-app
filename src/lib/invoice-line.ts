@@ -77,7 +77,22 @@ export function formatQtyRate(l: {
  * `main` is the basis text for a hand-edited line ("adjusted by hand"), and empty
  * only for a pre-019 line that never carried one. Either way nothing is claimed.
  */
-export function invoiceLineBasis(l: {
+/**
+ * Customers never see the combined declared value (Brent, 2026-11-14). Group
+ * insurance lines written before then stored it in their wording
+ * ("CB-000005: share of US$2.00 group insurance on US$120.00", "one premium on
+ * combined value US$120.00"); this takes it out. Code-identical in the admin's
+ * lib/invoice-line-qty.ts.
+ */
+export function withoutCombinedValue(basis: string | null): string | null {
+  if (basis == null) return basis;
+  return basis
+    .replace(/one premium on combined (?:declared )?value US\$[\d,]+(?:\.\d+)?/gi, "one premium for all packages")
+    .replace(/(group insurance) on US\$[\d,]+(?:\.\d+)?/gi, "$1")
+    .replace(/\s*on (?:the )?combined (?:declared )?value(?: of)? US\$[\d,]+(?:\.\d+)?/gi, "");
+}
+
+export function invoiceLineBasis(raw: {
   qty: number | null;
   unit: string | null;
   rate: number | null;
@@ -85,6 +100,7 @@ export function invoiceLineBasis(l: {
   lineType: string;
   currency: string;
 }): { main: string; note: string | null } {
+  const l = raw.lineType === "insurance" ? { ...raw, basis: withoutCombinedValue(raw.basis) } : raw;
   const isCustoms =
     l.lineType === "duty" ||
     l.lineType === "opt" ||

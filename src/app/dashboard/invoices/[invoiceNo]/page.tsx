@@ -144,7 +144,7 @@ function Breakdown({ layout }: { layout: NonNullable<InvoiceBreakdown["layout"]>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-green">{r.receipt}</p>
-                <p className="mt-0.5 text-xs text-muted-dark">{r.description} · declared US${num(r.declaredValueUsd)}</p>
+                <p className="mt-0.5 text-xs text-muted-dark">{r.description}</p>
               </div>
               <p className="shrink-0 text-sm font-bold text-white">{lineMoney("TTD", r.subtotalTtd)}</p>
             </div>

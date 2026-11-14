@@ -69,10 +69,9 @@ export function formatQtyRate(l: {
  *  - A CUSTOMS line: its `basis` alone — "20% of CIF". The assessed base is the
  *    broker's, not ours, and reprinting it as "TT$574.60 × 0.2" invites a
  *    customer to check our arithmetic against a number we did not assess.
- *  - THE INSURANCE MINIMUM: "minimum US$2.00", with the overridden calculation
- *    as a note. qty × rate does NOT equal the declared-value arithmetic here —
- *    that is the whole point of a minimum — so the note carries what would have
- *    been charged instead of pretending the multiplication holds.
+ *  - THE INSURANCE MINIMUM: "minimum US$2.00" and nothing more — the overridden
+ *    calculation names the declared value, which no customer invoice shows
+ *    (Brent, 2026-11-14).
  *
  * `main` is the basis text for a hand-edited line ("adjusted by hand"), and empty
  * only for a pre-019 line that never carried one. Either way nothing is claimed.
@@ -92,6 +91,24 @@ export function withoutCombinedValue(basis: string | null): string | null {
     .replace(/\s*on (?:the )?combined (?:declared )?value(?: of)? US\$[\d,]+(?:\.\d+)?/gi, "");
 }
 
+/**
+ * No invoice a customer can see shows a declared value (Brent, 2026-11-14). An
+ * insurance line written by insuranceQty stores it in its wording when the
+ * minimum bites — "minimum (declared US$41.45 would be US$0.04)" — and its qty
+ * IS the declared value. This takes the figure out of the wording; the caller
+ * never multiplies an insurance qty out. Stored lines are untouched (display
+ * only), so an invoice issued before the ruling re-renders without it too.
+ * Code-identical in the admin's lib/invoice-line-qty.ts.
+ */
+export function withoutDeclaredValue(basis: string | null): string | null {
+  if (basis == null) return basis;
+  return basis
+    .replace(/\s*\(\s*declared (?:value )?US\$[\d,]+(?:\.\d+)?(?: would be US\$[\d,]+(?:\.\d+)?)?\s*\)/gi, "")
+    .replace(/\s*(?:on )?(?:the )?declared value(?: of)? US\$[\d,]+(?:\.\d+)?/gi, "")
+    .replace(/\s*declared US\$[\d,]+(?:\.\d+)?(?: would be US\$[\d,]+(?:\.\d+)?)?/gi, "")
+    .trim();
+}
+
 export function invoiceLineBasis(raw: {
   qty: number | null;
   unit: string | null;
@@ -100,7 +117,8 @@ export function invoiceLineBasis(raw: {
   lineType: string;
   currency: string;
 }): { main: string; note: string | null } {
-  const l = raw.lineType === "insurance" ? { ...raw, basis: withoutCombinedValue(raw.basis) } : raw;
+  const isInsurance = raw.lineType === "insurance";
+  const l = isInsurance ? { ...raw, basis: withoutDeclaredValue(withoutCombinedValue(raw.basis)) } : raw;
   const isCustoms =
     l.lineType === "duty" ||
     l.lineType === "opt" ||
@@ -114,7 +132,9 @@ export function invoiceLineBasis(raw: {
   if (l.qty == null || l.rate == null)
     return { main: (l.basis ?? "").trim(), note: null };
   if (l.unit === "min")
-    return { main: formatQtyRate(l), note: (l.basis ?? "").trim() || null };
+    // The insurance minimum's note was the overridden calculation, which names
+    // the declared value — never shown to a customer (2026-11-14).
+    return { main: formatQtyRate(l), note: isInsurance ? null : (l.basis ?? "").trim() || null };
   // A stored basis beats the raw multiplication wherever one exists. Fuel reads
   // better as "20% of freight" than "20% of US$19.90", and insurance ABOVE the
   // minimum is worse than useless as a multiplication: its rate is 0.001, which
@@ -122,6 +142,8 @@ export function invoiceLineBasis(raw: {
   // (basis null, rate in dollars) is genuinely clearer multiplied out.
   const basis = (l.basis ?? "").trim();
   if (basis) return { main: basis, note: null };
+  // An insurance qty is the declared value: never multiplied out on an invoice.
+  if (isInsurance) return { main: "", note: null };
   return { main: formatQtyRate(l), note: null };
 }
 

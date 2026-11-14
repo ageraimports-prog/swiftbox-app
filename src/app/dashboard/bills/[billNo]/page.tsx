@@ -14,7 +14,7 @@ import { RefText, TrackingLine } from "@/components/PackageCard";
 
 /**
  * One Consolidated Bill: every package with its freight, fuel and insurance,
- * its customs charges item by item (declared value, duty, OPT, VAT), a package
+ * its customs charges item by item (duty, OPT, VAT — never a declared value), a package
  * subtotal, then the grand total, credits, paid and amount due — the same
  * layout as the PDF (R9). Rows, not tables: a table is too wide for a phone.
  *
@@ -137,7 +137,7 @@ export default function BillPage() {
                         <span className="font-bold text-white">{formatTtd(it.dutyTtd + it.optTtd + it.vatTtd + it.otherTaxTtd)}</span>
                       </div>
                       <p className="mt-0.5 text-xs text-muted-dark">
-                        Declared US${it.declaredValueUsd.toFixed(2)} · Duty {formatTtd(it.dutyTtd)} · OPT {formatTtd(it.optTtd)} · VAT {formatTtd(it.vatTtd)}
+                        Duty {formatTtd(it.dutyTtd)} · OPT {formatTtd(it.optTtd)} · VAT {formatTtd(it.vatTtd)}
                         {it.otherTaxTtd > 0 ? ` · Other ${formatTtd(it.otherTaxTtd)}` : ""}
                       </p>
                     </li>

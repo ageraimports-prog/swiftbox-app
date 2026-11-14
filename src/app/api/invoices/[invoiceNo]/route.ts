@@ -2,7 +2,7 @@ import { invoiceHouseColumn } from "@/lib/house-accounts";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { billingModeOf } from "@/lib/invoice-line";
+import { billingModeOf, withoutCombinedValue, withoutDeclaredValue } from "@/lib/invoice-line";
 import { cbHiddenInvoiceIds, cbBillForInvoice, fetchInvoiceBreakdown } from "@/lib/consolidated-billing";
 import { invoiceMoney } from "@/lib/invoice-money-core";
 import { billToForUser } from "@/lib/invoice-bill-to";
@@ -186,10 +186,14 @@ export async function GET(
         amountTtd: Number(l.amount_ttd),
         // NULL stays NULL — Number(null) is 0, and a qty of 0 would read as a
         // real measurement rather than as "this line was never derived".
-        qty: l.qty == null ? null : Number(l.qty),
+        // An insurance line's qty IS the declared value, and its stored wording
+        // may name it — no invoice a customer can see shows a declared value
+        // (Brent, 2026-11-14), so neither leaves the server. The minimum keeps its
+        // "1 × US$2.00".
+        qty: l.qty == null || (l.line_type === "insurance" && l.unit !== "min") ? null : Number(l.qty),
         unit: l.unit,
         rate: l.rate == null ? null : Number(l.rate),
-        basis: l.basis,
+        basis: l.line_type === "insurance" ? withoutDeclaredValue(withoutCombinedValue(l.basis)) : l.basis,
       })),
       payments: payRows.map((p) => ({
         paymentId: Number(p.payment_id),

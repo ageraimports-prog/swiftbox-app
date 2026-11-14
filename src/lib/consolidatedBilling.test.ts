@@ -220,10 +220,10 @@ describe("Consolidated Bill arithmetic (mirrors the admin core)", () => {
     expect(billTotals([{ totalTtd: 0.1, amountPaid: 0, lines: [] }, { totalTtd: 0.2, amountPaid: 0, lines: [] }]).totalTtd).toBe(0.3);
   });
   it("per item: duty / OPT / VAT from the invoice's own lines; ocean shows no OPT", () => {
-    const a = packageSection(air, [{ description: "SHOES", declaredValueUsd: 80 }]);
+    const a = packageSection(air, [{ description: "SHOES" }]);
     expect([a.items[0].dutyTtd, a.items[0].optTtd, a.items[0].vatTtd]).toEqual([34.01, 47.6, 42.7]);
     expect(a.subtotalTtd).toBe(186.63);
-    const o = packageSection(ocean, [{ description: "HOUSEHOLD", declaredValueUsd: 60 }]);
+    const o = packageSection(ocean, [{ description: "HOUSEHOLD" }]);
     expect(o.items[0].optTtd).toBe(0);
     expect(o.creditsTtd).toBe(-20);
   });
@@ -291,8 +291,8 @@ describe("government charges per WR (Brent, 2026-10-22)", () => {
     { lineType: "vat", description: "VAT", amountTtd: 191.04, basis: "as assessed by customs" },
   ];
   const items = [
-    { description: "WR1367 · CLOTHING", declaredValueUsd: 28, customs: { duty: 42.08, opt: 0, vat: 33.4, other: 0 } },
-    { description: "WR1409 · CLOTHING", declaredValueUsd: 68.26, customs: { duty: 110.01, opt: 0, vat: 87.31, other: 0 } },
+    { description: "WR1367 · CLOTHING", customs: { duty: 42.08, opt: 0, vat: 33.4, other: 0 } },
+    { description: "WR1409 · CLOTHING", customs: { duty: 110.01, opt: 0, vat: 87.31, other: 0 } },
   ];
   it("splits the invoice's stored customs per WR and adds up to the cent", () => {
     const s = packageSection(lines, items);

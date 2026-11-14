@@ -514,25 +514,12 @@ export async function getCbBill(
   const lines = await linesFor(ids);
   const pkgs = ids.length === 0 ? [] : await query<{
     invoice_id: number; pk_id: number; wr: string; tracking: string | null; commodities: string | null;
-    ship_value: string | null; asycuda_description: string | null; goods_desc_override: string | null;
+    asycuda_description: string | null; goods_desc_override: string | null;
   }>(
-    // The declared value the customer is BILLED on, never the original: a
-    // customs upliftment's figure when there is one (admin migration 065,
-    // swiftbox_customs_uplifts), plus the inspection "Uplift By". The customer
-    // never sees an uplift, an original value or a percentage — only the final
-    // value, which is what their duty, VAT and insurance were worked out on.
-    // Same formula as the admin's billedInsuranceValueSql (lib/customs-uplift-sql.ts):
-    // the Uplift By counts only on an invoice the 2026-10-14 rule reached (not
-    // one issued or paid before it), so a bill the customer already holds never
-    // shows a different figure.
+    // No declared value: no invoice a customer can see shows one (Brent, 2026-11-14).
     `SELECT ip.invoice_id, p.pk_id, p.wr, p.tracking, p.commodities,
-            IF(s.ship_id IS NULL, NULL,
-               COALESCE((SELECT cup.uplifted_value FROM swiftbox_customs_uplifts cup WHERE cup.ship_id = s.ship_id), s.ship_value)
-               + IF(inv.invoice_id IS NULL OR (inv.lifecycle IN ('draft','held') AND inv.amount_paid = 0)
-                    OR inv.created_at >= '2026-10-14 00:00:00', COALESCE(cl.uplift_by, 0), 0)) AS ship_value,
             cl.asycuda_description, cl.goods_desc_override
        FROM swiftbox_invoice_packages ip
-       LEFT JOIN swiftbox_invoices inv ON inv.invoice_id = ip.invoice_id
        JOIN mod_packages p ON p.pk_id = ip.pk_id
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
        LEFT JOIN customs_lines cl ON cl.ship_id = s.ship_id
@@ -555,7 +542,6 @@ export async function getCbBill(
           return {
             // Several WRs on one invoice: one item per WR, named by WR.
             description: mine.length > 1 && p.wr ? `${p.wr} · ${description}` : description,
-            declaredValueUsd: Math.round(Number(p.ship_value ?? 0) * 100) / 100,
             customs: mine.length > 1 ? customs?.get(Number(p.pk_id)) ?? null : null,
           };
         })
@@ -702,7 +688,7 @@ export type InvoiceBreakdown = {
     };
     customs: {
       rows: {
-        pkId: number; receipt: string; description: string; declaredValueUsd: number;
+        pkId: number; receipt: string; description: string;
         dutyTtd: number; optTtd: number; vatTtd: number; otherTtd: number; subtotalTtd: number;
       }[];
       showOther: boolean;
@@ -732,7 +718,11 @@ export async function fetchInvoiceBreakdown(userId: number, invoiceNo: string): 
     const l = b?.layout;
     // Guard the shape: a malformed answer hides the breakdown, never the invoice.
     const valid = !l || (Array.isArray(l.shipping?.rows) && Array.isArray(l.customs?.rows) && Array.isArray(l.otherCharges));
-    return valid ? { layout: l ?? null, otherOpenTtd: Number(b?.otherOpenTtd) || 0 } : null;
+    if (!valid) return null;
+    // No invoice a customer can see shows a declared value (Brent, 2026-11-14):
+    // whatever the admin sends, it never reaches the browser.
+    if (l) l.customs.rows = l.customs.rows.map((r) => { const { declaredValueUsd: _drop, ...rest } = r as typeof r & { declaredValueUsd?: unknown }; void _drop; return rest; });
+    return { layout: l ?? null, otherOpenTtd: Number(b?.otherOpenTtd) || 0 };
   } catch {
     return null;
   }

@@ -61,7 +61,6 @@ export type ChildLine = {
 
 export type CustomsItem = {
   description: string;
-  declaredValueUsd: number;
   dutyTtd: number;
   optTtd: number;
   vatTtd: number;
@@ -170,7 +169,7 @@ function isCustomsOther(l: ChildLine): boolean {
  */
 export function packageSection(
   lines: ChildLine[],
-  items: { description: string; declaredValueUsd: number; customs?: ItemCustomsWeights | null }[]
+  items: { description: string; customs?: ItemCustomsWeights | null }[]
 ): PackageSection {
   let freight = 0, fuel = 0, insurance = 0, duty = 0, opt = 0, vat = 0, otherTax = 0, otherCharges = 0, credits = 0;
   for (const l of lines) {
@@ -188,7 +187,7 @@ export function packageSection(
         else otherCharges += c;
     }
   }
-  const described = items.length > 0 ? items : [{ description: "Goods", declaredValueUsd: 0 }];
+  const described = items.length > 0 ? items : [{ description: "Goods" } as { description: string; customs?: ItemCustomsWeights | null }];
   const split = described.length > 1 && described.every((it) => it.customs);
   const share = (total: number, k: keyof ItemCustomsWeights) =>
     split ? splitCustomsCents(total, described.map((it) => it.customs![k])) : described.map((_, i) => (i === 0 ? total : 0));
@@ -200,7 +199,6 @@ export function packageSection(
     otherChargesTtd: fromCents(otherCharges),
     items: described.map((it, i) => ({
       description: it.description,
-      declaredValueUsd: Number(it.declaredValueUsd) || 0,
       dutyTtd: fromCents(d[i]),
       optTtd: fromCents(o[i]),
       vatTtd: fromCents(v[i]),

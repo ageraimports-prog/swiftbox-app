@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import ConsolidatedBillingCard from "@/components/ConsolidatedBillingCard";
 import PackageCard, { type PackageSummary } from "@/components/PackageCard";
 import InvoiceCard, { type InvoiceSummary } from "@/components/InvoiceCard";
 import { CB_STATE_EVENT } from "@/components/SendMyPackagesNow";
@@ -94,8 +93,6 @@ export default function DashboardHome() {
 
   return (
     <>
-      <ConsolidatedBillingCard />
-
       {/* Recent Packages */}
       <section>
         <SectionHeading title="Recent Packages" href="/dashboard/packages" />

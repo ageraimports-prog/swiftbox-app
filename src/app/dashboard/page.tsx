@@ -17,7 +17,7 @@ import {
 } from "@/lib/referral";
 import { countPackagesNeedingPrealert } from "@/lib/prealert-pick-server";
 import DashboardHome from "./DashboardHome";
-import SendMyPackagesNow from "@/components/SendMyPackagesNow";
+import ConsolidatedBillingCard from "@/components/ConsolidatedBillingCard";
 import PrealertWaitingCard from "./PrealertWaitingCard";
 import ReferralCard from "./ReferralCard";
 import ReferralEarningsCard from "./ReferralEarningsCard";
@@ -121,8 +121,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Consolidated Billing: "that's everything, send my packages" — first thing on the page. */}
-      <SendMyPackagesNow />
+      {/* Consolidated Billing lives here (moved from Account, 2026-11-13): the switch,
+          "Send my packages now", the bill notice, the savings counter and the FAQ — first thing on the page. */}
+      <ConsolidatedBillingCard dashboard showSendNow showFaq />
 
       {prealertCount > 0 && <PrealertWaitingCard count={prealertCount} />}
 

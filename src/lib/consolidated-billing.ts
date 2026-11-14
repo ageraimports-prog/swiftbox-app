@@ -1,4 +1,5 @@
 import { invoiceHouseColumn } from "./house-accounts";
+import { lifetimeCbSavingsTtd } from "@/lib/cb-savings";
 import "server-only";
 import { query } from "@/lib/db";
 import { swiftCodeFromAc } from "@/lib/consolidatedBilling";
@@ -100,6 +101,11 @@ export type CbState = {
   billReady: { billNo: string; dueTtd: number } | null;
   /** Delivered in Tobago (users.zone, else the address): the card shows the Tobago delivery line. */
   tobago: boolean;
+  /**
+   * Lifetime Consolidated Billing saving, TT$ (src/lib/cb-savings.ts): 0 when none,
+   * null when it can't be read (before admin migration 113). Shown only above 0.
+   */
+  savingsTtd: number | null;
 };
 
 /** One package in the open group, for "3 packages waiting: Shoes, …". */
@@ -173,6 +179,7 @@ export async function getCbState(userId: number): Promise<CbState> {
     group,
     preparing: groups.some((g) => g.state === "closed" && g.close_reason === "customer"),
     billReady: ready ? { billNo: ready.billNo, dueTtd: ready.totals.dueTtd } : null,
+    savingsTtd: await lifetimeCbSavingsTtd(userId),
   };
 }
 

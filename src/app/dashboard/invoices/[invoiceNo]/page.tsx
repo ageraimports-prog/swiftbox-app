@@ -20,6 +20,7 @@ import { RefText, TrackingLine } from "@/components/PackageCard";
 import type { InvoiceBreakdown } from "@/lib/consolidated-billing";
 import type { BillToView } from "@/lib/invoice-bill-to-core";
 import { BillToCard } from "@/components/BillToCard";
+import { cbInvoiceSavingLine } from "@/lib/consolidatedBilling";
 
 type Line = {
   lineType: string;
@@ -72,6 +73,8 @@ type Invoice = {
   discount?: { amountTtd: number; reason: string } | null;
   /** What was charged before the discount. */
   chargesTotalTtd?: number;
+  /** What Consolidated Billing saved on this bill, TT$. Optional/null/0 → no line. */
+  cbSavingTtd?: number | null;
   totalTtd: number;
   amountPaid: number;
   balance: number;
@@ -338,6 +341,11 @@ export default function InvoiceDetailPage() {
               {invoice.discount && <> · Discount -{formatTtd(invoice.discount.amountTtd)}</>}
               {" "}· Paid {formatTtd(invoice.amountPaid)}
             </p>
+            {cbInvoiceSavingLine(invoice.cbSavingTtd) && (
+              <p className="mt-3 rounded-md border border-green/30 bg-green/10 px-3 py-2 text-sm font-semibold text-mist">
+                {cbInvoiceSavingLine(invoice.cbSavingTtd)}
+              </p>
+            )}
           </section>
 
           {/* Pay online by card (Stripe) — shown only when the admin says this invoice can be paid. */}

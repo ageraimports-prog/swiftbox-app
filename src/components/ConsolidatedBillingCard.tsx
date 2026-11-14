@@ -15,8 +15,12 @@ import {
   cbBillReadyText,
   cbWhatsAppUrl,
   CB_PREPARING_TEXT,
+  CB_DASH_HEADLINE,
+  CB_DASH_PITCH,
+  CB_DASH_MULTI_ONLY,
 } from "@/lib/consolidatedBilling";
 import { SendNowPanel, CB_STATE_EVENT, type SendGroup } from "@/components/SendMyPackagesNow";
+import CbSavingsCounter from "@/components/CbSavingsCounter";
 import { formatTtd } from "@/lib/invoice-line";
 import { TOBAGO_DELIVERY_SHORT, TOBAGO_DELIVERY_LONG, TOBAGO_DELIVERY_FAQ_Q } from "@/lib/tobago-delivery";
 
@@ -32,22 +36,39 @@ type State = {
   /** Delivered in Tobago (users.zone, else the address) — only then the Tobago delivery line shows. */
   tobago?: boolean;
   sendNowMessage?:string;
+  /** Lifetime Consolidated Billing saving, TT$ (src/lib/cb-savings.ts). 0 / null / missing → no counter. */
+  savingsTtd?: number | null;
 };
+
+/** Which of the Dashboard's three faces to show (Brent, 2026-11-13). */
+export function dashboardFace(s: Pick<State, "settingOn" | "group" | "preparing" | "closedWaiting" | "sendNowMessage" | "savingsTtd">): "new" | "active" | "used" {
+  const active = s.settingOn || !!s.group || s.preparing || s.closedWaiting || !!s.sendNowMessage;
+  if (active) return "active";
+  return Math.round((Number(s.savingsTtd) || 0) * 100) > 0 ? "used" : "new";
+}
 
 /**
  * Consolidated Billing: the switch, where the customer's group stands, the
- * "your bill is ready" notice, and (on Account) the FAQ. Every word comes from
- * src/lib/consolidatedBilling.ts (the Tobago delivery line: src/lib/tobago-delivery.ts).
- * Nothing here says where a package is (R13).
+ * "your bill is ready" notice, the FAQ and (on the Dashboard) the savings counter.
+ * Every word comes from src/lib/consolidatedBilling.ts (the Tobago delivery line:
+ * src/lib/tobago-delivery.ts). Nothing here says where a package is (R13).
+ *
+ * `dashboard` (since 2026-11-13 the card lives at the top of the Dashboard, not
+ * under Account): a customer who never used it gets the pitch and "more than one
+ * package" line; one who has used it sees the lifetime saving first. The switch,
+ * its confirmation and "Send my packages now" behave exactly as before.
  */
 export default function ConsolidatedBillingCard({
   showFaq = false,
   showSendNow = false,
+  dashboard = false,
   initialState = null,
 }: {
   showFaq?: boolean;
-  /** "Send my packages now" beside the switch (Account). The Dashboard has its own card at the top. */
+  /** "Send my packages now" beside the switch. */
   showSendNow?: boolean;
+  /** The Dashboard's card: pitch / savings counter, FAQ folded away. */
+  dashboard?: boolean;
   /** Tests only: render a known state before the fetch. Pages leave it out. */
   initialState?: State | null;
 }) {
@@ -62,10 +83,18 @@ export default function ConsolidatedBillingCard({
       .then((d) => d && setState(d))
       .catch(() => {});
     // A "Send my packages now" tap anywhere on the page moves this card too.
-    const on = (e: Event) => setState((e as CustomEvent).detail as State);
+    const on = (e: Event) => setState((prev) => ({ savingsTtd: prev?.savingsTtd, ...((e as CustomEvent).detail as State) }));
     window.addEventListener(CB_STATE_EVENT, on);
     return () => window.removeEventListener(CB_STATE_EVENT, on);
   }, []);
+
+  // Account's "Now on your Dashboard" link lands on #consolidated-billing; the card
+  // appears only after its fetch, so the browser's own jump has nothing to reach.
+  const loaded = state !== null;
+  React.useEffect(() => {
+    if (!dashboard || !loaded || window.location.hash !== "#consolidated-billing") return;
+    document.getElementById("consolidated-billing")?.scrollIntoView({ block: "start" });
+  }, [dashboard, loaded]);
 
   async function toggle() {
     if (!state) return;
@@ -98,18 +127,41 @@ export default function ConsolidatedBillingCard({
   if (!state) return null;
   const on = state.settingOn;
   const disabled = busy || (!state.eligible && !on);
+  const face = dashboard ? dashboardFace(state) : null;
+  const saving = Number(state.savingsTtd) || 0;
+
+  const faq = (state.tobago ? [...CB_FAQ, { q: TOBAGO_DELIVERY_FAQ_Q, a: TOBAGO_DELIVERY_LONG }] : CB_FAQ).map((f) => (
+    <details key={f.q} className="border-b border-mist/10 py-2 last:border-b-0">
+      <summary className="cursor-pointer text-sm font-medium text-mist">{f.q}</summary>
+      <p className="mt-1 text-xs text-muted-dark">{f.a}</p>
+    </details>
+  ));
 
   return (
-    <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <section
+      id={dashboard ? "consolidated-billing" : undefined}
+      className={`scroll-mt-20 rounded-lg border bg-ink-2 p-5 ${dashboard ? "border-green/30" : "border-mist/10"}`}
+    >
+      {face === "used" && <CbSavingsCounter ttd={saving} swiftCode={state.swiftCode} big />}
+
+      <div className={`flex items-start justify-between gap-4 ${face === "used" ? "mt-4" : ""}`}>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">{CB_NAME}</p>
+          {face === "new" && <h2 className="sb-disp mt-2 text-xl leading-snug text-mist">{CB_DASH_HEADLINE}</h2>}
           <div className="mt-2 space-y-2 text-sm text-mist">
             {state.sendNowMessage && <p role="status" className="font-semibold">{state.sendNowMessage}</p>}
-            {!on && !state.sendNowMessage && <p>{CB_LONG_DESCRIPTION}</p>}
-            {!on && !state.sendNowMessage && <p>{CB_EXISTING_INCLUDED}</p>}
+            {face === "new" || face === "used" ? (
+              <>
+                <p>{CB_DASH_PITCH}</p>
+                <p className="text-xs text-muted-dark">{CB_DASH_MULTI_ONLY}</p>
+              </>
+            ) : (
+              <>
+                {!on && !state.sendNowMessage && <p>{CB_LONG_DESCRIPTION}</p>}
+                {!on && !state.sendNowMessage && <p>{CB_EXISTING_INCLUDED}</p>}
+              </>
+            )}
             {on && note && <p className="font-semibold">{note}</p>}
-            {/* On the Dashboard the card at the top already says it. */}
             {showSendNow && state.preparing && !state.sendNowMessage && <p className="font-semibold">{CB_PREPARING_TEXT}</p>}
             {/* R13a: no day count, window date or place, so an open group and no group yet read the same. */}
             {on && state.closedWaiting && <p>{CB_CLOSED_CARD}</p>}
@@ -134,9 +186,15 @@ export default function ConsolidatedBillingCard({
         </button>
       </div>
 
+      {face === "active" && saving > 0 && (
+        <div className="mt-3">
+          <CbSavingsCounter ttd={saving} swiftCode={state.swiftCode} />
+        </div>
+      )}
+
       {showSendNow && state.group && (
         <div className="mt-4 border-t border-mist/10 pt-4">
-          <SendNowPanel key={state.group.groupId} group={state.group} onDone={(d) => setState(d as State)} />
+          <SendNowPanel key={state.group.groupId} group={state.group} onDone={(d) => setState((prev) => ({ savingsTtd: prev?.savingsTtd, ...(d as State) }))} />
         </div>
       )}
 
@@ -171,16 +229,17 @@ export default function ConsolidatedBillingCard({
 
       {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
 
-      {showFaq && (
+      {showFaq && !dashboard && (
         <div className="mt-4 border-t border-mist/10 pt-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Questions</p>
-          {(state.tobago ? [...CB_FAQ, { q: TOBAGO_DELIVERY_FAQ_Q, a: TOBAGO_DELIVERY_LONG }] : CB_FAQ).map((f) => (
-            <details key={f.q} className="border-b border-mist/10 py-2 last:border-b-0">
-              <summary className="cursor-pointer text-sm font-medium text-mist">{f.q}</summary>
-              <p className="mt-1 text-xs text-muted-dark">{f.a}</p>
-            </details>
-          ))}
+          {faq}
         </div>
+      )}
+      {showFaq && dashboard && (
+        <details className="mt-4 border-t border-mist/10 pt-3">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-widest text-muted-dark">Questions</summary>
+          <div className="mt-1">{faq}</div>
+        </details>
       )}
     </section>
   );

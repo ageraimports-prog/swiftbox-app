@@ -16,6 +16,11 @@ const allCopy = [
   copy.CB_EXISTING_INCLUDED,
   copy.cbEnrolledText(1),
   copy.cbEnrolledText(3),
+  copy.CB_DASH_HEADLINE,
+  copy.CB_DASH_PITCH,
+  copy.CB_DASH_MULTI_ONLY,
+  copy.cbLifetimeSavingLine(123.4) ?? "",
+  copy.cbInvoiceSavingLine(36.65) ?? "",
   ...copy.CB_FAQ.flatMap((f) => [f.q, f.a]),
 ].join("\n");
 
@@ -66,6 +71,17 @@ describe("Consolidated Billing copy (Brent's rules, 27 Sep 2026)", () => {
     expect(copy.formatExactLb(0.5)).toBe("0.5 lb");
     expect(copy.formatExactLb(1.25)).toBe("1.25 lb");
     expect(copy.formatExactLb(2)).toBe("2 lb");
+  });
+  it("savings lines: hidden at zero, TT$ to the cent, the admin's invoice wording", () => {
+    expect(copy.cbLifetimeSavingLine(0)).toBeNull();
+    expect(copy.cbLifetimeSavingLine(null)).toBeNull();
+    expect(copy.cbLifetimeSavingLine(1234.5)).toBe("You've saved TT$1,234.50 with Consolidated Billing");
+    expect(copy.cbInvoiceSavingLine(0.004)).toBeNull();
+    expect(copy.cbInvoiceSavingLine(36.65)).toBe("You saved TT$36.65 on this bill with Consolidated Billing");
+  });
+  it("dashboard copy never counts packages or names a place, time or value", () => {
+    const dash = [copy.CB_DASH_HEADLINE, copy.CB_DASH_PITCH, copy.CB_DASH_MULTI_ONLY].join(" ");
+    expect(dash).not.toMatch(/\d|miami|trinidad|tobago|warehouse|\bheld\b|\bdays?\b|declared|uplift/i);
   });
   it("HOLD_DAYS is 20", () => expect(copy.HOLD_DAYS).toBe(20));
   it("has the eight FAQ entries", () => expect(copy.CB_FAQ).toHaveLength(8));
@@ -118,6 +134,8 @@ const SAMPLES: Record<string, unknown[][]> = {
   formatExactLb: [[0.5]],
   cbSavingLine: [[4, 17.57, 119.48, 8]],
   cbGroupInsuranceLabel: [[90]],
+  cbLifetimeSavingLine: [[123.4], [0]],
+  cbInvoiceSavingLine: [[36.65], [0]],
 };
 
 function everyCbString(): { name: string; text: string }[] {

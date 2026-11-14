@@ -37,3 +37,36 @@ describe("ConsolidatedBillingCard — Tobago delivery line (Brent, 25 Oct 2026)"
     expect(render({ ...base, tobago: true }, false)).not.toContain(TOBAGO_DELIVERY_LONG);
   });
 });
+
+describe("ConsolidatedBillingCard — on the Dashboard (Brent, 13 Nov 2026)", () => {
+  const dash = (state: Record<string, unknown>) =>
+    renderToStaticMarkup(React.createElement(ConsolidatedBillingCard, { dashboard: true, showFaq: true, showSendNow: true, initialState: state as never }));
+  it("never used: the pitch and the more-than-one-package line, the switch, no counter", () => {
+    const html = dash({ ...base, savingsTtd: 0 });
+    expect(html).toContain("Ordering more than one thing? Consolidate and save");
+    expect(html).toContain("expecting more than one package");
+    expect(html).toContain('role="switch"');
+    expect(html).not.toContain("saved TT$");
+  });
+  it("used before, nothing open: the lifetime saving first, with the switch", () => {
+    const html = dash({ ...base, savingsTtd: 123.4 });
+    expect(html).toContain("TT$123.40");
+    expect(html.indexOf("TT$123.40")).toBeLessThan(html.indexOf('role="switch"'));
+    expect(html).not.toContain("Ordering more than one thing");
+  });
+  it("on: the usual wording, the counter only above zero", () => {
+    expect(dash({ ...base, settingOn: true, savingsTtd: 50 })).toContain("You&#x27;ve saved TT$50.00 with Consolidated Billing");
+    expect(dash({ ...base, settingOn: true, savingsTtd: 0 })).not.toContain("saved TT$");
+    expect(dash({ ...base, settingOn: true, savingsTtd: null })).not.toContain("saved TT$");
+  });
+  it("an anchor for the Account link, and the questions folded away", () => {
+    const html = dash(base);
+    expect(html).toContain('id="consolidated-billing"');
+    expect(html).toMatch(/<details[^>]*><summary[^>]*>Questions<\/summary>/);
+  });
+  it("Account's card (not dashboard) is unchanged: no pitch, no counter", () => {
+    const html = render({ ...base, savingsTtd: 99 }, true);
+    expect(html).not.toContain("Ordering more than one thing");
+    expect(html).not.toContain("saved TT$");
+  });
+});

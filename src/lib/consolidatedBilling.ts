@@ -10,7 +10,7 @@
  * its COMBINED EXACT weight, rounded up once (two 0.5 lb packages = 1 lb, not 2);
  * insurance is charged ONCE on the group's combined declared value, and each
  * package is still covered on its own, up to US$500 (never imply one shared cap);
- * duty, OPT and VAT stay per package; the switch is in the Account tab. Never
+ * duty, OPT and VAT stay per package; the switch is on the Dashboard (moved from Account, 2026-11-13). Never
  * "cheapest", "no hidden fees", typed savings figures in marketing lines,
  * delivery dates or times, competitor names or volume numbers. Wherever US$1.99
  * appears, the 20% fuel is on the same line. The only phone number is
@@ -150,7 +150,7 @@ export const CB_FAQ: { q: string; a: string }[] = [
   { q: "Does Consolidated Billing cost extra?", a: "No. Consolidated Billing is free." },
   {
     q: "What does “Send my packages now” do?",
-    a: `Got everything you ordered? Tap “Send my packages now” in the app and we'll deliver them together, with one bill. Consolidated Billing then switches off. Turn it back on anytime in the Account tab.`,
+    a: `Got everything you ordered? Tap “Send my packages now” in the app and we'll deliver them together, with one bill. Consolidated Billing then switches off. Turn it back on anytime on your Dashboard.`,
   },
   {
     q: "Does Consolidated Billing lower my freight and insurance?",
@@ -162,7 +162,7 @@ export const CB_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How do I turn on Consolidated Billing?",
-    a: "In the Account tab of the Swiftbox app, or WhatsApp or call us on (868) 609-3000.",
+    a: "On the Dashboard of the Swiftbox app, or WhatsApp or call us on (868) 609-3000.",
   },
   { q: "Can I still follow my packages?", a: "Yes. Every package is in the Swiftbox app." },
   {
@@ -195,4 +195,26 @@ export function cbSavingLine(savingLb: number, savingUsd: number, savingTtd: num
 /** "Insurance (group, combined value US$90.00)" — the admin's groupInsuranceLabel, word for word. */
 export function cbGroupInsuranceLabel(combinedValueUsd: number): string {
   return `Insurance (group, combined value US$${combinedValueUsd.toFixed(2)})`;
+}
+
+/* ── Dashboard card + savings counter (Brent, 2026-11-13). No count, place, timing or declared value. ── */
+
+/** The headline for a customer who has never used Consolidated Billing. */
+export const CB_DASH_HEADLINE = "Ordering more than one thing? Consolidate and save";
+/** What it does, in one line. */
+export const CB_DASH_PITCH = "Your packages come together: one delivery, one bill, and you pay less on weight and insurance. Free.";
+/** Single-package customers kept switching it on by mistake. */
+export const CB_DASH_MULTI_ONLY = "It's for when you're expecting more than one package. With just one, there's nothing to combine.";
+
+const savedTtd = (ttd: number) =>
+  `TT$${(Math.round((Number(ttd) || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** "You've saved TT$X with Consolidated Billing" — the lifetime counter. Null at 0 (hidden). */
+export function cbLifetimeSavingLine(ttd: number | null | undefined): string | null {
+  return Math.round((Number(ttd) || 0) * 100) > 0 ? `You've saved ${savedTtd(Number(ttd))} with Consolidated Billing` : null;
+}
+
+/** "You saved TT$X on this bill with Consolidated Billing" — word for word the admin's invoiceSavingLine. Null at 0. */
+export function cbInvoiceSavingLine(ttd: number | null | undefined): string | null {
+  return Math.round((Number(ttd) || 0) * 100) > 0 ? `You saved ${savedTtd(Number(ttd))} on this bill with Consolidated Billing` : null;
 }

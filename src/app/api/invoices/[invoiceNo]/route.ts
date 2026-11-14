@@ -6,6 +6,7 @@ import { billingModeOf } from "@/lib/invoice-line";
 import { cbHiddenInvoiceIds, cbBillForInvoice, fetchInvoiceBreakdown } from "@/lib/consolidated-billing";
 import { invoiceMoney } from "@/lib/invoice-money-core";
 import { billToForUser } from "@/lib/invoice-bill-to";
+import { invoiceCbSavingTtd } from "@/lib/cb-savings";
 
 type HeaderRow = {
   house_account: number;
@@ -168,6 +169,8 @@ export async function GET(
       ownerCredits: money.ownerCredits,
       // The owner's discount ("Discount" / "Discount (label)"), already inside totalTtd.
       discount: money.discount,
+      // What Consolidated Billing saved on this bill (admin snapshot at issue); null = none / not shown.
+      cbSavingTtd: Number(h.house_account) === 1 ? null : await invoiceCbSavingTtd(session.id, Number(h.invoice_id)),
       // What was charged before the discount — the footer's "Total due".
       chargesTotalTtd: money.chargesTotalTtd,
       totalTtd: total,

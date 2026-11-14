@@ -4,7 +4,7 @@ import { query } from "./db";
 
 /** Read the invoice snapshot, never the customer's current setting.
  * Confirmed absence is supported; bridge/auth failures propagate. */
-const invoiceColumnExists = cache(async () => {
+export const invoiceColumnExists = cache(async () => {
   const rows = await query<{ COLUMN_NAME: string }>(`SELECT COLUMN_NAME FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'swiftbox_invoices' AND COLUMN_NAME = 'house_account'`);
   return rows.length > 0;

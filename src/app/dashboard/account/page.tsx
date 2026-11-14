@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import ShippingAddress from "./ShippingAddress";
 import ContactDetailsCard from "./ContactDetailsCard";
-import ConsolidatedBillingCard from "@/components/ConsolidatedBillingCard";
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -27,8 +26,17 @@ export default async function AccountPage() {
       {/* Shipping address (AIR / SEA, copy-to-clipboard) */}
       <ShippingAddress accountNo={session.ac} customerName={session.name} />
 
-      {/* Consolidated Billing: switch, group, bill notice and its FAQ */}
-      <ConsolidatedBillingCard showFaq showSendNow />
+      {/* Consolidated Billing moved to the Dashboard (2026-11-13): one link, no second set of controls. */}
+      <Link
+        href="/dashboard#consolidated-billing"
+        className="flex items-center justify-between rounded-lg border border-mist/10 bg-ink-2 p-5 text-sm text-mist transition-colors hover:border-green/40"
+      >
+        <span>
+          <span className="block text-xs font-semibold uppercase tracking-widest text-muted-dark">Consolidated Billing</span>
+          <span className="mt-1 block">Now on your Dashboard</span>
+        </span>
+        <span className="font-bold text-green" aria-hidden>→</span>
+      </Link>
 
       {/* Support */}
       <section>

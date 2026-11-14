@@ -389,7 +389,9 @@ PAUSE, not a removal: every page, route and table stays.
   VAT · Other taxes (> 0) · Total to pay, then the estimated-weight sentence
   (`allInNotice`).
 - **Payment is bank deposit / bank transfer ONLY** — every payment screen shows
-  `PAYMENT_ONLY_LINE` (no card, LINX, PayPal or cash on delivery). The rules copy
+  `PAYMENT_ONLY_LINE` ("Buy For Me is paid by bank deposit or bank transfer only." — it no
+  longer lists refused methods: no LINX / debit card anywhere customer-facing, Brent
+  2026-11-14). The rules copy
   reads `bfm_fee_pct` from `swiftbox_settings` (`getBfmFeePct`, fallback 15);
   never hardcode the percentage. Nothing is bought until staff confirm payment.
 - History titles go through `bfmEventTitle` (base titles from the core copy, plus

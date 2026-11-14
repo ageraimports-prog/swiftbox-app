@@ -39,7 +39,8 @@ export const ghostButton =
   "rounded-xl border border-mist/20 px-4 py-2.5 text-sm font-semibold text-mist transition-colors hover:bg-mist/5 disabled:opacity-50";
 
 /** The one payment rule, word for word wherever money is mentioned. */
-export const PAYMENT_ONLY_LINE = "We only accept bank deposit or bank transfer — no card, LINX, PayPal or cash on delivery.";
+// Brent, 2026-11-14: no debit card / LINX anywhere customer-facing, so no list of refused methods either.
+export const PAYMENT_ONLY_LINE = "Buy For Me is paid by bank deposit or bank transfer only.";
 
 /**
  * The rules, stated plainly wherever someone could start or pay a request.

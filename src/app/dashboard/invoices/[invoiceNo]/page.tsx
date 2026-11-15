@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { paymentLabel } from "@/lib/payment-label";
+import { ONLINE_DISCOUNT_METHOD, paymentLabel } from "@/lib/payment-label";
 import PayNow from "./PayNow";
 import { discountRowLabel } from "@/lib/invoice-money-core";
 import {
@@ -41,6 +41,11 @@ type Payment = {
   paidDate: string;
   reference: string;
 };
+
+/** The online-payment discount inside amount_paid (method online_discount — not money). */
+function onlineDiscountOf(payments: Payment[]): number {
+  return Math.round(payments.filter((p) => p.method === ONLINE_DISCOUNT_METHOD).reduce((s, p) => s + Number(p.amount), 0) * 100) / 100;
+}
 
 type Pkg = {
   pkId: number;
@@ -339,7 +344,8 @@ export default function InvoiceDetailPage() {
             <p className="mt-2 text-xs text-muted-dark">
               Total {formatTtd(invoice.chargesTotalTtd ?? invoice.totalTtd)}
               {invoice.discount && <> · Discount -{formatTtd(invoice.discount.amountTtd)}</>}
-              {" "}· Paid {formatTtd(invoice.amountPaid)}
+              {" "}· Paid {formatTtd(invoice.amountPaid - onlineDiscountOf(invoice.payments))}
+              {onlineDiscountOf(invoice.payments) > 0 && <> · Online payment discount -{formatTtd(onlineDiscountOf(invoice.payments))}</>}
             </p>
             {cbInvoiceSavingLine(invoice.cbSavingTtd) && (
               <p className="mt-3 rounded-md border border-green/30 bg-green/10 px-3 py-2 text-sm font-semibold text-mist">
@@ -510,7 +516,11 @@ export default function InvoiceDetailPage() {
                 emphasis
                 divider
               />
-              <TotalRow label="Amount paid" value={formatTtd(invoice.amountPaid)} />
+              <TotalRow label="Amount paid" value={formatTtd(invoice.amountPaid - onlineDiscountOf(invoice.payments))} />
+              {/* The discount for paying online (admin CARD_DISCOUNT_PLAN.md): not money, it settles the rest. */}
+              {onlineDiscountOf(invoice.payments) > 0 && (
+                <TotalRow label="Online payment discount" value={`-${formatTtd(onlineDiscountOf(invoice.payments))}`} />
+              )}
               {/* Swiftbox's discount — not a referral credit and not a payment.
                   Same row the admin's screen, PDF and email print. */}
               {invoice.discount && (

@@ -12,7 +12,21 @@ import AuthLayout from "@/components/AuthLayout";
  * and the capture happens on the server. Reloading it is safe — the admin answers
  * the same outcome and never captures twice.
  */
-type Answer = { outcome: string; message: string; invoiceNo?: string; amountTtd?: number; amountUsd?: number; fxLine?: string };
+type Answer = {
+  outcome: string;
+  message: string;
+  invoiceNo?: string;
+  amountTtd?: number;
+  amountUsd?: number;
+  fxLine?: string;
+  /** Several invoices on one order (admin CARD_DISCOUNT_PLAN.md). */
+  invoiceNos?: string[];
+  /** The online-payment discount granted, and the lifetime total saved — on "paid" only. */
+  savedTtd?: number;
+  totalSavedTtd?: number | null;
+};
+
+const money = (n: number) => `TT$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const TITLE: Record<string, string> = {
   paid: "Payment received",
@@ -58,7 +72,8 @@ export default function PayPalOutcome({ mode }: { mode: "return" | "cancel" }) {
           ? "border-sky-300/30 bg-sky-300/10"
           : "border-mist/15 bg-ink-2";
   const titleCls = answer?.outcome === "paid" ? "text-green" : answer?.outcome === "pending" || answer?.outcome === "error" ? "text-amber-300" : "text-mist";
-  const invoiceHref = answer?.invoiceNo ? `/dashboard/invoices/${encodeURIComponent(answer.invoiceNo)}` : "/dashboard/invoices";
+  const several = (answer?.invoiceNos?.length ?? 0) > 1;
+  const invoiceHref = answer?.invoiceNo && !several ? `/dashboard/invoices/${encodeURIComponent(answer.invoiceNo)}` : "/dashboard/invoices";
   const canRetry = answer && ["canceled", "declined", "changed", "not_approved"].includes(answer.outcome) && answer.invoiceNo;
 
   return (
@@ -73,11 +88,17 @@ export default function PayPalOutcome({ mode }: { mode: "return" | "cancel" }) {
           <p className={`text-lg font-bold ${titleCls}`}>{TITLE[answer.outcome] ?? "Payment"}</p>
           {answer.invoiceNo && (
             <p className="mt-1 text-sm text-muted">
-              Invoice {answer.invoiceNo}
+              {several ? `Invoices ${answer.invoiceNos!.join(", ")}` : `Invoice ${answer.invoiceNo}`}
               {answer.fxLine ? ` · ${answer.fxLine}` : ""}
             </p>
           )}
           <p className="mt-3 text-sm text-mist">{answer.message}</p>
+          {answer.outcome === "paid" && (answer.savedTtd ?? 0) > 0 && (
+            <p className="mt-3 rounded-md border border-green/30 bg-green/10 px-3 py-2 text-sm font-semibold text-mist">
+              You saved <span className="text-green">{money(answer.savedTtd!)}</span>.
+              {(answer.totalSavedTtd ?? 0) > 0 && <> Total saved with Swiftbox: <span className="text-green">{money(answer.totalSavedTtd!)}</span></>}
+            </p>
+          )}
           {answer.outcome === "paid" && <p className="mt-2 text-sm text-muted">A receipt is on its way to your email.</p>}
           <div className="mt-5 flex flex-col gap-2">
             {canRetry && (
@@ -93,7 +114,7 @@ export default function PayPalOutcome({ mode }: { mode: "return" | "cancel" }) {
                   : "w-full rounded-lg bg-green px-4 py-3 text-center text-sm font-bold text-ink"
               }
             >
-              {answer.invoiceNo ? "Back to the invoice" : "Go to my invoices"}
+              {answer.invoiceNo && !several ? "Back to the invoice" : "Go to my invoices"}
             </Link>
           </div>
         </div>

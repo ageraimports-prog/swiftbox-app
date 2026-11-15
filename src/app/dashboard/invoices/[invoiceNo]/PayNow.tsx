@@ -65,6 +65,10 @@ type PayPalOffer = {
   pending: boolean;
   lastFailure: string | null;
   mode: "sandbox" | "live" | "none";
+  /** The discount for paying online (admin CARD_DISCOUNT_PLAN.md). amountTtd/amountUsd/fxLine are then the discounted figures. */
+  discount?: { pct: string; discountTtd: number; invoiceTotalTtd: number; payTtd: number; payUsd: number; fxLine: string } | null;
+  /** Every open invoice on ONE order; shown only when that reaches a bigger discount. */
+  payAll?: { available: boolean; discountTtd: number; pct: string | null; payTtd: number; payUsd: number; fxLine: string; higherTier: boolean } | null;
 };
 
 type Intent = { clientSecret: string; publishableKey: string; paymentIntentId: string; amountTtd: number; amountUsd: number; fxLine: string; fxNote: string };
@@ -168,8 +172,8 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
     return false;
   }
 
-  /** PayPal: the admin makes the order; we leave for PayPal's page (full redirect). */
-  async function startPayPal() {
+  /** PayPal: the admin makes the order; we leave for PayPal's page (full redirect). `all` = every open invoice on one order. */
+  async function startPayPal(all = false) {
     if (!offer?.paypal?.available || !agreed) return;
     setPpBusy(true);
     setError(null);
@@ -177,7 +181,7 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
       const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceNo)}/pay/paypal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ terms: { version: offer.paypal.termsVersion, accepted: true } }),
+        body: JSON.stringify({ terms: { version: offer.paypal.termsVersion, accepted: true }, all }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; approveUrl?: string; error?: string };
       if (!res.ok || !data.ok || !data.approveUrl) {
@@ -267,6 +271,9 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
   const note = intent?.fxNote ?? (ppOn ? pp!.fxNote : offer.fxNote);
   const ways = cardOn && ppOn ? "Card, Apple Pay, Google Pay or PayPal." : cardOn ? "Card, Apple Pay or Google Pay." : "PayPal.";
   const testMode = (cardOn && offer.mode === "test") || (ppOn && pp!.mode === "sandbox");
+  // The online-payment discount (admin CARD_DISCOUNT_PLAN.md) — PayPal only. Never the fee, the rate cap or how it is worked out.
+  const disc = ppOn && pp!.discount && pp!.discount.discountTtd > 0 ? pp!.discount : null;
+  const all = ppOn && pp!.payAll?.available && pp!.payAll.higherTier && pp!.payAll.discountTtd > 0 ? pp!.payAll : null;
 
   return (
     <section className="rounded-lg border border-mist/10 bg-ink-2 p-5">
@@ -278,6 +285,16 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
           <p className="mt-2 text-base font-bold text-mist">{line}</p>
           <p className="mt-1 text-xs text-muted-dark">{note}</p>
           {testMode && <p className="mt-1 text-[11px] font-bold uppercase text-amber-300">Test mode — no real money moves</p>}
+          {disc && (
+            <p className="mt-3 rounded-md border border-green/30 bg-green/10 px-3 py-2 text-sm font-semibold text-mist">
+              {cardOn ? "Pay online with PayPal now and save" : "Pay online now and save"} <span className="text-green">{formatTtd(disc.discountTtd)}</span> ({disc.pct})
+            </p>
+          )}
+          {all && (
+            <p className="mt-2 rounded-md border border-green/30 bg-green/5 px-3 py-2 text-sm text-mist">
+              Pay all together and save <span className="font-bold text-green">{formatTtd(all.discountTtd)}</span> — every open invoice on one payment
+            </p>
+          )}
         </div>
       </div>
 
@@ -330,11 +347,22 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
               <button
                 type="button"
                 disabled={!agreed || busy || ppBusy}
-                onClick={startPayPal}
+                onClick={() => startPayPal(false)}
                 className={`${cardOn ? "mt-2" : "mt-4"} w-full rounded-lg bg-[#FFC439] px-4 py-3 text-sm font-bold text-[#003087] transition-colors hover:bg-[#f2b72f] disabled:opacity-60`}
               >
                 {ppBusy ? "Taking you to PayPal…" : `Pay with PayPal — ${usd(pp!.amountUsd ?? usdAmount)}`}
               </button>
+              {disc && <p className="mt-1 text-center text-[11px] text-muted-dark">{disc.fxLine} · you save {formatTtd(disc.discountTtd)}</p>}
+              {all && (
+                <button
+                  type="button"
+                  disabled={!agreed || busy || ppBusy}
+                  onClick={() => startPayPal(true)}
+                  className="mt-2 w-full rounded-lg border-2 border-[#FFC439] bg-transparent px-4 py-3 text-sm font-bold text-[#FFC439] transition-colors hover:bg-[#FFC439]/10 disabled:opacity-60"
+                >
+                  {ppBusy ? "Taking you to PayPal…" : `Pay all together with PayPal — ${usd(all.payUsd)} · save ${formatTtd(all.discountTtd)}`}
+                </button>
+              )}
               <p className="mt-2 text-center text-[11px] text-muted-dark">You&rsquo;ll go to PayPal to pay, then come straight back here.</p>
             </>
           )}

@@ -18,7 +18,13 @@ const LABEL: Record<string, string> = {
   // System-only (never picked by staff): the landed invoice of a Buy For Me
   // package, settled from the all-in amount the customer paid upfront.
   bfm_prepaid: "Paid in advance (Buy For Me)",
+  // System-only: the discount for paying online (admin CARD_DISCOUNT_PLAN.md). Not money —
+  // it settles the rest of the invoice beside the PayPal payment.
+  online_discount: "Online payment discount",
 };
+
+/** The online-payment discount rows' method (admin ONLINE_DISCOUNT_METHOD). */
+export const ONLINE_DISCOUNT_METHOD = "online_discount";
 
 export function paymentLabel(method: string | null | undefined): string {
   const m = String(method ?? "").trim().toLowerCase();

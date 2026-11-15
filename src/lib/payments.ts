@@ -52,7 +52,27 @@ export type PayPalOffer = {
   pending: boolean;
   lastFailure: string | null;
   mode: "sandbox" | "live" | "none";
+  /** The discount for paying THIS invoice online (admin CARD_DISCOUNT_PLAN.md); absent/null = none. amountTtd/amountUsd/fxLine are then the discounted figures. */
+  discount?: DiscountOffer | null;
+  /** Paying every open invoice on one order (only with 2+). */
+  payAll?: PayAllOffer | null;
 };
+
+export type DiscountOffer = { pct: string; discountTtd: number; invoiceTotalTtd: number; payTtd: number; payUsd: number; fxLine: string };
+export type PayAllOffer = {
+  available: boolean;
+  count: number;
+  invoiceNos: string[];
+  totalTtd: number;
+  discountTtd: number;
+  pct: string | null;
+  payTtd: number;
+  payUsd: number;
+  fxLine: string;
+  /** Paying them together reaches a higher discount than the invoice alone. */
+  higherTier: boolean;
+};
+export type PayAllAnswer = { payAll: PayAllOffer | null; termsVersion?: string; termsUrl?: string; refundPolicyUrl?: string; fxNote?: string; mode?: "sandbox" | "live" | "none" };
 
 export type PayPalOrderAnswer =
   | { ok: true; approveUrl: string; rowId: number; orderId: string; amountTtd: number; amountUsd: number; usdRate: number; fxLine: string }
@@ -65,6 +85,12 @@ export type PayPalReturnAnswer = {
   amountTtd?: number;
   amountUsd?: number;
   fxLine?: string;
+  /** Several invoices paid on one order. */
+  invoiceNos?: string[];
+  /** The online-payment discount granted (paid only). */
+  savedTtd?: number;
+  /** Lifetime savings with Swiftbox (paid only). */
+  totalSavedTtd?: number | null;
 };
 
 export type IntentAnswer =
@@ -163,10 +189,28 @@ export async function fetchPayStatus(userId: number, paymentIntentId: string): P
   }
 }
 
-/** Ask the admin for a PayPal order (it checks everything and answers PayPal's approval link). */
+/** The invoices list's "Pay all open invoices" offer. Never throws — no answer means no button. */
+export async function fetchPayAllOffer(userId: number): Promise<PayAllAnswer> {
+  const a = admin();
+  if (!a) return { payAll: null };
+  try {
+    const res = await fetch(`${a.base}/api/payments/paypal/pay-all?userId=${userId}`, {
+      headers: { "x-consolidation-key": a.key },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { payAll: null };
+    return (await res.json()) as PayAllAnswer;
+  } catch {
+    return { payAll: null };
+  }
+}
+
+/** Ask the admin for a PayPal order (it checks everything and answers PayPal's approval link). One invoice, or several on ONE order. */
 export async function requestPayPalOrder(input: {
   userId: number;
-  invoiceNo: string;
+  invoiceNo?: string;
+  invoiceNos?: string[] | "all";
   terms: { version: string; accepted: boolean };
   ip: string | null;
   userAgent: string | null;

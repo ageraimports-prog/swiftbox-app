@@ -3,6 +3,7 @@
 import * as React from "react";
 import InvoiceCard, { type InvoiceSummary } from "@/components/InvoiceCard";
 import BillCard, { type BillSummary } from "@/components/BillCard";
+import PayAllCard from "@/components/PayAllCard";
 
 function SkeletonCard() {
   return (
@@ -105,6 +106,9 @@ export default function InvoicesPage() {
           <p className="mt-1 text-xs text-muted-dark">Taken off your next invoice automatically.</p>
         </section>
       )}
+
+      {/* Every open invoice on ONE PayPal payment (shown only when the admin says 2+ can be paid together). */}
+      {invoices && invoices.length > 1 && <PayAllCard />}
 
       {/* Consolidated Bills: one per delivery, instead of their invoices one by one. */}
       {bills.map((b) => <BillCard key={b.billNo} bill={b} />)}

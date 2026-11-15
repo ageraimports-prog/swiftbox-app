@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ invoice
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { invoiceNo } = await params;
   if (!/^INV-\d+$/.test(invoiceNo)) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const body = (await req.json().catch(() => ({}))) as { terms?: { version?: unknown; accepted?: unknown } };
+  const body = (await req.json().catch(() => ({}))) as { terms?: { version?: unknown; accepted?: unknown }; all?: unknown };
   const terms = body.terms ?? {};
   if (terms.accepted !== true || typeof terms.version !== "string") {
     return NextResponse.json({ ok: false, error: "Please agree to the Terms and Refund Policy first.", code: "terms" }, { status: 400 });
@@ -27,7 +27,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ invoice
   const ip = (forwarded ?? "").split(",")[0]?.trim() || req.headers.get("x-real-ip") || null;
   const r = await requestPayPalOrder({
     userId: session.id,
-    invoiceNo,
+    // "Pay all together": every open invoice on ONE order (admin CARD_DISCOUNT_PLAN.md).
+    ...(body.all === true ? { invoiceNos: "all" as const } : { invoiceNo }),
     terms: { version: terms.version, accepted: true },
     ip: ip ? ip.slice(0, 45) : null,
     userAgent: (req.headers.get("user-agent") ?? "").slice(0, 255) || null,

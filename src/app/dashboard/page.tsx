@@ -136,7 +136,7 @@ export default async function DashboardPage() {
           "Send my packages now", the bill notice, the savings counter and the FAQ — first thing on the page. */}
       <ConsolidatedBillingCard dashboard showSendNow showFaq />
 
-      {savings && savings.totalTtd > 0 && <YourSavingsCard savings={savings} swiftCode={user.ac} />}
+      {savings && <YourSavingsCard savings={savings} swiftCode={user.ac} />}
 
       {prealertCount > 0 && <PrealertWaitingCard count={prealertCount} />}
 

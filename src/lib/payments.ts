@@ -133,7 +133,7 @@ export async function fetchPayOffer(userId: number, invoiceNo: string): Promise<
     const res = await fetch(`${a.base}/api/payments/offer?invoiceNo=${encodeURIComponent(invoiceNo)}&userId=${userId}`, {
       headers: { "x-consolidation-key": a.key },
       cache: "no-store",
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(20_000), // the offer now also quotes "pay all" (several invoices)
     });
     if (!res.ok) return UNAVAILABLE;
     return (await res.json()) as PayOffer;
@@ -197,7 +197,7 @@ export async function fetchPayAllOffer(userId: number): Promise<PayAllAnswer> {
     const res = await fetch(`${a.base}/api/payments/paypal/pay-all?userId=${userId}`, {
       headers: { "x-consolidation-key": a.key },
       cache: "no-store",
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(20_000), // the offer now also quotes "pay all" (several invoices)
     });
     if (!res.ok) return { payAll: null };
     return (await res.json()) as PayAllAnswer;
@@ -223,7 +223,7 @@ export async function requestPayPalOrder(input: {
       headers: { "Content-Type": "application/json", "x-consolidation-key": a.key },
       body: JSON.stringify(input),
       cache: "no-store",
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(50_000), // the admin route allows 60 s; several invoices + the discount rows take longer than one
     });
     const data = (await res.json().catch(() => ({}))) as Partial<PayPalOrderAnswer> & { error?: string; code?: string };
     if (!res.ok || !("ok" in data) || !data.ok) return { ok: false, error: data.error || "Couldn't start the PayPal payment. Please try again.", code: data.code || "error" };

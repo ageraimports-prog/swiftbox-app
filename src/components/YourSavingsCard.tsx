@@ -70,7 +70,17 @@ export default function YourSavingsCard({ savings, swiftCode }: { savings: Savin
     return () => cancelAnimationFrame(raf);
   }, [target, swiftCode]);
 
-  if (target <= 0) return null;
+  // Zero state (Brent, 2026-11-15 click-through): the card shows TT$0.00 and one plain line —
+  // nothing about how a saving is worked out.
+  if (target <= 0) {
+    return (
+      <section aria-label="Your savings: TT$0.00" className="relative overflow-hidden rounded-lg border border-mist/10 bg-ink-2 p-5">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Your savings</p>
+        <p className="sb-disp mt-2 text-4xl tracking-tight text-mist tabular-nums">{formatTtd(0)}</p>
+        <p className="mt-2 text-sm text-muted">What you save with Swiftbox adds up here.</p>
+      </section>
+    );
+  }
   const latest = savings.latest;
   return (
     <section aria-label={`Your savings: ${formatTtd(target / 100)}`} className="relative overflow-hidden rounded-lg border border-green/30 bg-ink-2 p-5">

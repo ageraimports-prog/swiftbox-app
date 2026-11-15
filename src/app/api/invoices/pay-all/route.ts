@@ -12,6 +12,7 @@ import { fetchPayAllOffer, requestPayPalOrder } from "@/lib/payments";
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // the admin builds the PayPal order (up to 50 s on a slow bridge)
 
 export async function GET() {
   const session = await getSession();

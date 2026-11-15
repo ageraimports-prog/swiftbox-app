@@ -25,6 +25,8 @@ import ReferralListCard from "./ReferralListCard";
 import BuyForMeCard, { BuyForMeOrdersLink } from "@/components/BuyForMeCard";
 import { isBfmEnabled } from "@/lib/bfm-switch";
 import { myBuyForMeCounts } from "@/lib/buy-for-me";
+import YourSavingsCard from "@/components/YourSavingsCard";
+import { savingsSummary, type SavingsSummary } from "@/lib/customer-savings";
 
 type UserRow = {
   fname: string;
@@ -119,11 +121,22 @@ export default async function DashboardPage() {
     prealertCount = 0;
   }
 
+  // "Your savings" (admin CARD_DISCOUNT_PLAN.md): card + Consolidated Billing savings.
+  // Secondary like the rest: before migration 114/113 or on any failure the card is hidden.
+  let savings: SavingsSummary | null = null;
+  try {
+    savings = await savingsSummary(session.id);
+  } catch {
+    savings = null;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Consolidated Billing lives here (moved from Account, 2026-11-13): the switch,
           "Send my packages now", the bill notice, the savings counter and the FAQ — first thing on the page. */}
       <ConsolidatedBillingCard dashboard showSendNow showFaq />
+
+      {savings && savings.totalTtd > 0 && <YourSavingsCard savings={savings} swiftCode={user.ac} />}
 
       {prealertCount > 0 && <PrealertWaitingCard count={prealertCount} />}
 

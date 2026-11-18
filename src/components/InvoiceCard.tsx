@@ -11,10 +11,15 @@ export type InvoiceSummary = {
   totalTtd: number;
   amountPaid: number;
   status: InvoiceStatus;
+  /** Paid by PayPal, not on the invoice yet (the office is still recording it): "Payment processing". Optional for older responses. */
+  processing?: boolean;
   createdAt: string;
   /** What it bills for. Optional: a cached app shell can meet an older response. */
   packages?: { wr: string; tracking: string; commodities: string }[];
 };
+
+/** A PayPal payment the customer made that the office is still recording — never shown as "Unpaid". */
+const PROCESSING_BADGE = { label: "Payment processing", cls: "bg-amber-400/10 text-amber-300 border border-amber-400/25" };
 
 /** Headline for an invoice with no package rows — never the invoice number. */
 function fallbackTitle(scope: InvoiceSummary["scope"]): string {
@@ -29,7 +34,10 @@ function fallbackTitle(scope: InvoiceSummary["scope"]): string {
  * invoice number, which stays the small line underneath either way.
  */
 export default function InvoiceCard({ inv }: { inv: InvoiceSummary }) {
-  const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.unpaid;
+  const badge =
+    inv.processing && (inv.status === "unpaid" || inv.status === "partial")
+      ? PROCESSING_BADGE
+      : STATUS_BADGE[inv.status] ?? STATUS_BADGE.unpaid;
   const pkgs = inv.packages ?? [];
   const title = packagesSummary(pkgs.map((p) => formatDescription(p.commodities) ?? "Package"));
   const numbers = pkgs.flatMap((p) => trackingNumbers(p.tracking));

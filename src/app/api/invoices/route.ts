@@ -5,6 +5,7 @@ import { getSession } from "@/lib/session";
 import { cbHiddenInvoiceIds, listCbBills } from "@/lib/consolidated-billing";
 import { invoicePaymentStatus } from "@/lib/invoice-money-core";
 import { carriedCreditBalances } from "@/lib/carried-credits";
+import { paypalProcessingInvoiceIds } from "@/lib/paypal-processing";
 
 type Row = {
   house_account: number;
@@ -85,6 +86,9 @@ export async function GET() {
     byInvoice.set(p.invoice_no, list);
   }
 
+  // Paid by PayPal, not on the ledger yet: "Payment processing", never plain "Unpaid" (never throws).
+  const processing = await paypalProcessingInvoiceIds(session.id, visible.map((r) => Number(r.invoice_id)));
+
   const invoices = visible.map((r) => ({
     invoiceNo: r.invoice_no,
     scope: r.scope,
@@ -93,6 +97,7 @@ export async function GET() {
     houseAccount: Number(r.house_account) === 1,
     balance: Number(r.house_account) === 1 ? 0 : Math.round((Number(r.total_ttd) - Number(r.amount_paid)) * 100) / 100,
     status: invoicePaymentStatus(Number(r.total_ttd), Number(r.amount_paid), Number(r.house_account) === 1),
+    processing: processing.has(Number(r.invoice_id)),
     createdAt: r.created_at,
     packages: byInvoice.get(r.invoice_no) ?? [],
   }));

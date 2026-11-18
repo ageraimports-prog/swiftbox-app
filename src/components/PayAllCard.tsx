@@ -39,6 +39,18 @@ export default function PayAllCard() {
     };
   }, []);
 
+  // The invoice email's "pay all your open invoices" button opens /dashboard/invoices?pay=all: bring this card into view.
+  const ref = React.useRef<HTMLElement | null>(null);
+  const shown = !!a?.payAll?.available;
+  React.useEffect(() => {
+    if (!shown) return;
+    try {
+      if (new URLSearchParams(window.location.search).get("pay") === "all") ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch {
+      /* no scroll is fine */
+    }
+  }, [shown]);
+
   const p = a?.payAll;
   if (!p?.available) return null;
 
@@ -66,7 +78,7 @@ export default function PayAllCard() {
   }
 
   return (
-    <section className="rounded-lg border border-green/30 bg-ink-2 p-5">
+    <section id="pay-all" ref={ref} className="scroll-mt-4 rounded-lg border border-green/30 bg-ink-2 p-5">
       <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Pay all open invoices</p>
       <p className="mt-1 text-sm text-muted">Every open invoice on one PayPal payment.</p>
       <p className="mt-2 text-base font-bold text-mist">{p.fxLine}</p>

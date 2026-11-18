@@ -10,7 +10,7 @@ import { formatTtd } from "@/lib/invoice-line";
  * Revision b: the card is charged in US DOLLARS. The admin works out the US$
  * figure from the TT$ balance at Brent's rate (rounded up) and locks it on the
  * payment; this screen shows both ("TT$680.00 = US$100.00 at 6.80") and the
- * foreign-transaction-fee note, and never computes a figure itself.
+ * "charged in US dollars" note, and never computes a figure itself.
  *
  *   1. ask /api/invoices/<no>/pay?offer=1 — can it be paid, TT$ / US$ / rate;
  *   2. the customer ticks "I agree to the Terms and Refund Policy";
@@ -281,7 +281,7 @@ export default function PayNow({ invoiceNo, balance, onPaid, autoOpen = false }:
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-dark">Pay online</p>
           <p className="mt-1 text-sm text-muted">{ways} Or pay the driver in cash on delivery.</p>
-          {/* Rule b2: both figures and the rate, then the foreign-transaction-fee note. */}
+          {/* Rule b2: both figures and the rate, then the "charged in US dollars" note. */}
           <p className="mt-2 text-base font-bold text-mist">{line}</p>
           <p className="mt-1 text-xs text-muted-dark">{note}</p>
           {testMode && <p className="mt-1 text-[11px] font-bold uppercase text-amber-300">Test mode — no real money moves</p>}

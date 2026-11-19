@@ -55,9 +55,22 @@ export type CustomerStatusKey =
   | "out_for_delivery"
   | "delivered"
   | "delayed"
-  | "on_hold";
+  | "on_hold"
+  | "delivery_attempted";
 
-type KeyDef = { key: CustomerStatusKey; label: string; stage: CustomerStage | null };
+type KeyDef = {
+  key: CustomerStatusKey;
+  label: string;
+  stage: CustomerStage | null;
+  /**
+   * A notice's progress-bar step. "Delivery attempted" sits on Out for Delivery,
+   * where the attempt happened, so the bar never drops below what the customer
+   * already saw (Brent, 2026-11-19). Absent = the real step underneath.
+   */
+  shown?: CustomerStage;
+  /** Set by the system only (a not-delivered stop, an owner's single-package undo); never in the picker. */
+  system?: true;
+};
 
 /**
  * Every value the override can hold, in picker order. Stored in the table as
@@ -72,7 +85,23 @@ export const CUSTOMER_STATUS_OPTIONS: readonly KeyDef[] = [
   { key: "delivered", label: "Delivered", stage: 4 },
   { key: "delayed", label: "Delayed", stage: null },
   { key: "on_hold", label: "On hold — contact us", stage: null },
+  {
+    key: "delivery_attempted",
+    label: "Delivery attempted – we'll be in touch to reschedule",
+    stage: null,
+    shown: 3,
+    system: true,
+  },
 ];
+
+/**
+ * The key a package gets when a delivery was attempted and it did not reach the
+ * customer (Brent, 2026-11-19). Set with base_stage 2 (Awaiting Clearance /
+ * Cleared – Ready to Deliver), so it shows once the package is back to raw 3 and
+ * is over the moment it goes Out for Delivery again or is delivered.
+ */
+export const DELIVERY_ATTEMPTED_KEY: CustomerStatusKey = "delivery_attempted";
+export const DELIVERY_ATTEMPTED_BASE_STAGE: CustomerStage = 2;
 
 export const NOTE_MAX = 255;
 
@@ -87,6 +116,16 @@ export function isCustomerStatusKey(key: unknown): key is CustomerStatusKey {
 /** "Delayed" etc. Unknown key → null. */
 export function customerStatusLabel(key: string | null | undefined): string | null {
   return defOf(key)?.label ?? null;
+}
+
+/** Set only by the system (never the picker) — e.g. "Delivery attempted". */
+export function isSystemCustomerStatus(key: string | null | undefined): boolean {
+  return defOf(key)?.system === true;
+}
+
+/** A notice's progress-bar step (see KeyDef.shown); null when it has none. */
+export function customerNoticeStage(key: string | null | undefined): CustomerStage | null {
+  return defOf(key)?.shown ?? null;
 }
 
 /** The stage a stage label stands for; null for a notice or an unknown key. */
@@ -138,7 +177,7 @@ export function isOverrideActive(o: StoredOverride | null | undefined, realStage
 export function allowedKeysFor(realStage: CustomerStage, grouped: boolean): CustomerStatusKey[] {
   if (realStage >= 4) return []; // delivered: nothing left to say
   return CUSTOMER_STATUS_OPTIONS.filter((o) =>
-    o.stage == null ? true : !grouped && o.stage > realStage
+    o.system ? false : o.stage == null ? true : !grouped && o.stage > realStage
   ).map((o) => o.key);
 }
 
@@ -148,6 +187,7 @@ export type SetDecision = { ok: true; baseStage: CustomerStage } | { ok: false; 
 export function decideSet(key: string, realStage: CustomerStage, grouped: boolean): SetDecision {
   const def = defOf(key);
   if (!def) return { ok: false, reason: "Unknown status." };
+  if (def.system) return { ok: false, reason: "This status is set automatically after a delivery attempt." };
   if (realStage >= 4) return { ok: false, reason: "Already delivered." };
   if (def.stage != null && grouped) {
     return { ok: false, reason: "In a Consolidated Billing group — only Delayed or On hold can be shown." };

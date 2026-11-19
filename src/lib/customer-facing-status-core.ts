@@ -101,7 +101,7 @@
  * DISPLAY ONLY. Nothing here is written anywhere; the real status, customs,
  * invoices, delivery and the admin's own chips never read it.
  */
-import { CUSTOMER_STAGE_LABELS, cleanNote, customerStageOf, customerStatusStage, customerStatusView, isCustomerStatusKey, isOverrideActive, type CustomerStage, type StoredOverride } from "./customer-status-core";
+import { CUSTOMER_STAGE_LABELS, cleanNote, customerNoticeStage, customerStageOf, isSystemCustomerStatus, customerStatusStage, customerStatusView, isCustomerStatusKey, isOverrideActive, type CustomerStage, type StoredOverride } from "./customer-status-core";
 import { inTransitLabel, isAutoTransitDue } from "./auto-transit-core";
 
 /** Every member of a group still collecting (Brent, 2026-10-29: "Consolidated"). */
@@ -213,6 +213,9 @@ export function invoiceIssuedAtFromRow(v: unknown): string | null {
  */
 export function isPreIssueOverride(o: StoredOverride, issuedAt: string | null | undefined): boolean {
   if (!isCustomerStatusKey(o.key)) return true;
+  // A system notice ("Delivery attempted") only ever follows a delivery attempt,
+  // which always comes after the issue — never stale, issue time known or not.
+  if (isSystemCustomerStatus(o.key)) return false;
   const stage = customerStatusStage(o.key);
   if (stage != null) return stage <= 2;
   const set = o.setAt ? String(o.setAt) : "";
@@ -473,6 +476,16 @@ function cbStepOfStage(stage: CustomerStage): CustomerStage {
   return stage === 0 ? 0 : stage <= 2 ? 1 : stage;
 }
 
+/**
+ * A notice's progress-bar step: the step underneath, raised to the notice's own
+ * step when it has one ("Delivery attempted" stays on Out for Delivery — the
+ * customer saw that step, and the bar never goes backwards; Brent, 2026-11-19).
+ */
+function noticeBar(stage: CustomerStage, key: string): CustomerStage {
+  const own = customerNoticeStage(key);
+  return own != null && own > stage ? own : stage;
+}
+
 export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
   const v = facingView(i);
   // Last, for every branch: a consolidated package's status never names a place.
@@ -505,7 +518,7 @@ function facingView(i: CustomerFacingInput): CustomerFacingView {
     const notice = (stage: CustomerStage, extra: Partial<CustomerFacingView>) => {
       const o = customerStatusView(i.override, real, true, false);
       return o?.kind === "notice"
-        ? ({ cb: true, consolidating: false, ready: false, ...extra, stage, label: o.label, source: "office", notice: true, note: o.note } as CustomerFacingView)
+        ? ({ cb: true, consolidating: false, ready: false, ...extra, stage: noticeBar(stage, o.key), label: o.label, source: "office", notice: true, note: o.note } as CustomerFacingView)
         : null;
     };
     if (!cb.groupReleased) {
@@ -535,7 +548,7 @@ function facingView(i: CustomerFacingInput): CustomerFacingView {
       return { ...ready, ready: false, stage: later, label: word(later), source: "office", notice: false, note: cleanNote(o.note) };
     }
     if (o && later == null && isOverrideActive(o, 2)) {
-      return { ...ready, stage: 2, label: customerStatusView(o, 2, false)?.label ?? CLEARED_READY_LABEL, source: "office", notice: true, note: cleanNote(o.note) };
+      return { ...ready, stage: noticeBar(2, o.key), label: customerStatusView(o, 2, false)?.label ?? CLEARED_READY_LABEL, source: "office", notice: true, note: cleanNote(o.note) };
     }
     return { ...ready, stage: 2, label: CLEARED_READY_LABEL, source: i.invoiceIssuedAt != null ? "real" : "floor", notice: false, note: null };
   }
@@ -544,7 +557,7 @@ function facingView(i: CustomerFacingInput): CustomerFacingView {
 
   const office = customerStatusView(i.override, real, isCbHeld(cb), false);
   if (office?.kind === "notice") {
-    return { ...base, stage: step ?? (Math.max(real, floorStage) as CustomerStage), label: office.label, source: "office", notice: true, note: office.note };
+    return { ...base, stage: noticeBar(step ?? (Math.max(real, floorStage) as CustomerStage), office.key), label: office.label, source: "office", notice: true, note: office.note };
   }
   if (office?.kind === "stage" && (cb || office.stage > floorStage)) {
     return { ...base, consolidating: false, stage: cb ? cbStepOfStage(office.stage) : office.stage, label: word(office.stage), source: "office", notice: false, note: office.note };

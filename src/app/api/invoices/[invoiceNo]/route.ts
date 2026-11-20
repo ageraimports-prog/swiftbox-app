@@ -55,6 +55,9 @@ type PackageRow = {
 };
 
 
+/** Customs lines: their qty is the assessed base, which encodes the declared value. */
+const CUSTOMS_LINE_TYPES = new Set(["duty", "opt", "vat", "other"]);
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ invoiceNo: string }> }
@@ -189,8 +192,10 @@ export async function GET(
         // An insurance line's qty IS the declared value, and its stored wording
         // may name it — no invoice a customer can see shows a declared value
         // (Brent, 2026-11-14), so neither leaves the server. The minimum keeps its
-        // "1 × US$2.00".
-        qty: l.qty == null || (l.line_type === "insurance" && l.unit !== "min") ? null : Number(l.qty),
+        // "1 × US$2.00". A customs line's qty is the assessed CIF base, worked out
+        // from the declared value; the screen never prints it (it shows the basis,
+        // "20% of CIF"), so it stays on the server too (Brent, 2026-11-20).
+        qty: l.qty == null || (l.line_type === "insurance" && l.unit !== "min") || CUSTOMS_LINE_TYPES.has(l.line_type) ? null : Number(l.qty),
         unit: l.unit,
         rate: l.rate == null ? null : Number(l.rate),
         basis: l.line_type === "insurance" ? withoutDeclaredValue(withoutCombinedValue(l.basis)) : l.basis,

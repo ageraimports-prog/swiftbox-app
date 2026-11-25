@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, consolidatedCustomerOn, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARANCE_FACTS_SQL, CLEARED_SQL, INVOICE_ISSUED_AT_SQL, consolidatedCustomerOn, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 import { openPrealertRows } from "@/lib/prealert-flags";
 
 type Row = {
@@ -22,6 +22,7 @@ type Row = {
   ship_no: string | null;
   ship_status: number | null;
   cleared: number | null;
+  clearance_facts?: string | null;
   invoice_issued_at: string | null;
 };
 
@@ -36,7 +37,7 @@ export async function GET() {
   const rows = await query<Row>(
     `SELECT p.pk_id, p.wr, p.tracking, p.pk_type, p.weight, p.pcs,
             p.shipper, p.commodities, p.date, ${await airdropPackageColumns()},
-            s.ship_no, s.ship_status, ${CLEARED_SQL} AS cleared,
+            s.ship_no, s.ship_status, ${CLEARED_SQL} AS cleared, ${CLEARANCE_FACTS_SQL} AS clearance_facts,
             ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
@@ -66,6 +67,7 @@ export async function GET() {
       override: overrides.get(Number(r.pk_id)),
       rawShipStatus: raw,
       cleared: Number(r.cleared) > 0,
+      clearanceFacts: r.clearance_facts,
       pkType: Number(r.pk_type),
       cb: cb.get(Number(r.pk_id))?.membership ?? null,
       airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },

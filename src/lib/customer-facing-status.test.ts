@@ -95,7 +95,9 @@ describe("Consolidated Billing masking", () => {
   it("non-members are unchanged", () => {
     expect(customerFacingView({ shipStatus: 2, pkType: 1 }).label).toBe("In Transit to Piarco");
     expect(customerFacingView({ shipStatus: 3 }).label).toBe("Awaiting Clearance");
-    expect(customerFacingView({ shipStatus: 3, cleared: true }).label).toBe("Awaiting Clearance");
+    // Cleared, no issued invoice (Brent, 2026-11-24): Cleared – Awaiting Invoice.
+    expect(customerFacingView({ shipStatus: 3, cleared: true }).label).toBe("Cleared – Awaiting Invoice");
+    expect(customerFacingView({ shipStatus: 3, clearance: { scheduledOn: "2026-11-25", held: false } }).label).toBe("Clearance Scheduled – Wed 25 Nov");
   });
 });
 

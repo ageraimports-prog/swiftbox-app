@@ -98,6 +98,17 @@
  * missing-check-in flag is on it. Neither is a count nor a location; the only
  * place ever named is Miami.
  *
+ * CLEARANCE SCHEDULED / CLEARED – AWAITING INVOICE (Brent, 2026-11-24). Two steps
+ * between Awaiting Clearance and Cleared – Ready to Deliver, both on step 2:
+ *   - "Clearance Scheduled – Wed 25 Nov": the shipment has a customs appointment
+ *     (clearanceFactsSql) and its line is at raw 3 (landed). A date recorded before
+ *     landing is stored and shows once it lands. Never for a Consolidated Billing
+ *     member or a CB customer (the clearing stage is not shown to them).
+ *   - "Cleared – Awaiting Invoice": raw 3 on a shipment marked cleared, the package on
+ *     no issued invoice yet (an issued invoice still reads Cleared – Ready to Deliver).
+ *     Floor rank 3. A released CB group reads it too (CB_GROUP_CODE.CLEARED).
+ *   A package bonded or seized on its customs line keeps its own status (neither).
+ *
  * DISPLAY ONLY. Nothing here is written anywhere; the real status, customs,
  * invoices, delivery and the admin's own chips never read it.
  */
@@ -160,6 +171,73 @@ export function prealertFacingStatus(i: { flagged?: boolean | null; consolidated
 
 /** What a customer sees once the package's invoice is issued (the admin's own chip wording). */
 export const CLEARED_READY_LABEL = "Cleared – Ready to Deliver";
+
+/** The shipment is cleared; this package's invoice is not issued yet (Brent, 2026-11-24). */
+export const CLEARED_AWAITING_INVOICE_LABEL = "Cleared – Awaiting Invoice";
+/** The shipment's customs appointment is booked; the label carries its date. */
+export const CLEARANCE_SCHEDULED_LABEL = "Clearance Scheduled";
+
+/**
+ * The appointment lives in swiftbox_audit_log (entity 'shipment', entity_id = ship_no):
+ * the NEWEST row among these two actions is the current state. A scheduled row's
+ * to_value is the date (YYYY-MM-DD); a removed row means none. Written only by the admin.
+ */
+export const CLEARANCE_SCHEDULED_ACTION = "clearance_scheduled";
+export const CLEARANCE_SCHEDULE_REMOVED_ACTION = "clearance_schedule_removed";
+
+/** SQL: the current appointment date of shipment `shipNoExpr` (YYYY-MM-DD), NULL for none. */
+export function clearanceScheduledOnSql(shipNoExpr: string): string {
+  return `(SELECT csa.to_value FROM swiftbox_audit_log csa WHERE csa.entity_type = 'shipment' AND csa.entity_id = ${shipNoExpr} AND csa.action IN ('${CLEARANCE_SCHEDULED_ACTION}', '${CLEARANCE_SCHEDULE_REMOVED_ACTION}') ORDER BY csa.id DESC LIMIT 1)`;
+}
+
+/** SQL: the customs line `shipIdExpr` (a mod_shipment.ship_id) is bonded or seized. */
+export function customsHeldSql(shipIdExpr: string): string {
+  return `EXISTS (SELECT 1 FROM customs_lines clh WHERE clh.ship_id = ${shipIdExpr} AND (clh.bond_flag = 1 OR clh.seize_flag = 1))`;
+}
+
+/**
+ * SQL, ONE column for every surface: 'customs_hold' when the line is bonded / seized, else the
+ * shipment's appointment date, else NULL. Read with clearanceFactsOfRow. Columns of a
+ * mod_shipment row, e.g. clearanceFactsSql("s.ship_no", "s.ship_id").
+ */
+export function clearanceFactsSql(shipNoExpr: string, shipIdExpr: string): string {
+  return `(CASE WHEN ${shipIdExpr} IS NULL THEN NULL WHEN ${customsHeldSql(shipIdExpr)} THEN 'customs_hold' ELSE ${clearanceScheduledOnSql(shipNoExpr)} END)`;
+}
+
+export type ClearanceFacts = { scheduledOn: string | null; held: boolean };
+
+/** A YYYY-MM-DD that is a real calendar date, else null. */
+export function scheduledDateOf(v: unknown): string | null {
+  const t = v == null ? "" : String(v).trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  const d = new Date(t + "T12:00:00Z");
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t ? null : t;
+}
+
+/** A value read with clearanceFactsSql → CustomerFacingInput.clearance (null = nothing to say). */
+export function clearanceFactsOfRow(v: unknown): ClearanceFacts | null {
+  if (v == null || v === "") return null;
+  if (String(v) === "customs_hold") return { scheduledOn: null, held: true };
+  const d = scheduledDateOf(v);
+  return d ? { scheduledOn: d, held: false } : null;
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Wed 25 Nov" for 2026-11-25 (a calendar date, no time zone involved); "" for junk. */
+export function scheduledDayLabel(date: string | null | undefined): string {
+  const t = scheduledDateOf(date);
+  if (!t) return "";
+  const d = new Date(t + "T12:00:00Z");
+  return WEEKDAYS[d.getUTCDay()] + " " + d.getUTCDate() + " " + MONTHS[d.getUTCMonth()];
+}
+
+/** "Clearance Scheduled – Wed 25 Nov" (plain "Clearance Scheduled" without a usable date). */
+export function clearanceScheduledLabel(date: string | null | undefined): string {
+  const day = scheduledDayLabel(date);
+  return day ? CLEARANCE_SCHEDULED_LABEL + " – " + day : CLEARANCE_SCHEDULED_LABEL;
+}
 
 /**
  * CANCELLED (Brent, 2026-10-28): the office cancelled the package (picked up in
@@ -288,7 +366,7 @@ export function isCbHeld(m: CbMembership | null | undefined): boolean {
  * earlier member is further along or held back. The group's shown status only
  * ever moves forward (its floor). Codes:
  */
-export const CB_GROUP_CODE = { MIAMI: 0, TRANSIT: 1, CLEARANCE: 2, READY: 4, OUT_FOR_DELIVERY: 5, DELIVERED: 6 } as const;
+export const CB_GROUP_CODE = { MIAMI: 0, TRANSIT: 1, CLEARANCE: 2, CLEARED: 3, READY: 4, OUT_FOR_DELIVERY: 5, DELIVERED: 6 } as const;
 
 /**
  * SQL: the code (CB_GROUP_CODE) of the LAST package identified into the group of
@@ -296,13 +374,15 @@ export const CB_GROUP_CODE = { MIAMI: 0, TRANSIT: 1, CLEARANCE: 2, READY: 4, OUT
  * then). "Last" = the ACTIVE, counted member (archived members never count)
  * with the latest Miami entry: COALESCE(entered_at, mod_packages.date), newest
  * first, the higher pk_id on a tie. Its code: no shipment line (or raw 0/1) = In
- * Miami; raw 2 = In Transit; on an ISSUED invoice = Ready; raw 3 = Awaiting
- * Clearance; raw 4 = Out for Delivery; raw 5 = Delivered. A package's newest
+ * Miami; raw 2 = In Transit; on an ISSUED invoice = Ready; raw 3 on a shipment marked
+ * cleared = Cleared (– Awaiting Invoice, 2026-11-24); raw 3 = Awaiting Clearance; raw 4 =
+ * Out for Delivery; raw 5 = Delivered. A package's newest
  * shipment line is the one that counts.
  */
 export function cbGroupLastSql(m: string): string {
   return `(SELECT CASE WHEN s_gl.ship_id IS NULL THEN 0 WHEN s_gl.ship_status >= 5 THEN 6 WHEN s_gl.ship_status = 4 THEN 5
       WHEN EXISTS (SELECT 1 FROM swiftbox_invoice_packages ip_gl JOIN swiftbox_invoices i_gl ON i_gl.invoice_id = ip_gl.invoice_id WHERE ip_gl.pk_id = m_gl.pk_id AND i_gl.lifecycle = 'issued') THEN 4
+      WHEN s_gl.ship_status = 3 AND EXISTS (SELECT 1 FROM swiftbox_shipment_clearance sc_gl WHERE sc_gl.ship_no = s_gl.ship_no) THEN 3
       WHEN s_gl.ship_status = 3 THEN 2 WHEN s_gl.ship_status = 2 THEN 1 ELSE 0 END
     FROM swiftbox_cb_group_packages m_gl JOIN mod_packages p_gl ON p_gl.pk_id = m_gl.pk_id
     LEFT JOIN mod_shipment s_gl ON s_gl.ship_id = (SELECT MAX(s2_gl.ship_id) FROM mod_shipment s2_gl WHERE s2_gl.package_id = m_gl.pk_id)
@@ -357,7 +437,7 @@ export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: nu
 
 /** A group's code (its last-identified member's) → the ladder rank its members show (Out for Delivery / Delivered stay codes 5 / 6). */
 export function cbGroupRankOfCode(code: number): number {
-  return code >= CB_GROUP_CODE.OUT_FOR_DELIVERY ? code : code === CB_GROUP_CODE.READY ? 4 : Math.max(0, Math.min(2, code));
+  return code >= CB_GROUP_CODE.OUT_FOR_DELIVERY ? code : code === CB_GROUP_CODE.READY ? 4 : Math.max(0, Math.min(3, code));
 }
 
 /**
@@ -399,6 +479,11 @@ export type CustomerFacingInput = {
   displayFloor?: number | null;
   /** The office cancelled the package (packageCancelledColumnSql). Terminal. */
   cancelled?: boolean;
+  /**
+   * The shipment's customs appointment and whether this line is bonded / seized, read
+   * with clearanceFactsSql / clearanceFactsOfRow. Absent = no appointment, not held.
+   */
+  clearance?: ClearanceFacts | null;
   /**
    * The customer's Consolidated Billing switch is on (users.consolidated_billing):
    * the answer's label is made location-free even for a package outside a group.
@@ -448,6 +533,10 @@ export type CustomerFacingView = {
   group?: boolean;
   /** The office cancelled the package: show CANCELLED_FACING_LABEL and no progress bar. */
   cancelled?: boolean;
+  /** Cleared – Awaiting Invoice (step 2): a stepper names that step with `label`. */
+  awaitingInvoice?: boolean;
+  /** Clearance Scheduled (step 2): the appointment date, YYYY-MM-DD. */
+  scheduledOn?: string | null;
 };
 
 /** The group is still collecting (open, or closed by its window but not sent / released). */
@@ -532,8 +621,9 @@ function facingView(i: CustomerFacingInput): CustomerFacingView {
       // After Send now: the last-identified member's real status, never backwards.
       const stage: CustomerStage = rank >= 6 ? 4 : rank === 5 ? 3 : rank >= 2 ? 2 : (rank as CustomerStage);
       const ready = rank === 4;
-      const extra = { cb: true, consolidating: false, ready, group: true };
-      return notice(stage, extra) ?? { ...extra, stage, label: ready ? CLEARED_READY_LABEL : word(stage), source: "consolidated", notice: false, note: null };
+      const awaitingInvoice = rank === 3;
+      const extra = { cb: true, consolidating: false, ready, group: true, ...(awaitingInvoice ? { awaitingInvoice } : {}) };
+      return notice(stage, extra) ?? { ...extra, stage, label: ready ? CLEARED_READY_LABEL : awaitingInvoice ? CLEARED_AWAITING_INVOICE_LABEL : word(stage), source: "consolidated", notice: false, note: null };
     }
   }
 
@@ -565,6 +655,17 @@ function facingView(i: CustomerFacingInput): CustomerFacingView {
   if (cb && step != null) {
     const label = step === 0 ? CB_RECEIVED_MIAMI_LABEL : step === 1 ? CB_CONSOLIDATING_LABEL : step === 2 ? CB_READY_LABEL : CUSTOMER_STAGE_LABELS[step];
     return { ...base, stage: step, label, source: step <= 2 ? "consolidated" : "real", notice: false, note: null };
+  }
+  // Cleared – Awaiting Invoice / Clearance Scheduled (2026-11-24): never for a CB
+  // member (handled above) and never for a bonded / seized line.
+  if (!cb && !i.clearance?.held) {
+    if ((s === 3 && cleared) || (floor === 3 && real <= 2)) {
+      return { ...base, stage: 2, label: CLEARED_AWAITING_INVOICE_LABEL, source: s === 3 && cleared ? "real" : "floor", notice: false, note: null, awaitingInvoice: true };
+    }
+    const on = s === 3 && !i.consolidatedCustomer ? scheduledDateOf(i.clearance?.scheduledOn) : null;
+    if (on) {
+      return { ...base, stage: 2, label: clearanceScheduledLabel(on), source: "real", notice: false, note: null, scheduledOn: on };
+    }
   }
   if (auto && real < 1 && floorStage <= 1) {
     return { ...base, stage: 1, label: word(1), source: "auto", notice: false, note: null };

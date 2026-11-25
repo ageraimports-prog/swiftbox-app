@@ -17,11 +17,18 @@ describe("issued invoice → Cleared – Ready to Deliver", () => {
     expect(packageBadge(v).label).toBe(CLEARED_READY_LABEL);
   });
 
-  it("without an issued invoice nothing changes", () => {
+  it("without an issued invoice: Cleared – Awaiting Invoice (2026-11-24)", () => {
     const v = customerFacingView({ shipStatus: 3, cleared: true, pkType: 1 });
-    expect(v.label).toBe("Awaiting Clearance");
+    expect(v.label).toBe("Cleared – Awaiting Invoice");
     expect(v.ready).toBe(false);
-    expect(stepLabels(v, 1)[2]).toBe("Awaiting Clearance");
+    expect(stepLabels(v, 1)[2]).toBe("Cleared – Awaiting Invoice");
+  });
+
+  it("an appointment before clearance: Clearance Scheduled – <day> on step 2", () => {
+    const v = customerFacingView({ shipStatus: 3, pkType: 1, clearance: { scheduledOn: "2026-11-25", held: false } });
+    expect(v.label).toBe("Clearance Scheduled – Wed 25 Nov");
+    expect(stepLabels(v, 1)[2]).toBe("Clearance Scheduled – Wed 25 Nov");
+    expect(customerFacingView({ shipStatus: 2, pkType: 1, clearance: { scheduledOn: "2026-11-25", held: false } }).stage).toBe(1);
   });
 
   it("a held Consolidated Billing member with an issued invoice is no longer masked", () => {

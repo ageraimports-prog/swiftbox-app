@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { airdropPackageColumns } from "@/lib/airdrop-display";
 import { cbPackageFacts } from "@/lib/consolidated-billing";
-import { CLEARED_SQL, INVOICE_ISSUED_AT_SQL, consolidatedCustomerOn, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
+import { CLEARANCE_FACTS_SQL, CLEARED_SQL, INVOICE_ISSUED_AT_SQL, consolidatedCustomerOn, customerDisplayFloors, customerStatusOverrides, viewFor } from "@/lib/customer-status";
 
 type Row = {
   pk_id: number;
@@ -28,6 +28,7 @@ type Row = {
   ofd_date: string | null;
   delivered_date: string | null;
   cleared: number | null;
+  clearance_facts?: string | null;
   invoice_issued_at: string | null;
 };
 
@@ -53,7 +54,7 @@ export async function GET(
             p.volumetric_weight, p.pcs, p.shipper, p.commodities, p.date, ${await airdropPackageColumns()},
             s.ship_id, s.ship_no, s.ship_status,
             s.miami_date, s.transit_date, s.awaiting_date,
-            s.ofd_date, s.delivered_date, ${CLEARED_SQL} AS cleared,
+            s.ofd_date, s.delivered_date, ${CLEARED_SQL} AS cleared, ${CLEARANCE_FACTS_SQL} AS clearance_facts,
             ${INVOICE_ISSUED_AT_SQL} AS invoice_issued_at
        FROM mod_packages p
        LEFT JOIN mod_shipment s ON s.package_id = p.pk_id
@@ -75,6 +76,7 @@ export async function GET(
     override: (await customerStatusOverrides(session.id, [Number(r.pk_id)])).get(Number(r.pk_id)),
     rawShipStatus: raw,
     cleared: Number(r.cleared) > 0,
+      clearanceFacts: r.clearance_facts,
     pkType: Number(r.pk_type),
     cb: cb?.membership ?? null,
     airdrop: { receivedAt: r.external_received_at, mode: r.external_mode },

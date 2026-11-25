@@ -1,7 +1,7 @@
 import "server-only";
 import { query } from "@/lib/db";
 import { CUSTOMER_STATUS_TABLE, OVERRIDE_SET_AT_SQL, type StoredOverride } from "@/lib/customer-status-core";
-import { customerFacingView, displayFloorOfRow, invoiceIssuedAtSql, DISPLAY_FLOOR_TABLE, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
+import { clearanceFactsOfRow, clearanceFactsSql, customerFacingView, displayFloorOfRow, invoiceIssuedAtSql, DISPLAY_FLOOR_TABLE, type CbMembership, type CustomerFacingView } from "@/lib/customer-facing-status-core";
 
 /**
  * Customer-facing status set by the office (admin migration 055,
@@ -88,6 +88,8 @@ export function viewFor(input: {
   displayFloor?: number | null;
   /** The customer's Consolidated Billing switch is on (consolidatedCustomerOn): no place in any label. */
   consolidatedCustomer?: boolean;
+  /** The row's CLEARANCE_FACTS_SQL column: the shipment's customs appointment / bonded-seized (2026-11-24). */
+  clearanceFacts?: unknown;
   nowMs?: number;
 }): CustomerFacingView {
   return customerFacingView({
@@ -100,6 +102,7 @@ export function viewFor(input: {
     invoiceIssuedAt: input.invoiceIssuedAt ?? null,
     displayFloor: input.displayFloor ?? null,
     consolidatedCustomer: !!input.consolidatedCustomer,
+    clearance: clearanceFactsOfRow(input.clearanceFacts),
     nowMs: input.nowMs,
   });
 }
@@ -125,6 +128,12 @@ export async function consolidatedCustomerOn(userId: number): Promise<boolean> {
  * and the admin read the same fact.
  */
 export const INVOICE_ISSUED_AT_SQL = invoiceIssuedAtSql("p.pk_id");
+
+/**
+ * SQL: the shipment row `s`'s customs appointment ("Clearance Scheduled – Tue 25 Nov")
+ * or a customs-hold marker for a bonded / seized line — the shared core's one column (2026-11-24).
+ */
+export const CLEARANCE_FACTS_SQL = clearanceFactsSql("s.ship_no", "s.ship_id");
 
 /** SQL: 1 when the shipment row aliased `s` has been marked cleared (admin migration 017). */
 export const CLEARED_SQL = "(SELECT COUNT(*) FROM swiftbox_shipment_clearance sc WHERE sc.ship_no = s.ship_no) > 0";

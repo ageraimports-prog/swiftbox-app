@@ -109,6 +109,12 @@
  *     Floor rank 3. A released CB group reads it too (CB_GROUP_CODE.CLEARED).
  *   A package bonded or seized on its customs line keeps its own status (neither).
  *
+ * SHIPMENT DELAYS (Brent, 2026-11-26; see shipmentDelaySql / applyDelay). An overlay on
+ * one step, never a status: "Delayed by airline – tentatively scheduled for Fri 27 Nov"
+ * on In Transit; "Delayed – awaiting remaining cargo from the airline" on the landed
+ * awaiting-customs step. When a delay ends the customer is on Awaiting Clearance (or
+ * Clearance Scheduled – <day>). Never for an open Consolidated Billing group.
+ *
  * DISPLAY ONLY. Nothing here is written anywhere; the real status, customs,
  * invoices, delivery and the admin's own chips never read it.
  */
@@ -196,15 +202,74 @@ export function customsHeldSql(shipIdExpr: string): string {
 }
 
 /**
- * SQL, ONE column for every surface: 'customs_hold' when the line is bonded / seized, else the
- * shipment's appointment date, else NULL. Read with clearanceFactsOfRow. Columns of a
- * mod_shipment row, e.g. clearanceFactsSql("s.ship_no", "s.ship_id").
+ * SHIPMENT DELAYS (Brent, 2026-11-26; DELAY_STATUS_PLAN.md). A shipment-level overlay on
+ * the real stage — never a status of its own:
+ *   - airline_bumped: the flight was bumped while In Transit. Shown on step 1 only.
+ *   - part_shipment: the airline short-landed the cargo. Shown on step 2 only, once
+ *     landed (Awaiting Clearance / Clearance Scheduled), until all cargo arrives or the
+ *     shipment is cleared.
+ * The admin keeps the record in its own table (migration 121) and PUBLISHES the state as
+ * swiftbox_audit_log rows (entity 'shipment', entity_id = ship_no): the NEWEST row among
+ * these two actions is the current delay. A set row's to_value is "<kind>|<YYYY-MM-DD or
+ * empty>"; an ended row means none. Every repo reads it with no migration.
  */
-export function clearanceFactsSql(shipNoExpr: string, shipIdExpr: string): string {
-  return `(CASE WHEN ${shipIdExpr} IS NULL THEN NULL WHEN ${customsHeldSql(shipIdExpr)} THEN 'customs_hold' ELSE ${clearanceScheduledOnSql(shipNoExpr)} END)`;
+export const SHIPMENT_DELAY_SET_ACTION = "shipment_delay_set";
+export const SHIPMENT_DELAY_ENDED_ACTION = "shipment_delay_ended";
+export const DELAY_KINDS = ["airline_bumped", "part_shipment"] as const;
+export type DelayKind = (typeof DELAY_KINDS)[number];
+export type DelayFacts = { kind: DelayKind; date: string | null };
+
+/** SQL: the shipment `shipNoExpr`'s published delay ("<kind>|<date>"), NULL for none. */
+export function shipmentDelaySql(shipNoExpr: string): string {
+  return `(SELECT CASE WHEN sda.action = '${SHIPMENT_DELAY_SET_ACTION}' THEN sda.to_value END FROM swiftbox_audit_log sda WHERE sda.entity_type = 'shipment' AND sda.entity_id = ${shipNoExpr} AND sda.action IN ('${SHIPMENT_DELAY_SET_ACTION}', '${SHIPMENT_DELAY_ENDED_ACTION}') ORDER BY sda.id DESC LIMIT 1)`;
 }
 
-export type ClearanceFacts = { scheduledOn: string | null; held: boolean };
+/** "<kind>|<date>" → DelayFacts; anything else → null. */
+export function delayFactsOf(v: unknown): DelayFacts | null {
+  if (v == null) return null;
+  const [k, d] = String(v).split("|");
+  const key = String(k ?? "").trim();
+  const kind = (DELAY_KINDS as readonly string[]).includes(key) ? (key as DelayKind) : null;
+  return kind ? { kind, date: scheduledDateOf(d) } : null;
+}
+
+/** DelayFacts → the published to_value. */
+export function delayStateValue(f: DelayFacts): string {
+  return `${f.kind}|${scheduledDateOf(f.date) ?? ""}`;
+}
+
+export const DELAY_BUMPED_LABEL = "Delayed by airline";
+export const DELAY_PART_LABEL = "Delayed – awaiting remaining cargo from the airline";
+
+/** Today in Trinidad (UTC−4, no daylight saving), YYYY-MM-DD. */
+export function trinidadDateOf(nowMs: number): string {
+  return new Date(nowMs - 4 * 3600_000).toISOString().slice(0, 10);
+}
+
+/**
+ * What a customer reads for a delay. A date only while it is today or later (Trinidad):
+ * never a stale date. No flight numbers, AWB or piece counts — ever.
+ */
+export function delayLabel(f: DelayFacts, today: string): string {
+  const date = scheduledDateOf(f.date);
+  const day = date && date >= today ? scheduledDayLabel(date) : "";
+  if (f.kind === "airline_bumped") {
+    return day ? `${DELAY_BUMPED_LABEL} – tentatively scheduled for ${day}` : `${DELAY_BUMPED_LABEL} – new date to be confirmed`;
+  }
+  return day ? `${DELAY_PART_LABEL} – expected ${day}` : DELAY_PART_LABEL;
+}
+
+/**
+ * SQL, ONE column for every surface: 'customs_hold' when the line is bonded / seized, else
+ * "<appointment date or empty>#<published delay or empty>"; NULL with no shipment line.
+ * Read with clearanceFactsOfRow. Columns of a mod_shipment row, e.g.
+ * clearanceFactsSql("s.ship_no", "s.ship_id").
+ */
+export function clearanceFactsSql(shipNoExpr: string, shipIdExpr: string): string {
+  return `(CASE WHEN ${shipIdExpr} IS NULL THEN NULL WHEN ${customsHeldSql(shipIdExpr)} THEN 'customs_hold' ELSE CONCAT(COALESCE(${clearanceScheduledOnSql(shipNoExpr)}, ''), '#', COALESCE(${shipmentDelaySql(shipNoExpr)}, '')) END)`;
+}
+
+export type ClearanceFacts = { scheduledOn: string | null; held: boolean; delay?: DelayFacts | null };
 
 /** A YYYY-MM-DD that is a real calendar date, else null. */
 export function scheduledDateOf(v: unknown): string | null {
@@ -218,8 +283,12 @@ export function scheduledDateOf(v: unknown): string | null {
 export function clearanceFactsOfRow(v: unknown): ClearanceFacts | null {
   if (v == null || v === "") return null;
   if (String(v) === "customs_hold") return { scheduledOn: null, held: true };
-  const d = scheduledDateOf(v);
-  return d ? { scheduledOn: d, held: false } : null;
+  const t = String(v);
+  const cut = t.indexOf("#");
+  const d = scheduledDateOf(cut < 0 ? t : t.slice(0, cut));
+  const delay = cut < 0 ? null : delayFactsOf(t.slice(cut + 1));
+  if (!d && !delay) return null;
+  return delay ? { scheduledOn: d, held: false, delay } : { scheduledOn: d, held: false };
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -342,6 +411,8 @@ export type CbMembership = {
   groupLast?: number | null;
   /** The group's never-backwards floor (ladder rank 0–4), read with cbGroupFloorSql. */
   groupFloor?: number | null;
+  /** The published delay of the last-identified member's shipment (cbGroupLastDelaySql). */
+  groupDelay?: DelayFacts | null;
 };
 
 /**
@@ -391,6 +462,19 @@ export function cbGroupLastSql(m: string): string {
 }
 
 /**
+ * SQL: the published shipment delay (shipmentDelaySql) of the newest shipment line of the
+ * group's LAST-IDENTIFIED member — the same member, in the same order, as cbGroupLastSql.
+ * NULL when that member is on no shipment or its shipment has no delay.
+ */
+export function cbGroupLastDelaySql(m: string): string {
+  return `(SELECT ${shipmentDelaySql("s_gd.ship_no")}
+    FROM swiftbox_cb_group_packages m_gd JOIN mod_packages p_gd ON p_gd.pk_id = m_gd.pk_id
+    LEFT JOIN mod_shipment s_gd ON s_gd.ship_id = (SELECT MAX(s2_gd.ship_id) FROM mod_shipment s2_gd WHERE s2_gd.package_id = m_gd.pk_id)
+   WHERE m_gd.group_id = ${m}.group_id AND m_gd.removed_at IS NULL AND NOT (p_gd.archived_at IS NOT NULL AND s_gd.ship_id IS NULL)
+   ORDER BY COALESCE(m_gd.entered_at, p_gd.date) DESC, m_gd.pk_id DESC LIMIT 1)`;
+}
+
+/**
  * The last-identified member of a group, from facts already read (pure; the
  * same order as cbGroupLastSql): the latest Miami entry wins, the higher pk_id on
  * a tie. Null for no members.
@@ -418,10 +502,10 @@ export function cbGroupFloorSql(m: string): string {
 export const CB_GROUP_RELEASED_SQL = "(g.state = 'released' OR (g.close_reason IN ('customer','turned_off') AND g.state IN ('closed','released')))";
 
 /** SQL for the membership facts of the member row `m` (swiftbox_cb_group_packages) — join `g` = groups, `b` = bills. */
-export const CB_MEMBERSHIP_SELECT = `g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason, (g.close_reason = 'customer' AND g.state IN ('closed','released')) AS cb_shipping_released, ${CB_GROUP_RELEASED_SQL} AS cb_group_released, ${cbGroupLastSql("m")} AS cb_group_last, ${cbGroupFloorSql("m")} AS cb_group_floor`;
+export const CB_MEMBERSHIP_SELECT = `g.state AS cb_state, g.bill_id AS cb_bill_id, b.lifecycle AS cb_bill_lifecycle, m.off_bill_reason AS cb_off_bill_reason, (g.close_reason = 'customer' AND g.state IN ('closed','released')) AS cb_shipping_released, ${CB_GROUP_RELEASED_SQL} AS cb_group_released, ${cbGroupLastSql("m")} AS cb_group_last, ${cbGroupFloorSql("m")} AS cb_group_floor, ${cbGroupLastDelaySql("m")} AS cb_group_delay`;
 
 /** A row read with CB_MEMBERSHIP_SELECT → CbMembership. */
-export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_shipping_released?: number | string | null; cb_group_released?: number | string | null; cb_group_last?: number | string | null; cb_group_floor?: number | string | null }): CbMembership | null {
+export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: number | string | null; cb_bill_lifecycle: string | null; cb_off_bill_reason: string | null; cb_shipping_released?: number | string | null; cb_group_released?: number | string | null; cb_group_last?: number | string | null; cb_group_floor?: number | string | null; cb_group_delay?: string | null }): CbMembership | null {
   if (!r.cb_state) return null;
   return {
     state: String(r.cb_state),
@@ -432,6 +516,7 @@ export function cbMembershipFromRow(r: { cb_state: string | null; cb_bill_id: nu
     groupReleased: !!Number(r.cb_group_released),
     groupLast: r.cb_group_last == null || r.cb_group_last === "" ? null : Number(r.cb_group_last),
     groupFloor: displayFloorOfRow(r.cb_group_floor),
+    ...(delayFactsOf(r.cb_group_delay) ? { groupDelay: delayFactsOf(r.cb_group_delay) } : {}),
   };
 }
 
@@ -537,6 +622,11 @@ export type CustomerFacingView = {
   awaitingInvoice?: boolean;
   /** Clearance Scheduled (step 2): the appointment date, YYYY-MM-DD. */
   scheduledOn?: string | null;
+  /**
+   * A shipment delay relabels this step (Brent, 2026-11-26): the label says it, the bar
+   * stays at `stage` and the rank is the stage's own. A stepper names the step `label`.
+   */
+  delayed?: DelayKind;
 };
 
 /** The group is still collecting (open, or closed by its window but not sent / released). */
@@ -576,9 +666,39 @@ function noticeBar(stage: CustomerStage, key: string): CustomerStage {
 }
 
 export function customerFacingView(i: CustomerFacingInput): CustomerFacingView {
-  const v = facingView(i);
+  const v = applyDelay(facingView(i), i);
   // Last, for every branch: a consolidated package's status never names a place.
   return v.cb || (i.consolidatedCustomer && !v.cancelled) ? { ...v, label: cbLocationFreeLabel(v.label) } : v;
+}
+
+/**
+ * SHIPMENT DELAY OVERLAY (Brent, 2026-11-26): relabels a view, never moves it. Only the
+ * step the delay belongs to: airline bumped on In Transit (step 1), part shipment on the
+ * awaiting-customs step (step 2, landed: Awaiting Clearance or Clearance Scheduled). Never
+ * on: cancelled, an office status, Ready / Awaiting Invoice, a bonded / seized line, an
+ * open Consolidated Billing group, a CB member read without group facts. A released
+ * group uses its last-identified member's shipment. When the delay ends the same view
+ * comes back without it — Awaiting Clearance (or Clearance Scheduled – <day>).
+ */
+function applyDelay(v: CustomerFacingView, i: CustomerFacingInput): CustomerFacingView {
+  if (v.cancelled || v.notice || v.ready || v.awaitingInvoice || v.consolidating || v.source === "office") return v;
+  let d: DelayFacts | null;
+  if (v.cb) {
+    if (!v.group) return v;
+    d = i.cb?.groupDelay ?? null;
+  } else {
+    if (i.clearance?.held) return v;
+    d = i.clearance?.delay ?? null;
+  }
+  if (!d) return v;
+  const today = trinidadDateOf(i.nowMs ?? Date.now());
+  if (d.kind === "airline_bumped" && v.stage === 1) return { ...v, label: delayLabel(d, today), delayed: d.kind };
+  if (d.kind === "part_shipment" && v.stage === 2) {
+    const raw = i.shipStatus == null || i.shipStatus === "" ? null : Number(i.shipStatus);
+    if (!v.cb && raw !== 3) return v;
+    return { ...v, label: delayLabel(d, today), delayed: d.kind };
+  }
+  return v;
 }
 
 function facingView(i: CustomerFacingInput): CustomerFacingView {

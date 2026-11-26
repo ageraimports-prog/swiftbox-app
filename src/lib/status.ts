@@ -119,6 +119,8 @@ export function packageBadge(
 ): { label: string; badge: string } {
   if (!status) return stageMeta(shipStatus, freight);
   if (status.notice) return { label: status.label, badge: NOTICE_BADGE };
+  // A shipment delay (2026-11-26): the label says it, highlighted like a notice.
+  if (status.delayed) return { label: status.label, badge: NOTICE_BADGE };
   if (status.consolidating) return { label: status.label, badge: CB_CONSOLIDATING_BADGE };
   if (status.ready || status.awaitingInvoice || (status.cb && !status.group && status.stage === 2)) return { label: status.label, badge: CB_READY_BADGE };
   return { label: status.label, badge: STAGES[status.stage].badge };
@@ -133,5 +135,7 @@ export function stepLabels(status: ShownStatus | null | undefined, freight?: num
   if (status?.ready) labels[2] = CLEARED_READY_LABEL;
   // Clearance Scheduled – <day> / Cleared – Awaiting Invoice (2026-11-24): step 2 says it.
   else if (status?.awaitingInvoice || status?.scheduledOn) labels[2] = status.label;
+  // A shipment delay (2026-11-26) relabels the step it is on (In Transit / awaiting customs).
+  if (status?.delayed) labels[status.stage] = status.label;
   return labels;
 }

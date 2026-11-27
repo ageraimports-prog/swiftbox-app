@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { query, execute } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { prealertLockedSql, prealertMatchedSql } from "@/lib/prealert-lock-sql";
-import { LOCKED_MESSAGE } from "@/lib/prealert-edit-core";
+import { customerPackageViews } from "@/lib/package-views";
+import { PREALERT_LOCKED_NOTE, prealertCardStatus, type PrealertPackage } from "@/lib/prealert-status";
 
 /**
  * Customer pre-alerts, backed by swiftbox_prealerts. user_id + account_no come
@@ -42,7 +43,21 @@ export async function GET() {
     { userId: session.id }
   );
 
-  const prealerts = rows.map((r) => ({
+  // A matched pre-alert shows its package's status, read by the package list's
+  // own function (lib/package-views.ts) — never the stored sp.status, which was
+  // written once when it matched. If the read fails, a matched card shows no
+  // status at all rather than the stale stored one.
+  let packages: PrealertPackage[] | null = null;
+  try {
+    const v = await customerPackageViews(session.id);
+    packages = v.packages.map(({ row, status }) => ({ pkId: Number(row.pk_id), wr: row.wr, tracking: row.tracking, status }));
+  } catch {
+    packages = null;
+  }
+
+  const prealerts = rows.map((r) => {
+    const card = prealertCardStatus(r.tracking_number, packages ?? []);
+    return {
     id: Number(r.prealert_id),
     storeName: r.store_name,
     trackingNumber: r.tracking_number,
@@ -54,9 +69,15 @@ export async function GET() {
     itemCount: Number(r.item_count),
     // Edit / Cancel: shown unless locked (prealert-edit-core.ts, the admin's rules).
     locked: Number(r.locked) === 1,
-    lockMessage: Number(r.locked) === 1 ? LOCKED_MESSAGE : null,
+    lockMessage: Number(r.locked) === 1 ? PREALERT_LOCKED_NOTE : null,
     canEditTracking: Number(r.matched) !== 1,
-  }));
+    // The matched package's customer-facing view (the same object the package
+    // list sends); null = no package yet → the stored status above.
+    packageStatus: card.matched ? card.status : null,
+    packageWrs: card.matched ? card.wrs : [],
+    statusUnknown: packages == null && Number(r.matched) === 1,
+    };
+  });
 
   return NextResponse.json({ prealerts });
 }

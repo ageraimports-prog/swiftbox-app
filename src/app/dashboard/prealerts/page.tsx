@@ -5,6 +5,7 @@ import Link from "next/link";
 import PrealertPickCard from "@/components/PrealertPickCard";
 import QueryToast from "@/components/QueryToast";
 import type { PickPackage } from "@/lib/prealert-pick";
+import { packageBadge, type ShownStatus } from "@/lib/status";
 
 type PreAlert = {
   id: number;
@@ -20,7 +21,22 @@ type PreAlert = {
   locked: boolean;
   lockMessage: string | null;
   canEditTracking: boolean;
+  /** The matched package's status, exactly as the package list shows it; null = no package yet. */
+  packageStatus?: ShownStatus | null;
+  packageWrs?: string[];
+  /** Matched, but the package status couldn't be read: no badge (never the stale stored one). */
+  statusUnknown?: boolean;
 };
+
+/** The card's badge: the package's own status once matched, else the pre-alert's. */
+function cardBadge(pa: PreAlert): { label: string; cls: string } | null {
+  if (pa.packageStatus) {
+    const b = packageBadge(pa.packageStatus);
+    return { label: b.label, cls: b.badge };
+  }
+  if (pa.statusUnknown) return null;
+  return STATUS_BADGE[pa.status] ?? STATUS_BADGE.pending;
+}
 
 /** What the list showed, sent with a cancel so a change made meanwhile refuses it (409). */
 function expectedOf(pa: PreAlert) {
@@ -246,7 +262,7 @@ export default function PreAlertsPage() {
       {prealerts && prealerts.length === 0 && <EmptyState />}
 
       {prealerts?.map((pa) => {
-        const badge = STATUS_BADGE[pa.status] ?? STATUS_BADGE.pending;
+        const badge = cardBadge(pa);
         return (
           <article
             key={pa.id}
@@ -256,15 +272,19 @@ export default function PreAlertsPage() {
               <p className="sb-disp text-lg uppercase leading-tight text-mist">
                 {pa.description || pa.storeName}
               </p>
-              <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.cls}`}
-              >
-                {badge.label}
-              </span>
+              {badge && (
+                <span
+                  data-testid="prealert-status"
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${badge.cls}`}
+                >
+                  {badge.label}
+                </span>
+              )}
             </div>
 
             <p className="mt-1 break-all text-xs text-muted-dark">
               {pa.trackingNumber}
+              {pa.packageWrs && pa.packageWrs.length > 0 && <> · {pa.packageWrs.join(", ")}</>}
             </p>
 
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-dark">

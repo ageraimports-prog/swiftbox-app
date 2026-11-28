@@ -40,8 +40,10 @@ function announce(state: unknown) {
  * the packages ARE (description + tracking), never by WR/SWF, and never where
  * they are (R13). The admin owns the rule; a double tap answers "already".
  */
-export function SendNowPanel({ group, onDone }: { group: SendGroup; onDone?: (state: unknown) => void }) {
-  const [step, setStep] = React.useState<"idle" | "confirm" | "busy" | "done" | "already">("idle");
+export function SendNowPanel({ group, onDone, autoOpen = false }: { group: SendGroup; onDone?: (state: unknown) => void; autoOpen?: boolean }) {
+  const [step, setStep] = React.useState<"idle" | "confirm" | "busy" | "done" | "already">(autoOpen ? "confirm" : "idle");
+  // A reminder's link (?send=1) opens the confirmation — never a send without the tap.
+  React.useEffect(() => { if (autoOpen) setStep((s) => (s === "idle" ? "confirm" : s)); }, [autoOpen]);
   const [error, setError] = React.useState<string | null>(null);
   const titles = group.packages.map((p) => formatDescription(p.commodities) ?? "Package");
   const count = group.packages.length;

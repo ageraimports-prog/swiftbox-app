@@ -23,15 +23,18 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  let body: { on?: unknown };
+  let body: { on?: unknown; choice?: unknown; undo?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
   if (typeof body.on !== "boolean") return NextResponse.json({ error: "on must be true or false" }, { status: 400 });
+  const choice = body.choice === "together" || body.choice === "each" ? body.choice : undefined;
   try {
-    const r = await setCbSetting(session.id, body.on);
+    const r = await setCbSetting(session.id, body.on, { choice, undo: body.undo === true });
+    // Switching off with packages waiting: the card asks the customer (409 = "answer this first").
+    if (r.needsChoice) return NextResponse.json({ needs_choice: true, ...r.needsChoice }, { status: 409 });
     // Turning it on also enrols packages already with us — the state read
     // afterwards already shows their group; `enrolled` lets the card say so.
     return NextResponse.json({ ...(await getCbState(session.id)), enrolled: r.enrolled });

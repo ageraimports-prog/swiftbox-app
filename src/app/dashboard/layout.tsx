@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 import TabBar from "@/components/TabBar";
 import { getSession } from "@/lib/session";
 import { unreadFlagCount } from "@/lib/prealert-flags";
+import { unreadCbNoticeCount } from "@/lib/cb-notices";
 import { countPackagesNeedingPrealert } from "@/lib/prealert-pick-server";
 
 export default async function DashboardLayout({
@@ -32,6 +33,8 @@ export default async function DashboardLayout({
   }
   // Pre-alert flags ("we've flagged … to the Miami warehouse") count as notices too; never fatal.
   unreadNotices += await unreadFlagCount(session.id);
+  // Consolidated Billing reminders (admin migration 122); 0 before it exists, never fatal.
+  unreadNotices += await unreadCbNoticeCount(session.id);
 
   return (
     <div className="min-h-screen bg-ink">

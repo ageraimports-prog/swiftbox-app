@@ -58,8 +58,30 @@ export function cbEnrolledText(_count: number): string {
   return 'Your packages already with us are included in your group.';
 }
 
-/** Confirm before turning it OFF. */
+/** Confirm before turning it OFF. Kept for the old flow; since 2026-11-27 the admin asks CB_OFF_QUESTION when packages are waiting. */
 export const CB_OFF_CONFIRM = "Turning this off sends out what's ready now.";
+
+/* ── Switch on / off (Brent, 2026-11-27 — admin CB_VERDICT_PLAN.md rules B6, B7). No place, no timing, no count. ── */
+
+/** Shown BEFORE switching on (B7). */
+export const CB_ON_CONFIRM_TITLE = "Turn on Consolidated Billing?";
+export const CB_ON_CONFIRM_TEXT =
+  "Your packages will now be kept together and delivered on one bill. They won't go out one by one — when you're ready, tap Send my packages now and we'll deliver them together.";
+export const CB_ON_CONFIRM_YES = "Turn it on";
+export const CB_ON_CONFIRM_NO = "Not now";
+/** For 10 minutes after switching on (B7). */
+export const CB_UNDO_MINUTES = 10;
+export const CB_UNDO_BUTTON = "Undo";
+export const CB_UNDO_TEXT = "Consolidated Billing is on. Changed your mind? You can undo it for 10 minutes.";
+export const CB_UNDONE_TEXT = "Done — Consolidated Billing is off again.";
+
+/** Switching off with packages waiting: ONE question, two answers (B6). */
+export const CB_OFF_QUESTION = "You have packages waiting to go out together. What should we do with them?";
+export const CB_OFF_TOGETHER = "Deliver them together now";
+export const CB_OFF_EACH = "Deliver each as it comes";
+export const CB_OFF_CANCEL = "Keep Consolidated Billing on";
+export const CB_OFF_DONE_TOGETHER = "Your packages are on their way together. Consolidated Billing is now off — turn it back on anytime.";
+export const CB_OFF_DONE_EACH = "Consolidated Billing is off. Each package will be delivered as it comes.";
 
 /**
  * A member's status from the moment it leaves Miami until its group's bill is

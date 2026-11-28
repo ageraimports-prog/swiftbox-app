@@ -7,8 +7,21 @@ import {
   CB_LONG_DESCRIPTION,
   CB_EXISTING_INCLUDED,
   cbEnrolledText,
-  CB_OFF_CONFIRM,
   CB_CLOSED_CARD,
+  CB_ON_CONFIRM_TITLE,
+  CB_ON_CONFIRM_TEXT,
+  CB_ON_CONFIRM_YES,
+  CB_ON_CONFIRM_NO,
+  CB_UNDO_MINUTES,
+  CB_UNDO_BUTTON,
+  CB_UNDO_TEXT,
+  CB_UNDONE_TEXT,
+  CB_OFF_QUESTION,
+  CB_OFF_TOGETHER,
+  CB_OFF_EACH,
+  CB_OFF_CANCEL,
+  CB_OFF_DONE_TOGETHER,
+  CB_OFF_DONE_EACH,
   CB_FAQ,
   SWIFTBOX_TEL,
   CB_ON_TEXT,
@@ -76,6 +89,21 @@ export default function ConsolidatedBillingCard({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [note, setNote] = React.useState<string | null>(null);
+  // Switch on asks first; switch off with packages waiting asks ONE question (2026-11-27).
+  const [dialog, setDialog] = React.useState<null | "on" | { question: string }>(null);
+  // Switch-on Undo, for CB_UNDO_MINUTES after switching on (in-page only).
+  const [undoUntil, setUndoUntil] = React.useState<number | null>(null);
+  const [, tick] = React.useState(0);
+  React.useEffect(() => {
+    if (!undoUntil) return;
+    const t = window.setInterval(() => { if (Date.now() >= undoUntil) setUndoUntil(null); tick((n) => n + 1); }, 15_000);
+    return () => window.clearInterval(t);
+  }, [undoUntil]);
+  // A reminder's "Send my packages" link lands on /dashboard?send=1: open the Send confirmation.
+  const [autoSend, setAutoSend] = React.useState(false);
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("send") === "1") setAutoSend(true);
+  }, []);
 
   React.useEffect(() => {
     fetch("/api/consolidated-billing")
@@ -96,10 +124,8 @@ export default function ConsolidatedBillingCard({
     document.getElementById("consolidated-billing")?.scrollIntoView({ block: "start" });
   }, [dashboard, loaded]);
 
-  async function toggle() {
-    if (!state) return;
-    const next = !state.settingOn;
-    if (!next && !window.confirm(CB_OFF_CONFIRM)) return;
+  /** One POST to the switch. Returns false when the admin asked the off question instead. */
+  async function post(body: { on: boolean; choice?: "together" | "each"; undo?: boolean }): Promise<boolean> {
     setBusy(true);
     setError(null);
     setNote(null);
@@ -107,21 +133,42 @@ export default function ConsolidatedBillingCard({
       const res = await fetch("/api/consolidated-billing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ on: next }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
+      if (res.status === 409 && data.needs_choice) {
+        setDialog({ question: String(data.question || CB_OFF_QUESTION) });
+        return false;
+      }
       if (!res.ok) throw new Error(data.error ?? "Couldn't save.");
       setState(data);
+      setDialog(null);
       // Turning it on pulls in the packages already with us: say so, and tell
       // "Send my packages now" and the Dashboard's package cards to re-read.
       const enrolled = Number(data.enrolled ?? 0);
-      if (next && enrolled > 0) setNote(cbEnrolledText(enrolled));
+      if (body.on) {
+        setUndoUntil(Date.now() + CB_UNDO_MINUTES * 60_000);
+        if (enrolled > 0) setNote(cbEnrolledText(enrolled));
+      } else {
+        setUndoUntil(null);
+        setNote(body.undo ? CB_UNDONE_TEXT : body.choice === "together" ? CB_OFF_DONE_TOGETHER : body.choice === "each" ? CB_OFF_DONE_EACH : null);
+      }
       window.dispatchEvent(new CustomEvent(CB_STATE_EVENT, { detail: data }));
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save.");
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function toggle() {
+    if (!state) return;
+    // On: a confirmation first (rule B7). Off: straight to the admin, which asks the
+    // one question only when packages are waiting (rule B6).
+    if (!state.settingOn) { setDialog("on"); return; }
+    await post({ on: false });
   }
 
   if (!state) return null;
@@ -186,6 +233,35 @@ export default function ConsolidatedBillingCard({
         </button>
       </div>
 
+      {dialog === "on" && (
+        <div role="alertdialog" aria-labelledby="cb-on-title" className="mt-4 rounded-lg border border-green/40 bg-ink p-4" data-cb-on-confirm>
+          <p id="cb-on-title" className="font-semibold text-mist">{CB_ON_CONFIRM_TITLE}</p>
+          <p className="mt-1 text-sm text-muted-dark">{CB_ON_CONFIRM_TEXT}</p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <button type="button" disabled={busy} onClick={() => post({ on: true })} className="rounded-lg bg-green px-3 py-2.5 text-sm font-bold text-ink disabled:opacity-50">{CB_ON_CONFIRM_YES}</button>
+            <button type="button" disabled={busy} onClick={() => setDialog(null)} className="rounded-lg border border-mist/20 px-3 py-2.5 text-sm font-semibold text-mist">{CB_ON_CONFIRM_NO}</button>
+          </div>
+        </div>
+      )}
+
+      {dialog && dialog !== "on" && (
+        <div role="alertdialog" aria-labelledby="cb-off-title" className="mt-4 rounded-lg border border-amber-400/40 bg-ink p-4" data-cb-off-question>
+          <p id="cb-off-title" className="font-semibold text-mist">{dialog.question}</p>
+          <div className="mt-3 grid gap-2">
+            <button type="button" disabled={busy} onClick={() => post({ on: false, choice: "together" })} className="rounded-lg bg-green px-3 py-2.5 text-sm font-bold text-ink disabled:opacity-50">{CB_OFF_TOGETHER}</button>
+            <button type="button" disabled={busy} onClick={() => post({ on: false, choice: "each" })} className="rounded-lg border border-green/40 px-3 py-2.5 text-sm font-bold text-green disabled:opacity-50">{CB_OFF_EACH}</button>
+            <button type="button" disabled={busy} onClick={() => setDialog(null)} className="rounded-lg px-3 py-2 text-sm text-muted-dark underline">{CB_OFF_CANCEL}</button>
+          </div>
+        </div>
+      )}
+
+      {on && undoUntil != null && Date.now() < undoUntil && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-mist/10 bg-ink px-3 py-2 text-sm text-mist" data-cb-undo>
+          <span>{CB_UNDO_TEXT}</span>
+          <button type="button" disabled={busy} onClick={() => post({ on: false, undo: true })} className="shrink-0 rounded-lg border border-mist/30 px-3 py-1.5 font-semibold disabled:opacity-50">{CB_UNDO_BUTTON}</button>
+        </div>
+      )}
+
       {face === "active" && saving > 0 && (
         <div className="mt-3">
           <CbSavingsCounter ttd={saving} swiftCode={state.swiftCode} />
@@ -194,7 +270,7 @@ export default function ConsolidatedBillingCard({
 
       {showSendNow && state.group && (
         <div className="mt-4 border-t border-mist/10 pt-4">
-          <SendNowPanel key={state.group.groupId} group={state.group} onDone={(d) => setState((prev) => ({ savingsTtd: prev?.savingsTtd, ...(d as State) }))} />
+          <SendNowPanel key={state.group.groupId} group={state.group} autoOpen={autoSend} onDone={(d) => setState((prev) => ({ savingsTtd: prev?.savingsTtd, ...(d as State) }))} />
         </div>
       )}
 

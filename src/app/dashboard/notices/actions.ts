@@ -4,6 +4,18 @@ import { revalidatePath } from "next/cache";
 import { execute } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { markFlagRead } from "@/lib/prealert-flags";
+import { markCbNoticeRead } from "@/lib/cb-notices";
+
+/** A Consolidated Billing reminder (admin migration 122) marked read by its own customer. */
+export async function markCbReminderRead(form: FormData) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const id = Number(form.get("reminderId"));
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error("Invalid notice.");
+  await markCbNoticeRead(session.id, id);
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/notices");
+}
 
 export async function markFlagNoticeRead(form: FormData) {
   const session = await getSession();

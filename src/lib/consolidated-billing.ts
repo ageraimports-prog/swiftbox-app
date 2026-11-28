@@ -202,10 +202,13 @@ export async function getCbState(userId: number): Promise<CbState> {
  * Throws with a customer-safe sentence when the admin refuses or can't be reached;
  * the switch then does not move.
  */
+export type CbSettingResult = { released: number; removed: number; enrolled: number; needsChoice?: { question: string; options: { choice: "together" | "each"; label: string }[] } };
+
 export async function setCbSetting(
   userId: number,
-  on: boolean
-): Promise<{ released: number; removed: number; enrolled: number }> {
+  on: boolean,
+  opts: { choice?: "together" | "each"; undo?: boolean } = {}
+): Promise<CbSettingResult> {
   const key = process.env.CONSOLIDATION_HOOK_KEY ?? "";
   if (!key) throw new Error("Consolidated Billing can't be changed right now. Please WhatsApp or call us.");
   const base = (process.env.ADMIN_URL || "https://admin.swiftboxtt.com").replace(/\/+$/, "");
@@ -215,11 +218,16 @@ export async function setCbSetting(
     const res = await fetch(`${base}/api/consolidated-billing/customer-toggle`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-consolidation-key": key },
-      body: JSON.stringify({ userId, on }),
+      body: JSON.stringify({ userId, on, ...(opts.choice ? { choice: opts.choice } : {}), ...(opts.undo ? { undo: true } : {}) }),
       signal: ctl.signal,
       cache: "no-store",
     });
-    const data = (await res.json().catch(() => ({}))) as { released?: number; removed?: number; enrolled?: number; error?: string };
+    const data = (await res.json().catch(() => ({}))) as { released?: number; removed?: number; enrolled?: number; error?: string;
+      needs_choice?: boolean; question?: string; options?: { choice: "together" | "each"; label: string }[] };
+    // Switching off with packages waiting (2026-11-27): the admin asks one question instead.
+    if (res.status === 400 && data.needs_choice && data.question && Array.isArray(data.options)) {
+      return { released: 0, removed: 0, enrolled: 0, needsChoice: { question: data.question, options: data.options } };
+    }
     if (!res.ok) {
       if (res.status === 400 && data.error) throw new Error(data.error);
       throw new Error("Couldn't change Consolidated Billing. Please try again.");

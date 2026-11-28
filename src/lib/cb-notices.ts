@@ -21,7 +21,7 @@ export const CB_NOTICE_COPY: Record<string, { title: string; body: string }> = {
   day7: { title: "Consolidated Billing is still on", body: "We're still keeping your packages together so they come on one bill. Whenever you're ready, tap Send and we'll deliver them together." },
   day14: { title: "Consolidated Billing is still on", body: "We're still keeping your packages together so they come on one bill. Whenever you're ready, tap Send and we'll deliver them together." },
   day18: { title: "Your packages go out together in 2 days", body: "In 2 days we'll send your packages together on one bill. Want them sooner? Tap Send and we'll deliver them together now." },
-  day20: { title: "Your packages are on the way", body: "Your 20 days are up, so we've sent your packages together on one bill. They're on the way." },
+  day20: { title: "Your packages are on the way", body: "Your 20 days are up, so we've sent your packages together on one bill. They're on the way. Consolidated Billing is now off. You can turn it on again anytime in the Swiftbox app." },
 };
 
 export async function cbNotices(userId: number): Promise<CbNotice[]> {
